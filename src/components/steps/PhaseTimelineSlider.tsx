@@ -151,18 +151,41 @@ export function PhaseTimelineSlider({
     };
   }, [draggingHandle, handleDrag, handleDragEnd]);
 
-  // Calculate segment widths
+  // Calculate segment widths and dates
+  const totalDays = startDate && endDate ? differenceInDays(endDate, startDate) : 0;
+  
   const segments = PHASES.map((phase, index) => {
-    const start = index === 0 ? 0 : handlePositions[index - 1];
-    const end = index === PHASES.length - 1 ? 100 : handlePositions[index];
+    const startPercent = index === 0 ? 0 : handlePositions[index - 1];
+    const endPercent = index === PHASES.length - 1 ? 100 : handlePositions[index];
+    const width = endPercent - startPercent;
+    
+    // Calculate dates for this segment
+    const segmentStartDate = startDate ? addDays(startDate, Math.round((startPercent / 100) * totalDays)) : null;
+    const segmentEndDate = endDate ? addDays(startDate!, Math.round((endPercent / 100) * totalDays)) : null;
+    
     return {
       phase,
-      width: end - start,
-      start,
-      end,
+      width,
+      startPercent,
+      endPercent,
       color: PHASE_CATEGORY_COLORS[phase],
+      segmentStartDate,
+      segmentEndDate,
     };
   });
+
+  // Format date range for display
+  const formatDateRange = (start: Date | null, end: Date | null, width: number): string => {
+    if (!start || !end) return '';
+    
+    // For narrow segments, show abbreviated format
+    if (width < 20) {
+      return `${format(start, 'MMM d')}`;
+    }
+    
+    // For wider segments, show full range
+    return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
+  };
 
   return (
     <div className="space-y-4">
@@ -185,7 +208,7 @@ export function PhaseTimelineSlider({
             <div
               key={`tooltip-${index}`}
               className={cn(
-                "absolute -top-1 transform -translate-x-1/2 transition-opacity duration-150",
+                "absolute -top-1 transform -translate-x-1/2 transition-opacity duration-150 z-20",
                 isActive ? "opacity-100" : "opacity-0"
               )}
               style={{ left: `${pos}%` }}
@@ -201,22 +224,22 @@ export function PhaseTimelineSlider({
         {/* Track */}
         <div 
           ref={trackRef}
-          className="relative h-10 rounded-lg overflow-hidden flex cursor-pointer"
+          className="relative h-12 rounded-lg overflow-hidden flex cursor-pointer"
           style={{ touchAction: 'none' }}
         >
           {segments.map((segment) => (
             <div
               key={segment.phase}
-              className="h-full flex items-center justify-center transition-all duration-150"
+              className="h-full flex flex-col items-center justify-center transition-all duration-150 relative"
               style={{ 
                 width: `${segment.width}%`,
                 backgroundColor: segment.color,
                 minWidth: segment.width > 0 ? '2px' : 0,
               }}
             >
-              {segment.width > 12 && (
-                <span className="text-xs font-medium text-white drop-shadow-sm truncate px-1">
-                  {Math.round(segment.width)}%
+              {segment.width > 8 && (
+                <span className="text-[10px] font-medium text-white/90 drop-shadow-sm truncate px-1 leading-tight">
+                  {formatDateRange(segment.segmentStartDate, segment.segmentEndDate, segment.width)}
                 </span>
               )}
             </div>
@@ -236,7 +259,7 @@ export function PhaseTimelineSlider({
                 e.preventDefault();
                 setDraggingHandle(index);
               }}
-              onTouchStart={(e) => {
+              onTouchStart={() => {
                 setDraggingHandle(index);
               }}
               onMouseEnter={() => setHoverHandle(index)}
@@ -282,35 +305,6 @@ export function PhaseTimelineSlider({
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Detailed breakdown */}
-      <div className="grid grid-cols-4 gap-2 pt-2">
-        {PHASES.map((phase) => {
-          const weight = weights[phase] || 0;
-          const color = PHASE_CATEGORY_COLORS[phase];
-          
-          return (
-            <div 
-              key={phase}
-              className="text-center p-2 rounded-md bg-muted/50"
-            >
-              <div 
-                className="w-3 h-3 rounded-full mx-auto mb-1"
-                style={{ backgroundColor: color }}
-              />
-              <div className="text-xs font-medium truncate" title={phase}>
-                {phase.replace('-', '\u2011')}
-              </div>
-              <div 
-                className="text-sm font-bold tabular-nums"
-                style={{ color }}
-              >
-                {weight}%
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );
