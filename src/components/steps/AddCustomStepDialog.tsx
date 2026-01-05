@@ -5,9 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PHASE_CATEGORIES, PhaseCategory } from '@/types/database';
-import { ChevronDown, Settings2 } from 'lucide-react';
 
 export interface CustomStep {
   id: string;
@@ -16,7 +14,6 @@ export interface CustomStep {
   client_visible: boolean;
   review_rounds: number | null;
   weight_percent: number | null;
-  days: number | null;
 }
 
 interface AddCustomStepDialogProps {
@@ -35,9 +32,9 @@ export function AddCustomStepDialog({
   const [name, setName] = useState('');
   const [phase, setPhase] = useState<PhaseCategory>(defaultPhase);
   const [clientVisible, setClientVisible] = useState(true);
-  const [days, setDays] = useState<string>('1');
-  const [weightPercent, setWeightPercent] = useState<string>('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [relativeWeight, setRelativeWeight] = useState<'low' | 'medium' | 'high'>('medium');
+
+  const WEIGHT_MAP = { low: 5, medium: 10, high: 15 };
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -48,8 +45,7 @@ export function AddCustomStepDialog({
       phase_category: phase,
       client_visible: clientVisible,
       review_rounds: null,
-      weight_percent: weightPercent ? parseFloat(weightPercent) : null,
-      days: days ? parseInt(days) : 1,
+      weight_percent: WEIGHT_MAP[relativeWeight],
     };
 
     onAdd(customStep);
@@ -61,9 +57,7 @@ export function AddCustomStepDialog({
     setName('');
     setPhase(defaultPhase);
     setClientVisible(true);
-    setDays('1');
-    setWeightPercent('');
-    setShowAdvanced(false);
+    setRelativeWeight('medium');
   };
 
   return (
@@ -117,45 +111,25 @@ export function AddCustomStepDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="step-days">Duration (days)</Label>
-            <Input
-              id="step-days"
-              type="number"
-              min={1}
-              max={365}
-              value={days}
-              onChange={(e) => setDays(e.target.value)}
-              placeholder="Number of days"
-            />
+            <Label>Relative Effort</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              How much time should this step take relative to others?
+            </p>
+            <div className="flex gap-2">
+              {(['low', 'medium', 'high'] as const).map((weight) => (
+                <Button
+                  key={weight}
+                  type="button"
+                  variant={relativeWeight === weight ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 capitalize"
+                  onClick={() => setRelativeWeight(weight)}
+                >
+                  {weight}
+                </Button>
+              ))}
+            </div>
           </div>
-
-          <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 w-full justify-start px-0">
-                <Settings2 className="w-4 h-4" />
-                Advanced Settings
-                <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-2">
-              <div className="space-y-2">
-                <Label htmlFor="weight-percent">Weight Percent (optional)</Label>
-                <Input
-                  id="weight-percent"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  value={weightPercent}
-                  onChange={(e) => setWeightPercent(e.target.value)}
-                  placeholder="Auto-calculated if empty"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Relative weight for schedule distribution
-                </p>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
         </div>
 
         <DialogFooter>
