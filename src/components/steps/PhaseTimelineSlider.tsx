@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
 import { cn } from '@/lib/utils';
-import { format, addDays, differenceInDays } from 'date-fns';
+import { format, addDays, differenceInDays, eachDayOfInterval, isWeekend } from 'date-fns';
 
 // Phases in order (left to right on the bar)
 const PHASES: PhaseCategory[] = ['Pre-Production', 'Production', 'Post-Production', 'Delivery'];
@@ -151,6 +151,13 @@ export function PhaseTimelineSlider({
     };
   }, [draggingHandle, handleDrag, handleDragEnd]);
 
+  // Calculate working days between two dates (Mon-Fri)
+  const getWorkingDays = (start: Date | null, end: Date | null): number => {
+    if (!start || !end) return 0;
+    const days = eachDayOfInterval({ start, end });
+    return days.filter(day => !isWeekend(day)).length;
+  };
+
   // Calculate segment widths and dates
   const totalDays = startDate && endDate ? differenceInDays(endDate, startDate) : 0;
   
@@ -163,6 +170,9 @@ export function PhaseTimelineSlider({
     const segmentStartDate = startDate ? addDays(startDate, Math.round((startPercent / 100) * totalDays)) : null;
     const segmentEndDate = endDate ? addDays(startDate!, Math.round((endPercent / 100) * totalDays)) : null;
     
+    // Calculate working days
+    const workingDays = getWorkingDays(segmentStartDate, segmentEndDate);
+    
     return {
       phase,
       width,
@@ -171,20 +181,21 @@ export function PhaseTimelineSlider({
       color: PHASE_CATEGORY_COLORS[phase],
       segmentStartDate,
       segmentEndDate,
+      workingDays,
     };
   });
 
   // Format date range for display
-  const formatDateRange = (start: Date | null, end: Date | null, width: number): string => {
+  const formatDateRange = (start: Date | null, end: Date | null, workingDays: number, width: number): string => {
     if (!start || !end) return '';
     
     // For narrow segments, show abbreviated format
     if (width < 20) {
-      return `${format(start, 'MMM d')}`;
+      return `${format(start, 'MMM d')} (${workingDays}d)`;
     }
     
-    // For wider segments, show full range
-    return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
+    // For wider segments, show full range with working days
+    return `${format(start, 'MMM d')} – ${format(end, 'MMM d')} (${workingDays}d)`;
   };
 
   return (
@@ -239,7 +250,7 @@ export function PhaseTimelineSlider({
             >
               {segment.width > 8 && (
                 <span className="text-[10px] font-medium text-white/90 drop-shadow-sm truncate px-1 leading-tight">
-                  {formatDateRange(segment.segmentStartDate, segment.segmentEndDate, segment.width)}
+                  {formatDateRange(segment.segmentStartDate, segment.segmentEndDate, segment.workingDays, segment.width)}
                 </span>
               )}
             </div>
