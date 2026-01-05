@@ -197,6 +197,7 @@ export interface CanonicalStepWithSelection extends CanonicalStep {
 // Phase categories for grouping
 export const PHASE_CATEGORIES = [
   'Discovery',
+  'Client Check-ins',
   'Pre-Production', 
   'Production',
   'Post-Production',
@@ -207,8 +208,9 @@ export const PHASE_CATEGORIES = [
 export type PhaseCategory = typeof PHASE_CATEGORIES[number];
 
 // Phase category colors
-export const PHASE_CATEGORY_COLORS: Record<PhaseCategory, string> = {
+export const PHASE_CATEGORY_COLORS: Record<PhaseCategory | string, string> = {
   'Discovery': '#8B5CF6',      // Purple
+  'Client Check-ins': '#9CA3AF', // Light grey
   'Pre-Production': '#F59E0B', // Amber
   'Production': '#22D3EE',     // Cyan
   'Post-Production': '#10B981', // Green

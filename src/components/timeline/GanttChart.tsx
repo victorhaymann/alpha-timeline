@@ -260,19 +260,53 @@ export function GanttChart({
     return Math.max(columnWidth, (endCol - startCol + 1) * columnWidth);
   }, [groupedColumns, columnWidth]);
 
-  // Group tasks by phase
+  // Helper to check if a task is a client check-in
+  const isClientCheckin = useCallback((task: Task) => {
+    return task.name.toLowerCase().includes('client check-in') || 
+           task.name.toLowerCase().includes('client checkin');
+  }, []);
+
+  // Separate client check-ins from regular tasks
+  const clientCheckins = useMemo(() => {
+    return tasks.filter(t => isClientCheckin(t)).sort((a, b) => {
+      const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
+      const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
+      return aDate - bDate;
+    });
+  }, [tasks, isClientCheckin]);
+
+  // Group tasks by phase (excluding client check-ins)
   const tasksByPhase = useMemo(() => {
     const grouped = new Map<string, Task[]>();
     phases.forEach(phase => {
       grouped.set(
         phase.id,
         tasks
-          .filter(t => t.phase_id === phase.id)
+          .filter(t => t.phase_id === phase.id && !isClientCheckin(t))
           .sort((a, b) => a.order_index - b.order_index)
       );
     });
     return grouped;
-  }, [phases, tasks]);
+  }, [phases, tasks, isClientCheckin]);
+
+  // Create ordered sections: phases with Client Check-ins inserted after Discovery
+  type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'checkins'; tasks: Task[] };
+  
+  const orderedSections = useMemo((): Section[] => {
+    const sections: Section[] = [];
+    
+    phases.forEach(phase => {
+      const phaseTasks = tasksByPhase.get(phase.id) || [];
+      sections.push({ type: 'phase', phase, tasks: phaseTasks });
+      
+      // Insert Client Check-ins after Discovery
+      if (phase.name === 'Discovery' && clientCheckins.length > 0) {
+        sections.push({ type: 'checkins', tasks: clientCheckins });
+      }
+    });
+    
+    return sections;
+  }, [phases, tasksByPhase, clientCheckins]);
 
   // Handle drag start
   const handleDragStart = (
@@ -351,11 +385,14 @@ export function GanttChart({
     }
   });
 
-  // Calculate total chart height
+  // Calculate total chart height based on sections
   let totalHeight = HEADER_HEIGHT;
-  phases.forEach(phase => {
-    const phaseTasks = tasksByPhase.get(phase.id) || [];
-    totalHeight += PHASE_HEADER_HEIGHT + (phaseTasks.length * ROW_HEIGHT);
+  orderedSections.forEach(section => {
+    totalHeight += PHASE_HEADER_HEIGHT + (section.tasks.length * ROW_HEIGHT);
+    // Add space for "Add task" button only for phases
+    if (section.type === 'phase') {
+      totalHeight += ROW_HEIGHT;
+    }
   });
 
   return (
@@ -437,30 +474,31 @@ export function GanttChart({
               Tasks
             </div>
 
-            {/* Phase and task rows */}
-            {phases.map(phase => {
-              const phaseTasks = tasksByPhase.get(phase.id) || [];
-              const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
+            {/* Section rows (phases + client check-ins) */}
+            {orderedSections.map((section, sectionIndex) => {
+              const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+              const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
+              const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
 
               return (
-                <div key={phase.id}>
-                  {/* Phase header */}
+                <div key={sectionKey}>
+                  {/* Section header */}
                   <div 
                     className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm"
                     style={{ height: PHASE_HEADER_HEIGHT }}
                   >
                     <div 
                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: phaseColor }}
+                      style={{ backgroundColor: sectionColor }}
                     />
-                    <span className="truncate">{phase.name}</span>
+                    <span className="truncate">{sectionName}</span>
                     <Badge variant="secondary" className="ml-auto text-xs">
-                      {phaseTasks.length}
+                      {section.tasks.length}
                     </Badge>
                   </div>
 
                   {/* Task rows */}
-                  {phaseTasks.map((task) => {
+                  {section.tasks.map((task) => {
                     const startDate = task.start_date ? new Date(task.start_date) : null;
                     const endDate = task.end_date ? new Date(task.end_date) : null;
                     const duration = startDate && endDate 
@@ -501,30 +539,34 @@ export function GanttChart({
                           )}
                         </div>
 
-                        <button
-                          onClick={() => onAddReviewRound(task.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0"
-                          title="Add review round"
-                        >
-                          <RotateCcw className="w-3 h-3 text-muted-foreground" />
-                        </button>
+                        {section.type === 'phase' && (
+                          <button
+                            onClick={() => onAddReviewRound(task.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0"
+                            title="Add review round"
+                          >
+                            <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
 
-                  {/* Add task button */}
-                  <div 
-                    className="flex items-center px-3 border-b"
-                    style={{ height: ROW_HEIGHT }}
-                  >
-                    <button
-                      onClick={() => onAddTask(phase.id)}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  {/* Add task button - only for phases */}
+                  {section.type === 'phase' && (
+                    <div 
+                      className="flex items-center px-3 border-b"
+                      style={{ height: ROW_HEIGHT }}
                     >
-                      <Plus className="w-3 h-3" />
-                      Add task
-                    </button>
-                  </div>
+                      <button
+                        onClick={() => onAddTask(section.phase.id)}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add task
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -562,14 +604,15 @@ export function GanttChart({
               })}
             </div>
 
-            {/* Phase rows with task bars */}
-            {phases.map(phase => {
-              const phaseTasks = tasksByPhase.get(phase.id) || [];
-              const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
+            {/* Section rows with task bars */}
+            {orderedSections.map((section, sectionIndex) => {
+              const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+              const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
+              const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
 
               return (
-                <div key={phase.id}>
-                  {/* Phase header row */}
+                <div key={sectionKey}>
+                  {/* Section header row */}
                   <div 
                     className="border-b"
                     style={{ height: PHASE_HEADER_HEIGHT }}
@@ -586,7 +629,7 @@ export function GanttChart({
                   </div>
 
                   {/* Task bars */}
-                  {phaseTasks.map((task) => {
+                  {section.tasks.map((task) => {
                     const isCurrentlyDragging = dragging?.taskId === task.id;
                     const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
                     const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
@@ -637,7 +680,7 @@ export function GanttChart({
                               ? '#F59E0B' 
                               : task.task_type === 'meeting'
                                 ? undefined
-                                : phaseColor,
+                                : sectionColor,
                           }}
                           onMouseDown={(e) => handleDragStart(e, task, 'move')}
                         >
@@ -674,18 +717,20 @@ export function GanttChart({
                     );
                   })}
 
-                  {/* Add task row */}
-                  <div className="border-b" style={{ height: ROW_HEIGHT }}>
-                    <div className="flex h-full">
-                      {groupedColumns.map((col) => (
-                        <div
-                          key={col.key}
-                          className="border-r shrink-0"
-                          style={{ width: columnWidth }}
-                        />
-                      ))}
+                  {/* Add task row - only for phases */}
+                  {section.type === 'phase' && (
+                    <div className="border-b" style={{ height: ROW_HEIGHT }}>
+                      <div className="flex h-full">
+                        {groupedColumns.map((col) => (
+                          <div
+                            key={col.key}
+                            className="border-r shrink-0"
+                            style={{ width: columnWidth }}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}

@@ -143,6 +143,11 @@ const PHASE_DEFAULTS: Record<PhaseCategory, Partial<NarrativeOutput>> = {
     clientProvides: 'Relevant reference materials and feedback on direction.',
     reviewMeeting: 'Progress review and alignment check.',
   },
+  'Client Check-ins': {
+    objective: 'Regular sync to review progress and gather feedback.',
+    clientProvides: 'Availability for the meeting and prepared questions or concerns.',
+    reviewMeeting: 'Open discussion on current status and next steps.',
+  },
   'Pre-Production': {
     objective: 'Prepare detailed plans and assets for production.',
     clientProvides: 'Approvals on previous deliverables and additional references.',
