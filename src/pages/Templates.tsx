@@ -2,15 +2,44 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StepLibrary } from '@/components/steps/StepLibrary';
 import { Library, FolderPlus } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Templates() {
+  const { toast } = useToast();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleDeleteCanonicalStep = async (stepId: string) => {
+    const confirmed = window.confirm('Are you sure you want to delete this step from the library? This will affect all future projects.');
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from('canonical_steps')
+      .delete()
+      .eq('id', stepId);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete step: ' + error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Step deleted',
+        description: 'The step has been removed from the library.',
+      });
+      setRefreshKey(k => k + 1);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Step Library</h1>
         <p className="text-muted-foreground mt-1">
-          Browse the canonical VFX production steps available for your projects
+          Manage the canonical VFX production steps available for your projects
         </p>
       </div>
 
@@ -27,7 +56,12 @@ export default function Templates() {
         </TabsList>
 
         <TabsContent value="library">
-          <StepLibrary readOnly />
+          <StepLibrary 
+            key={refreshKey}
+            readOnly 
+            allowLibraryEdit 
+            onDeleteCanonicalStep={handleDeleteCanonicalStep}
+          />
         </TabsContent>
 
         <TabsContent value="custom">
