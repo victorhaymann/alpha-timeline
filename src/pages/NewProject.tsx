@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { CanonicalStep } from '@/types/database';
+import { CanonicalStep, PHASE_CATEGORIES } from '@/types/database';
+import { CustomStep } from '@/components/steps/AddCustomStepDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +62,7 @@ export default function NewProject() {
   const [currentStep, setCurrentStep] = useState<WizardStep>('basics');
   const [canonicalSteps, setCanonicalSteps] = useState<CanonicalStep[]>([]);
   const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
+  const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
   
   const today = new Date();
   const defaultEndDate = addMonths(today, 3);
@@ -119,6 +121,14 @@ export default function NewProject() {
       }
       return next;
     });
+  };
+
+  const handleAddCustomStep = (step: CustomStep) => {
+    setCustomSteps(prev => [...prev, step]);
+  };
+
+  const handleRemoveCustomStep = (stepId: string) => {
+    setCustomSteps(prev => prev.filter(s => s.id !== stepId));
   };
 
   const handleSubmit = async () => {
@@ -191,9 +201,97 @@ export default function NewProject() {
         if (stepsError) throw stepsError;
       }
 
+      // Create phases for each category that has selected steps or custom steps
+      const selectedCanonical = canonicalSteps.filter(s => selectedStepIds.has(s.id));
+      const usedCategories = new Set([
+        ...selectedCanonical.map(s => s.phase_category),
+        ...customSteps.map(s => s.phase_category)
+      ]);
+
+      const phaseRecords: { project_id: string; name: string; order_index: number }[] = [];
+      PHASE_CATEGORIES.forEach((category, index) => {
+        if (usedCategories.has(category)) {
+          phaseRecords.push({
+            project_id: project.id,
+            name: category,
+            order_index: index,
+          });
+        }
+      });
+
+      let createdPhases: { id: string; name: string }[] = [];
+      if (phaseRecords.length > 0) {
+        const { data: phases, error: phasesError } = await supabase
+          .from('phases')
+          .insert(phaseRecords)
+          .select('id, name');
+
+        if (phasesError) throw phasesError;
+        createdPhases = phases || [];
+      }
+
+      // Create a map of phase name to phase id
+      const phaseMap = new Map(createdPhases.map(p => [p.name, p.id]));
+
+      // Create tasks from selected canonical steps
+      const tasksToCreate: {
+        project_id: string;
+        phase_id: string;
+        name: string;
+        task_type: 'task' | 'milestone' | 'meeting';
+        client_visible: boolean;
+        weight_percent: number;
+        review_rounds: number;
+        order_index: number;
+      }[] = [];
+
+      let orderIndex = 0;
+      selectedCanonical.forEach(step => {
+        const phaseId = phaseMap.get(step.phase_category);
+        if (phaseId) {
+          tasksToCreate.push({
+            project_id: project.id,
+            phase_id: phaseId,
+            name: step.name,
+            task_type: step.task_type,
+            client_visible: true,
+            weight_percent: step.default_weight_percent || 0,
+            review_rounds: step.default_review_rounds || formData.default_review_rounds,
+            order_index: orderIndex++,
+          });
+        }
+      });
+
+      // Create tasks from custom steps
+      customSteps.forEach(step => {
+        const phaseId = phaseMap.get(step.phase_category);
+        if (phaseId) {
+          tasksToCreate.push({
+            project_id: project.id,
+            phase_id: phaseId,
+            name: step.name,
+            task_type: 'task',
+            client_visible: step.client_visible,
+            weight_percent: step.weight_percent || 0,
+            review_rounds: step.review_rounds ?? formData.default_review_rounds,
+            order_index: orderIndex++,
+          });
+        }
+      });
+
+      if (tasksToCreate.length > 0) {
+        const { error: tasksError } = await supabase
+          .from('tasks')
+          .insert(tasksToCreate);
+
+        if (tasksError) throw tasksError;
+      }
+
+      const totalSteps = selectedStepIds.size + customSteps.length;
+
       toast({
         title: 'Project created!',
-        description: `${formData.name} has been created with ${selectedStepIds.size} steps.`,
+        description: `${formData.name} has been created with ${totalSteps} steps.`,
       });
 
       navigate(`/projects/${project.id}`);
@@ -458,12 +556,20 @@ export default function NewProject() {
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span>Select the steps to include in this project</span>
                 <span className="font-medium text-foreground">
-                  {selectedStepIds.size} steps selected
+                  {selectedStepIds.size + customSteps.length} steps selected
+                  {customSteps.length > 0 && (
+                    <span className="text-primary ml-1">
+                      ({customSteps.length} custom)
+                    </span>
+                  )}
                 </span>
               </div>
               <StepLibrary 
                 selectedSteps={selectedStepIds}
                 onStepToggle={handleStepToggle}
+                customSteps={customSteps}
+                onAddCustomStep={handleAddCustomStep}
+                onRemoveCustomStep={handleRemoveCustomStep}
               />
             </div>
           )}

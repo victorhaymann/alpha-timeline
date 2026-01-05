@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { CanonicalStep, PHASE_CATEGORIES, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
+import { AddCustomStepDialog, CustomStep } from './AddCustomStepDialog';
 import { 
   Loader2, 
   Flag, 
@@ -12,20 +13,36 @@ import {
   Layers,
   ChevronDown,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Plus,
+  Eye,
+  EyeOff,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface StepLibraryProps {
   selectedSteps?: Set<string>;
   onStepToggle?: (stepId: string, included: boolean) => void;
+  customSteps?: CustomStep[];
+  onAddCustomStep?: (step: CustomStep) => void;
+  onRemoveCustomStep?: (stepId: string) => void;
   readOnly?: boolean;
 }
 
-export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: StepLibraryProps) {
+export function StepLibrary({ 
+  selectedSteps, 
+  onStepToggle, 
+  customSteps = [],
+  onAddCustomStep,
+  onRemoveCustomStep,
+  readOnly = false 
+}: StepLibraryProps) {
   const [steps, setSteps] = useState<CanonicalStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogPhase, setAddDialogPhase] = useState<PhaseCategory>('Production');
 
   useEffect(() => {
     fetchSteps();
@@ -59,10 +76,22 @@ export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: S
     });
   };
 
+  const openAddDialog = (phase: PhaseCategory) => {
+    setAddDialogPhase(phase);
+    setAddDialogOpen(true);
+  };
+
+  // Group canonical steps by phase
   const groupedSteps = PHASE_CATEGORIES.reduce((acc, category) => {
     acc[category] = steps.filter(s => s.phase_category === category);
     return acc;
   }, {} as Record<PhaseCategory, CanonicalStep[]>);
+
+  // Group custom steps by phase
+  const groupedCustomSteps = PHASE_CATEGORIES.reduce((acc, category) => {
+    acc[category] = customSteps.filter(s => s.phase_category === category);
+    return acc;
+  }, {} as Record<PhaseCategory, CustomStep[]>);
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -92,15 +121,19 @@ export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: S
     <div className="space-y-4">
       {PHASE_CATEGORIES.map((category) => {
         const categorySteps = groupedSteps[category];
-        if (categorySteps.length === 0) return null;
+        const categoryCustomSteps = groupedCustomSteps[category];
+        const totalSteps = categorySteps.length + categoryCustomSteps.length;
+        
+        if (categorySteps.length === 0 && categoryCustomSteps.length === 0 && readOnly) return null;
 
         const isCollapsed = collapsedPhases.has(category);
         const color = PHASE_CATEGORY_COLORS[category];
         const isImmersive = category === 'Immersive';
         
-        const includedCount = selectedSteps 
+        const includedCanonicalCount = selectedSteps 
           ? categorySteps.filter(s => selectedSteps.has(s.id)).length 
           : categorySteps.filter(s => !s.is_optional).length;
+        const totalIncluded = includedCanonicalCount + categoryCustomSteps.length;
 
         return (
           <Card key={category} className="overflow-hidden">
@@ -129,7 +162,7 @@ export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: S
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
-                    {includedCount}/{categorySteps.length} steps
+                    {totalIncluded}/{totalSteps} steps
                   </Badge>
                 </div>
               </div>
@@ -138,6 +171,7 @@ export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: S
             {!isCollapsed && (
               <CardContent className="pt-0 pb-4">
                 <div className="space-y-2">
+                  {/* Canonical Steps */}
                   {categorySteps.map((step) => {
                     const isIncluded = selectedSteps 
                       ? selectedSteps.has(step.id)
@@ -194,12 +228,75 @@ export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: S
                       </div>
                     );
                   })}
+
+                  {/* Custom Steps */}
+                  {categoryCustomSteps.map((step) => (
+                    <div 
+                      key={step.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20"
+                    >
+                      <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
+                        <Plus className="w-3 h-3 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{step.name}</span>
+                          <Badge variant="outline" className="text-xs gap-1 bg-primary/10 text-primary border-primary/30">
+                            Custom
+                          </Badge>
+                          {step.client_visible ? (
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                          ) : (
+                            <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                        {step.weight_percent && <span>{step.weight_percent}%</span>}
+                        {step.review_rounds !== null && (
+                          <span>{step.review_rounds} reviews</span>
+                        )}
+                        {!readOnly && onRemoveCustomStep && (
+                          <button
+                            onClick={() => onRemoveCustomStep(step.id)}
+                            className="p-1 hover:bg-destructive/20 rounded text-destructive"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Custom Step Button */}
+                  {!readOnly && onAddCustomStep && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAddDialog(category);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add custom step to {category}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             )}
           </Card>
         );
       })}
+
+      <AddCustomStepDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onAdd={(step) => onAddCustomStep?.(step)}
+        defaultPhase={addDialogPhase}
+      />
     </div>
   );
 }
+
