@@ -743,9 +743,9 @@ export function GanttChart({
                     onClick={() => toggleSectionCollapse(sectionKey)}
                   >
                     {isCollapsed ? (
-                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <ChevronRight className="w-4 h-4 shrink-0" style={{ color: sectionColor }} />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <ChevronDown className="w-4 h-4 shrink-0" style={{ color: sectionColor }} />
                     )}
                     <div 
                       className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
