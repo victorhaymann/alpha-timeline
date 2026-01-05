@@ -106,15 +106,13 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-cyan-500/5" />
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+      {/* Background - Clean light gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-muted/30" />
       
-      <Card className="w-full max-w-md glass-surface animate-fade-in relative">
+      <Card className="w-full max-w-md shadow-card animate-fade-in relative">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-cyan-400 flex items-center justify-center mb-4 shadow-lg">
-            <Film className="w-8 h-8 text-primary-foreground" />
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-foreground flex items-center justify-center mb-4">
+            <Film className="w-8 h-8 text-background" />
           </div>
           <CardTitle className="text-2xl font-bold">VFX Timeline Pro</CardTitle>
           <CardDescription className="flex items-center justify-center gap-2">
