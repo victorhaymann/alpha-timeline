@@ -187,6 +187,40 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
+  // Keyboard navigation for horizontal scrolling
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!containerRef.current) return;
+      
+      // Only handle if Gantt chart is focused or no other input is focused
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement?.tagName === 'INPUT' || 
+                            activeElement?.tagName === 'TEXTAREA' ||
+                            activeElement?.getAttribute('contenteditable') === 'true';
+      
+      if (isInputFocused) return;
+
+      const scrollAmount = columnWidth * 3; // Scroll 3 columns at a time
+      
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        containerRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        containerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        containerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        containerRef.current.scrollTo({ left: containerRef.current.scrollWidth, behavior: 'smooth' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [columnWidth]);
+
   // Calculate position from date (accounting for working days only)
   const dateToX = useCallback((date: Date) => {
     const targetDay = startOfDay(date);
