@@ -82,10 +82,15 @@ export function GanttChart({
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: projectStartDate,
-    to: projectEndDate,
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
+  
+  // Default view: show ~21 working days from project start (approximately 4 weeks)
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const defaultEndDate = addDays(projectStartDate, 28); // ~4 weeks to get ~20-22 working days
+    return {
+      from: projectStartDate,
+      to: defaultEndDate > projectEndDate ? projectEndDate : defaultEndDate,
+    };
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
@@ -187,25 +192,22 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
-  // Update date range when view mode changes
+  // Update date range when view mode changes - always start from project start
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     
-    const today = new Date();
-    const baseDate = dateRange?.from || projectStartDate;
-    
     if (mode === 'week') {
-      // Weekly view: show 7 days (or working days within that range)
-      const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+      // Weekly view: show first week of project (7 days from project start)
+      const weekStart = startOfWeek(projectStartDate, { weekStartsOn: 1 });
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
       setDateRange({ from: weekStart, to: weekEnd });
     } else {
-      // Monthly view: show ~30 days (a full month)
-      const monthStart = startOfMonth(baseDate);
+      // Monthly view: show first month of project
+      const monthStart = startOfMonth(projectStartDate);
       const monthEnd = endOfMonth(monthStart);
       setDateRange({ from: monthStart, to: monthEnd });
     }
-  }, [dateRange, projectStartDate]);
+  }, [projectStartDate]);
 
   // Navigate to previous/next period based on view mode
   const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
