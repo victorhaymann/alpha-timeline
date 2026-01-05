@@ -1,7 +1,7 @@
 /**
  * VFX Timeline Pro - Narrative Text Generator
- *
- * Auto-generates client-facing narrative text for each step
+ * 
+ * Auto-generates client-facing narrative text for each step during timeline generation
  */
 
 import type { PhaseCategory } from '@/types/database';
