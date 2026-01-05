@@ -59,7 +59,7 @@ interface GanttChartProps {
   readOnly?: boolean;
 }
 
-type ViewMode = 'week' | 'month';
+type ViewMode = 'week' | 'month' | 'project';
 
 const TASK_COLUMN_WIDTH = 340;
 const ROW_HEIGHT = 40;
@@ -185,8 +185,8 @@ export function GanttChart({
     const columnCount = groupedColumns.length || 1;
     const calculatedWidth = containerWidth / columnCount;
     
-    // Set minimum widths based on view mode
-    const minWidths = { week: MIN_COLUMN_WIDTH, month: 60 };
+    // Set minimum widths based on view mode - project view has smallest minimum for many columns
+    const minWidths = { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
     return Math.max(calculatedWidth, minWidths[viewMode]);
   }, [containerWidth, groupedColumns.length, viewMode]);
 
@@ -201,13 +201,16 @@ export function GanttChart({
       const weekStart = startOfWeek(projectStartDate, { weekStartsOn: 1 });
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
       setDateRange({ from: weekStart, to: weekEnd });
-    } else {
+    } else if (mode === 'month') {
       // Monthly view: show first month of project
       const monthStart = startOfMonth(projectStartDate);
       const monthEnd = endOfMonth(monthStart);
       setDateRange({ from: monthStart, to: monthEnd });
+    } else {
+      // Project view: show entire project from start to end
+      setDateRange({ from: projectStartDate, to: projectEndDate });
     }
-  }, [projectStartDate]);
+  }, [projectStartDate, projectEndDate]);
 
   // Navigate to previous/next period based on view mode
   const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
@@ -226,7 +229,7 @@ export function GanttChart({
       const shift = direction === 'prev' ? -7 : 7;
       newFrom = addDays(dateRange.from, shift);
       newTo = addDays(dateRange.to, shift);
-    } else {
+    } else if (viewMode === 'month') {
       // Move by 1 month
       if (direction === 'prev') {
         newFrom = subMonths(dateRange.from, 1);
@@ -235,6 +238,9 @@ export function GanttChart({
         newFrom = addMonths(dateRange.from, 1);
         newTo = addMonths(dateRange.to, 1);
       }
+    } else {
+      // Project view: no navigation needed, but allow scrolling if date range is custom
+      return;
     }
     
     setDateRange({ from: newFrom, to: newTo });
@@ -594,7 +600,7 @@ export function GanttChart({
           
           {/* View mode toggle - Segmented control */}
           <div className="flex items-center rounded-lg p-1 bg-muted border border-border">
-            {(['week', 'month'] as ViewMode[]).map((mode) => (
+            {(['week', 'month', 'project'] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant="ghost"
@@ -607,7 +613,7 @@ export function GanttChart({
                 )}
                 onClick={() => handleViewModeChange(mode)}
               >
-                {mode}ly
+                {mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'Project'}
               </Button>
             ))}
           </div>
