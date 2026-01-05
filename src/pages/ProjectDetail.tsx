@@ -25,6 +25,8 @@ import {
   Clock,
   Download,
   RefreshCw,
+  FileText,
+  BookOpen,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -370,8 +372,14 @@ export default function ProjectDetail() {
               <Download className="w-3.5 h-3.5" />
               Exports
             </TabsTrigger>
-            <TabsTrigger value="quotations">Quotations</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="documents" className="gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Documents
+            </TabsTrigger>
+            <TabsTrigger value="resources" className="gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              Resources
+            </TabsTrigger>
           </TabsList>
           
           {regenerateHandler && (
@@ -428,22 +436,72 @@ export default function ProjectDetail() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="quotations">
-          <DocumentUploader
-            projectId={id!}
-            type="quotations"
-            documents={quotations}
-            onUploadComplete={fetchDocuments}
-          />
+        <TabsContent value="documents" className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Quotations</h3>
+              <DocumentUploader
+                projectId={id!}
+                type="quotations"
+                documents={quotations}
+                onUploadComplete={fetchDocuments}
+              />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold mb-4">Invoices</h3>
+              <DocumentUploader
+                projectId={id!}
+                type="invoices"
+                documents={invoices}
+                onUploadComplete={fetchDocuments}
+              />
+            </div>
+          </div>
         </TabsContent>
 
-        <TabsContent value="invoices">
-          <DocumentUploader
-            projectId={id!}
-            type="invoices"
-            documents={invoices}
-            onUploadComplete={fetchDocuments}
-          />
+        <TabsContent value="resources" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Learning Resources</CardTitle>
+              <CardDescription>
+                Helpful guides and materials to support your project workflow.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <a 
+                  href="https://docs.lovable.dev" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                >
+                  <BookOpen className="w-8 h-8 text-primary mb-3" />
+                  <h4 className="font-semibold mb-1">Getting Started Guide</h4>
+                  <p className="text-sm text-muted-foreground">Learn the basics of timeline management and project setup.</p>
+                </a>
+                <a 
+                  href="https://docs.lovable.dev" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                >
+                  <Layers className="w-8 h-8 text-primary mb-3" />
+                  <h4 className="font-semibold mb-1">Phase Management</h4>
+                  <p className="text-sm text-muted-foreground">Understanding phase weights and task distribution.</p>
+                </a>
+                <a 
+                  href="https://docs.lovable.dev" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                >
+                  <Users className="w-8 h-8 text-primary mb-3" />
+                  <h4 className="font-semibold mb-1">Client Collaboration</h4>
+                  <p className="text-sm text-muted-foreground">Share projects and manage client feedback effectively.</p>
+                </a>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
