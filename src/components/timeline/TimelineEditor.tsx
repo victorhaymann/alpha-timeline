@@ -21,6 +21,7 @@ interface TimelineEditorProps {
   onTasksChange: (tasks: Task[]) => void;
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
+  renderRegenerateButton?: (props: { onClick: () => void; isLoading: boolean }) => React.ReactNode;
 }
 
 export function TimelineEditor({
@@ -30,6 +31,7 @@ export function TimelineEditor({
   dependencies,
   onTasksChange,
   onRefresh,
+  renderRegenerateButton,
 }: TimelineEditorProps) {
   const { toast } = useToast();
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -406,8 +408,10 @@ export function TimelineEditor({
     }
   };
 
-  return (
-    <div className="space-y-4">
+  // If a render prop is provided, call it with the handler; otherwise render default button
+  const regenerateButtonElement = renderRegenerateButton 
+    ? renderRegenerateButton({ onClick: handleRegenerate, isLoading: isRegenerating })
+    : (
       <div className="flex items-center justify-end">
         <Button
           variant="outline"
@@ -423,6 +427,11 @@ export function TimelineEditor({
           Regenerate Schedule
         </Button>
       </div>
+    );
+
+  return (
+    <div className="space-y-4">
+      {!renderRegenerateButton && regenerateButtonElement}
 
       <GanttChart
         projectStartDate={projectStartDate}

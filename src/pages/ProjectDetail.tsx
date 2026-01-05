@@ -24,6 +24,7 @@ import {
   Layers,
   Clock,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -60,6 +61,9 @@ export default function ProjectDetail() {
   
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  
+  // Regenerate state (lifted from TimelineEditor)
+  const [regenerateHandler, setRegenerateHandler] = useState<{ onClick: () => void; isLoading: boolean } | null>(null);
 
   const fetchProjectData = useCallback(async () => {
     if (!id) return;
@@ -359,15 +363,33 @@ export default function ProjectDetail() {
 
       {/* Tabs */}
       <Tabs defaultValue="timeline" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="exports" className="gap-1.5">
-            <Download className="w-3.5 h-3.5" />
-            Exports
-          </TabsTrigger>
-          <TabsTrigger value="quotations">Quotations</TabsTrigger>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
-        </TabsList>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="exports" className="gap-1.5">
+              <Download className="w-3.5 h-3.5" />
+              Exports
+            </TabsTrigger>
+            <TabsTrigger value="quotations">Quotations</TabsTrigger>
+            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          </TabsList>
+          
+          {regenerateHandler && (
+            <Button
+              variant="outline"
+              onClick={regenerateHandler.onClick}
+              disabled={regenerateHandler.isLoading}
+              className="gap-2"
+            >
+              {regenerateHandler.isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Regenerate Schedule
+            </Button>
+          )}
+        </div>
 
         <TabsContent value="timeline" className="space-y-4">
           <TimelineEditor
@@ -378,6 +400,13 @@ export default function ProjectDetail() {
             onTasksChange={handleTasksChange}
             onRefresh={fetchProjectData}
             onTaskClick={handleTaskClick}
+            renderRegenerateButton={(props) => {
+              // Store the handler props to render in the tabs row
+              if (!regenerateHandler || regenerateHandler.isLoading !== props.isLoading) {
+                setTimeout(() => setRegenerateHandler(props), 0);
+              }
+              return null; // Don't render anything here
+            }}
           />
         </TabsContent>
 
