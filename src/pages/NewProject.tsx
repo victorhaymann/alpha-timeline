@@ -729,6 +729,8 @@ export default function NewProject() {
             <PhaseWeightsConfig
               weights={phaseWeights}
               onChange={setPhaseWeights}
+              startDate={formData.start_date ? new Date(formData.start_date) : undefined}
+              endDate={formData.end_date ? new Date(formData.end_date) : undefined}
             />
           )}
 
