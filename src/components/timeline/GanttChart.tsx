@@ -724,11 +724,25 @@ export function GanttChart({
                       style={{ backgroundColor: sectionColor }}
                     />
                     <span className="truncate">{sectionName}</span>
-                    <Badge variant="secondary" className="ml-auto text-xs">
-                      {section.type === 'weekly-call' 
-                        ? section.task.recurring_dates?.length || 0
-                        : section.tasks.length}
-                    </Badge>
+                    <div className="ml-auto flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {section.type === 'weekly-call' 
+                          ? section.task.recurring_dates?.length || 0
+                          : section.tasks.length}
+                      </Badge>
+                      {section.type === 'phase' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddTask(section.phase.id);
+                          }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-muted rounded"
+                          title="Add task"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Weekly call row - single row with meeting count */}
@@ -815,21 +829,6 @@ export function GanttChart({
                     );
                   })}
 
-                  {/* Add task button - only for phases and when not collapsed */}
-                  {section.type === 'phase' && !isCollapsed && (
-                    <div 
-                      className="flex items-center px-3 border-b"
-                      style={{ height: ROW_HEIGHT }}
-                    >
-                      <button
-                        onClick={() => onAddTask(section.phase.id)}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Add task
-                      </button>
-                    </div>
-                  )}
                 </div>
               );
             })}
