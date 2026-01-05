@@ -14,7 +14,6 @@ import { PhaseCategory } from '@/types/database';
 
 // Default phase weights (must sum to 100)
 export const DEFAULT_PHASE_WEIGHTS: Record<PhaseCategory, number> = {
-  'Discovery': 0,
   'Client Check-ins': 0, // Check-ins don't consume allocation
   'Pre-Production': 20,
   'Production': 59,
@@ -25,14 +24,6 @@ export const DEFAULT_PHASE_WEIGHTS: Record<PhaseCategory, number> = {
 
 // Default step weights within phases (relative weights, normalized per phase)
 export const DEFAULT_STEP_WEIGHTS: Record<string, number> = {
-  // Discovery
-  'Kickoff Meeting': 5,
-  'Creative Brief Review': 10,
-  'Reference Gathering': 15,
-  'Concept Development': 25,
-  'Technical Assessment': 15,
-  'Schedule Planning': 10,
-  
   // Pre-Production
   'Script/Storyboard Review': 15,
   'Styleframes': 25,

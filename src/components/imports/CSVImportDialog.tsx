@@ -231,8 +231,6 @@ export function CSVImportDialog({ children }: CSVImportDialogProps) {
 
   const downloadSampleCSV = () => {
     const sampleData = `Phase,Step,Actual Days,Estimated Days,Review Rounds
-Discovery,Kickoff Meeting,1,1,0
-Discovery,Creative Brief Review,2,2,1
 Pre-Production,Styleframes,5,4,2
 Pre-Production,Animatic,3,3,1
 Production,Animation,10,8,2

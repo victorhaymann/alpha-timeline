@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { CanonicalStep, PHASE_CATEGORIES, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
+import { CanonicalStep, PHASE_CATEGORIES, PHASE_CATEGORY_COLORS, PHASE_WEIGHTS, PhaseCategory } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,7 +19,8 @@ import {
   Eye,
   EyeOff,
   X,
-  Pencil
+  Pencil,
+  Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -173,6 +174,13 @@ export function StepLibrary({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Phase Weight Badge */}
+                  {PHASE_WEIGHTS[category] > 0 && (
+                    <Badge variant="outline" className="gap-1 text-xs" style={{ borderColor: color, color }}>
+                      <Clock className="w-3 h-3" />
+                      {PHASE_WEIGHTS[category]}% time
+                    </Badge>
+                  )}
                   <Badge variant="secondary" className="text-xs">
                     {totalIncluded}/{totalSteps} steps
                   </Badge>
@@ -232,9 +240,6 @@ export function StepLibrary({
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                          {step.default_weight_percent && (
-                            <span className="text-muted-foreground">{step.default_weight_percent}%</span>
-                          )}
                           {allowLibraryEdit && onEditCanonicalStep && (
                             <button
                               onClick={(e) => {
@@ -287,9 +292,6 @@ export function StepLibrary({
                         </div>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                        {step.weight_percent && (
-                          <span className="text-muted-foreground">{step.weight_percent}%</span>
-                        )}
                         {!readOnly && onRemoveCustomStep && (
                           <button
                             onClick={() => onRemoveCustomStep(step.id)}
