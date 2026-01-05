@@ -366,6 +366,47 @@ export type Database = {
           },
         ]
       }
+      meeting_notes: {
+        Row: {
+          created_at: string
+          created_by: string
+          general_notes: string | null
+          id: string
+          meeting_date: string
+          project_id: string
+          task_notes: Json | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          general_notes?: string | null
+          id?: string
+          meeting_date: string
+          project_id: string
+          task_notes?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          general_notes?: string | null
+          id?: string
+          meeting_date?: string
+          project_id?: string
+          task_notes?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           collapsed_by_default: boolean | null

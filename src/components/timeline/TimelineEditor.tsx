@@ -434,6 +434,7 @@ export function TimelineEditor({
       {!renderRegenerateButton && regenerateButtonElement}
 
       <GanttChart
+        projectId={project.id}
         projectStartDate={projectStartDate}
         projectEndDate={projectEndDate}
         phases={phases}

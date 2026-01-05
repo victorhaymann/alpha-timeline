@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
 
 interface GanttChartProps {
+  projectId: string;
   projectStartDate: Date;
   projectEndDate: Date;
   phases: Phase[];
@@ -72,6 +73,7 @@ const PHASE_HEADER_HEIGHT = 36;
 const MIN_COLUMN_WIDTH = 36;
 
 export function GanttChart({
+  projectId,
   projectStartDate,
   projectEndDate,
   phases,
@@ -1069,6 +1071,7 @@ export function GanttChart({
                             columnWidth={columnWidth}
                             allMeetingDates={section.task.recurring_dates || []}
                             meetingIndex={idx}
+                            projectId={projectId}
                           />
                         );
                       })}
