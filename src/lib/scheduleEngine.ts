@@ -454,6 +454,44 @@ export function computeSchedule(input: ScheduleInput): ScheduleOutput {
     });
   });
   
+  // Add phase-to-phase dependencies: tasks in later phases depend on the previous phase completing
+  const phaseOrder: PhaseCategory[] = ['Pre-Production', 'Production', 'Post-Production', 'Delivery', 'Immersive'];
+  const orderedUsedPhases = phaseOrder.filter(p => usedPhases.includes(p));
+  
+  for (let i = 1; i < orderedUsedPhases.length; i++) {
+    const prevPhase = orderedUsedPhases[i - 1];
+    const currentPhase = orderedUsedPhases[i];
+    
+    // Find the predecessor: prefer phase milestone, otherwise use the last task in previous phase
+    const prevPhaseMilestone = phaseMilestones.find(m => m.phaseCategory === prevPhase);
+    const prevPhaseTasks = allTasks.filter(t => t.phaseCategory === prevPhase && !t.isGenerated);
+    
+    let predecessorId: string | null = null;
+    if (prevPhaseMilestone) {
+      predecessorId = prevPhaseMilestone._stepId;
+    } else if (prevPhaseTasks.length > 0) {
+      // Use the last non-generated task in the phase
+      predecessorId = prevPhaseTasks[prevPhaseTasks.length - 1]._stepId;
+    }
+    
+    if (predecessorId) {
+      // Make all non-generated tasks in current phase depend on previous phase
+      const currentPhaseTasks = allTasks.filter(t => t.phaseCategory === currentPhase && !t.isGenerated);
+      currentPhaseTasks.forEach(task => {
+        // Only add if this task doesn't already have a dependency from this predecessor
+        const alreadyExists = extendedDependencies.some(
+          d => d.predecessorId === predecessorId && d.successorId === task._stepId
+        );
+        if (!alreadyExists) {
+          extendedDependencies.push({
+            predecessorId: predecessorId!,
+            successorId: task._stepId,
+          });
+        }
+      });
+    }
+  }
+  
   // 7. Calculate phase weights
   const phaseWeights: Record<string, number> = {};
   let totalWeight = 0;
