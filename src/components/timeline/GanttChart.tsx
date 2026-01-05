@@ -910,8 +910,26 @@ export function GanttChart({
                       </div>
                     );
 
-                    const left = dateToX(displayStart);
-                    const width = getTaskWidth(displayStart, displayEnd);
+                    // Check if task overlaps with visible range
+                    const firstColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[0].startDate) : null;
+                    const lastColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[groupedColumns.length - 1].startDate) : null;
+                    const taskStartDay = startOfDay(displayStart);
+                    const taskEndDay = startOfDay(displayEnd);
+                    
+                    // Skip rendering if task is completely outside visible range
+                    const isOutsideView = firstColDate && lastColDate && 
+                      (taskEndDay < firstColDate || taskStartDay > lastColDate);
+
+                    // Calculate clipped position and width for tasks that partially overlap
+                    let clippedLeft = dateToX(displayStart);
+                    let clippedWidth = getTaskWidth(displayStart, displayEnd);
+                    
+                    // If task starts before view, clip to start at 0
+                    if (firstColDate && taskStartDay < firstColDate) {
+                      clippedLeft = 0;
+                      // Recalculate width from first visible column to task end
+                      clippedWidth = getTaskWidth(firstColDate, displayEnd);
+                    }
 
                     return (
                       <div key={task.id} className="relative border-b" style={{ height: ROW_HEIGHT }}>
@@ -929,56 +947,57 @@ export function GanttChart({
                           })}
                         </div>
 
-                        {/* Task bar */}
-                        <div
-                          className={cn(
-                            "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
-                            "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
-                            "transition-all duration-300 ease-out",
-                            isCurrentlyDragging && "opacity-90 ring-2 ring-primary shadow-xl !transition-none",
-                            isJustDropped && "animate-spring-settle",
-                            task.task_type === 'milestone' && "rounded-full",
-                            task.task_type === 'meeting' && "bg-primary/80"
-                          )}
-                          style={{
-                            left: left + 2,
-                            width: task.task_type === 'milestone' ? 24 : width - 4,
-                            backgroundColor: task.task_type === 'milestone' 
-                              ? '#F59E0B' 
-                              : task.task_type === 'meeting'
-                                ? undefined
-                                : sectionColor,
-                          }}
-                          onMouseDown={(e) => handleDragStart(e, task, 'move')}
-                        >
-                          {task.task_type !== 'milestone' && (
-                            <>
-                              {/* Resize handle - start */}
-                              <div
-                                className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  handleDragStart(e, task, 'resize-start');
-                                }}
-                              />
+                        {/* Task bar - only render if within visible range */}
+                        {!isOutsideView && clippedWidth > 0 && (
+                          <div
+                            className={cn(
+                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                              "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
+                              "transition-all duration-300 ease-out",
+                              isCurrentlyDragging && "opacity-90 ring-2 ring-primary shadow-xl !transition-none",
+                              isJustDropped && "animate-spring-settle",
+                              task.task_type === 'milestone' && "rounded-full",
+                              task.task_type === 'meeting' && "bg-primary/80"
+                            )}
+                            style={{
+                              left: clippedLeft + 2,
+                              width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
+                              backgroundColor: task.task_type === 'milestone' 
+                                ? '#F59E0B' 
+                                : task.task_type === 'meeting'
+                                  ? undefined
+                                  : sectionColor,
+                            }}
+                            onMouseDown={(e) => handleDragStart(e, task, 'move')}
+                          >
+                            {task.task_type !== 'milestone' && (
+                              <>
+                                {/* Resize handle - start */}
+                                <div
+                                  className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    handleDragStart(e, task, 'resize-start');
+                                  }}
+                                />
 
-                              {/* Task name */}
-                              <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                <span className="text-xs font-medium text-white truncate drop-shadow-sm">
-                                  {width > 60 ? task.name : ''}
-                                </span>
-                              </div>
+                                {/* Task name */}
+                                <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
+                                  <span className="text-xs font-medium text-white truncate drop-shadow-sm">
+                                    {clippedWidth > 60 ? task.name : ''}
+                                  </span>
+                                </div>
 
-                              {/* Resize handle - end */}
-                              <div
-                                className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
-                                onMouseDown={(e) => {
-                                  e.stopPropagation();
-                                  handleDragStart(e, task, 'resize-end');
-                                }}
-                              />
-                            </>
-                          )}
+                                {/* Resize handle - end */}
+                                <div
+                                  className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                  onMouseDown={(e) => {
+                                    e.stopPropagation();
+                                    handleDragStart(e, task, 'resize-end');
+                                  }}
+                                />
+                              </>
+                            )}
 
                           {/* Duration preview tooltip during resize */}
                           {durationChanged && (
@@ -1005,7 +1024,8 @@ export function GanttChart({
                               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-foreground" />
                             </div>
                           )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
