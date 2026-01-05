@@ -451,7 +451,7 @@ export function GanttChart({
     }
 
     phases
-      .filter(phase => phase.name !== 'Discovery')
+      .filter(phase => phase.name !== 'Discovery' && phase.name !== 'Client Check-ins')
       .forEach(phase => {
         const phaseTasks = tasksByPhase.get(phase.id) || [];
         sections.push({ type: 'phase', phase, tasks: phaseTasks });
