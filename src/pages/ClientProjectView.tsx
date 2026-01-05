@@ -271,6 +271,7 @@ export default function ClientProjectView() {
 
         <TabsContent value="timeline" className="space-y-4">
           <GanttChart
+            projectId={project.id}
             projectStartDate={new Date(project.start_date)}
             projectEndDate={new Date(project.end_date)}
             phases={phases}

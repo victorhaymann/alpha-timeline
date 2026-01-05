@@ -371,6 +371,7 @@ export default function SharedProjectView() {
               <CardContent>
                 {tasks.length > 0 ? (
                   <GanttChart
+                    projectId={project.id}
                     projectStartDate={new Date(project.start_date)}
                     projectEndDate={new Date(project.end_date)}
                     phases={phases}

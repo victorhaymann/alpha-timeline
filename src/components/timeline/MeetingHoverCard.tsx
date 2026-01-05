@@ -1,5 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Task } from '@/types/database';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import {
   HoverCard,
   HoverCardContent,
@@ -14,8 +17,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, Clock, CheckCircle2, PlayCircle, FileText } from 'lucide-react';
+import { Users, Clock, CheckCircle2, PlayCircle, FileText, Save, Loader2, NotebookPen } from 'lucide-react';
 import { format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns';
 
 interface MeetingHoverCardProps {
@@ -27,15 +29,17 @@ interface MeetingHoverCardProps {
   tasks: Task[];
   left: number;
   columnWidth: number;
-  allMeetingDates: string[]; // All recurring dates to calculate previous meeting
-  meetingIndex: number; // Index of this meeting in the array
+  allMeetingDates: string[];
+  meetingIndex: number;
+  projectId: string;
 }
 
-interface AgendaItem {
+interface TaskNote {
   taskId: string;
   taskName: string;
   checked: boolean;
   notes: string;
+  section: 'review' | 'validate';
 }
 
 export function MeetingHoverCard({
@@ -49,10 +53,15 @@ export function MeetingHoverCard({
   columnWidth,
   allMeetingDates,
   meetingIndex,
+  projectId,
 }: MeetingHoverCardProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
-  const [reviewItems, setReviewItems] = useState<AgendaItem[]>([]);
-  const [validateItems, setValidateItems] = useState<AgendaItem[]>([]);
+  const [generalNotes, setGeneralNotes] = useState('');
+  const [taskNotes, setTaskNotes] = useState<TaskNote[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Tasks "To be reviewed" - tasks in progress at the time of this meeting
   const inProgressTasks = useMemo(() => {
@@ -116,44 +125,143 @@ export function MeetingHoverCard({
     return `${formatTime(startDate)} - ${formatTime(endDate)}${tz ? ` (${tz})` : ''}`;
   }, [checkinTime, checkinDuration, checkinTimezone]);
 
-  // Open notes dialog and initialize agenda items
+  // Load existing notes from database
+  const loadNotes = async () => {
+    setIsLoading(true);
+    try {
+      const meetingDateStr = format(meetingDate, 'yyyy-MM-dd');
+      const { data, error } = await supabase
+        .from('meeting_notes')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('meeting_date', meetingDateStr)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setGeneralNotes(data.general_notes || '');
+        const savedTaskNotes = (data.task_notes as unknown as TaskNote[]) || [];
+        
+        // Merge saved notes with current tasks
+        const mergedNotes: TaskNote[] = [
+          ...inProgressTasks.map(task => {
+            const saved = savedTaskNotes.find(n => n.taskId === task.id && n.section === 'review');
+            return {
+              taskId: task.id,
+              taskName: task.name,
+              checked: saved?.checked ?? false,
+              notes: saved?.notes ?? '',
+              section: 'review' as const,
+            };
+          }),
+          ...recentlyCompletedTasks.map(task => {
+            const saved = savedTaskNotes.find(n => n.taskId === task.id && n.section === 'validate');
+            return {
+              taskId: task.id,
+              taskName: task.name,
+              checked: saved?.checked ?? false,
+              notes: saved?.notes ?? '',
+              section: 'validate' as const,
+            };
+          }),
+        ];
+        setTaskNotes(mergedNotes);
+      } else {
+        // Initialize fresh notes
+        initializeNotes();
+      }
+    } catch (error) {
+      console.error('Error loading meeting notes:', error);
+      initializeNotes();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeNotes = () => {
+    setGeneralNotes('');
+    setTaskNotes([
+      ...inProgressTasks.map(task => ({
+        taskId: task.id,
+        taskName: task.name,
+        checked: false,
+        notes: '',
+        section: 'review' as const,
+      })),
+      ...recentlyCompletedTasks.map(task => ({
+        taskId: task.id,
+        taskName: task.name,
+        checked: false,
+        notes: '',
+        section: 'validate' as const,
+      })),
+    ]);
+  };
+
+  // Save notes to database
+  const saveNotes = async () => {
+    if (!user) return;
+    
+    setIsSaving(true);
+    try {
+      const meetingDateStr = format(meetingDate, 'yyyy-MM-dd');
+      
+      const { error } = await supabase
+        .from('meeting_notes')
+        .upsert([{
+          project_id: projectId,
+          meeting_date: meetingDateStr,
+          general_notes: generalNotes,
+          task_notes: JSON.parse(JSON.stringify(taskNotes)),
+          created_by: user.id,
+        }], {
+          onConflict: 'project_id,meeting_date',
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Notes saved',
+        description: 'Your meeting notes have been saved.',
+      });
+    } catch (error: any) {
+      console.error('Error saving meeting notes:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save meeting notes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Open notes dialog
   const handleOpenNotes = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // Initialize review items from in-progress tasks
-    setReviewItems(inProgressTasks.map(task => ({
-      taskId: task.id,
-      taskName: task.name,
-      checked: false,
-      notes: '',
-    })));
-    
-    // Initialize validate items from recently completed tasks
-    setValidateItems(recentlyCompletedTasks.map(task => ({
-      taskId: task.id,
-      taskName: task.name,
-      checked: false,
-      notes: '',
-    })));
-    
     setNotesDialogOpen(true);
   };
 
-  const updateReviewItem = (taskId: string, field: 'checked' | 'notes', value: boolean | string) => {
-    setReviewItems(items => 
+  // Load notes when dialog opens
+  useEffect(() => {
+    if (notesDialogOpen) {
+      loadNotes();
+    }
+  }, [notesDialogOpen]);
+
+  const updateTaskNote = (taskId: string, section: 'review' | 'validate', field: 'checked' | 'notes', value: boolean | string) => {
+    setTaskNotes(items => 
       items.map(item => 
-        item.taskId === taskId ? { ...item, [field]: value } : item
+        item.taskId === taskId && item.section === section 
+          ? { ...item, [field]: value } 
+          : item
       )
     );
   };
 
-  const updateValidateItem = (taskId: string, field: 'checked' | 'notes', value: boolean | string) => {
-    setValidateItems(items => 
-      items.map(item => 
-        item.taskId === taskId ? { ...item, [field]: value } : item
-      )
-    );
-  };
+  const reviewItems = taskNotes.filter(n => n.section === 'review');
+  const validateItems = taskNotes.filter(n => n.section === 'validate');
 
   return (
     <>
@@ -262,111 +370,148 @@ export function MeetingHoverCard({
 
       {/* Meeting Notes Dialog */}
       <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Meeting Notes - {format(meetingDate, 'MMM d, yyyy')}
-            </DialogTitle>
+        <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Meeting Notes - {format(meetingDate, 'MMM d, yyyy')}
+              </DialogTitle>
+              <Button 
+                onClick={saveNotes} 
+                disabled={isSaving}
+                size="sm"
+                className="mr-8"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
+                Save
+              </Button>
+            </div>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 pr-4">
-            <div className="space-y-6 py-4">
-              {/* To be reviewed section */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <PlayCircle className="w-4 h-4 text-amber-500" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    To be reviewed
-                  </h3>
-                  <span className="text-xs font-medium text-amber-500">
-                    ({reviewItems.length})
-                  </span>
-                </div>
-                
-                {reviewItems.length > 0 ? (
-                  <div className="space-y-4">
-                    {reviewItems.map(item => (
-                      <div key={item.taskId} className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            id={`review-${item.taskId}`}
-                            checked={item.checked}
-                            onCheckedChange={(checked) => 
-                              updateReviewItem(item.taskId, 'checked', checked as boolean)
-                            }
-                          />
-                          <label
-                            htmlFor={`review-${item.taskId}`}
-                            className={`text-sm font-medium cursor-pointer ${
-                              item.checked ? 'line-through text-muted-foreground' : 'text-foreground'
-                            }`}
-                          >
-                            {item.taskName}
-                          </label>
-                        </div>
-                        <Textarea
-                          placeholder="Add notes..."
-                          value={item.notes}
-                          onChange={(e) => updateReviewItem(item.taskId, 'notes', e.target.value)}
-                          className="min-h-[60px] text-sm resize-none"
-                        />
-                      </div>
-                    ))}
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-6">
+                {/* General Notes Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <NotebookPen className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      General Notes
+                    </h3>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic px-3">No tasks to review</p>
-                )}
-              </div>
+                  <Textarea
+                    placeholder="Add general meeting notes, action items, or discussion points..."
+                    value={generalNotes}
+                    onChange={(e) => setGeneralNotes(e.target.value)}
+                    className="min-h-[100px] text-sm resize-none"
+                  />
+                </div>
 
-              {/* To be validated section */}
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    To be validated
-                  </h3>
-                  <span className="text-xs font-medium text-emerald-500">
-                    ({validateItems.length})
-                  </span>
-                </div>
-                
-                {validateItems.length > 0 ? (
-                  <div className="space-y-4">
-                    {validateItems.map(item => (
-                      <div key={item.taskId} className="space-y-2 p-3 rounded-lg bg-muted/30 border border-border">
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            id={`validate-${item.taskId}`}
-                            checked={item.checked}
-                            onCheckedChange={(checked) => 
-                              updateValidateItem(item.taskId, 'checked', checked as boolean)
-                            }
-                          />
-                          <label
-                            htmlFor={`validate-${item.taskId}`}
-                            className={`text-sm font-medium cursor-pointer ${
-                              item.checked ? 'line-through text-muted-foreground' : 'text-foreground'
-                            }`}
-                          >
-                            {item.taskName}
-                          </label>
-                        </div>
-                        <Textarea
-                          placeholder="Add notes..."
-                          value={item.notes}
-                          onChange={(e) => updateValidateItem(item.taskId, 'notes', e.target.value)}
-                          className="min-h-[60px] text-sm resize-none"
-                        />
-                      </div>
-                    ))}
+                {/* To be reviewed section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <PlayCircle className="w-4 h-4 text-amber-500" />
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      To be reviewed
+                    </h3>
+                    <span className="text-xs font-medium text-amber-500">
+                      ({reviewItems.length})
+                    </span>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic px-3">No tasks to validate</p>
-                )}
+                  
+                  {reviewItems.length > 0 ? (
+                    <div className="space-y-3">
+                      {reviewItems.map(item => (
+                        <div key={item.taskId} className="p-3 rounded-lg bg-muted/30 border border-border">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Checkbox
+                              id={`review-${item.taskId}`}
+                              checked={item.checked}
+                              onCheckedChange={(checked) => 
+                                updateTaskNote(item.taskId, 'review', 'checked', checked as boolean)
+                              }
+                            />
+                            <label
+                              htmlFor={`review-${item.taskId}`}
+                              className={`text-sm font-medium cursor-pointer ${
+                                item.checked ? 'line-through text-muted-foreground' : 'text-foreground'
+                              }`}
+                            >
+                              {item.taskName}
+                            </label>
+                          </div>
+                          <Textarea
+                            placeholder="Add notes..."
+                            value={item.notes}
+                            onChange={(e) => updateTaskNote(item.taskId, 'review', 'notes', e.target.value)}
+                            className="min-h-[50px] text-sm resize-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic px-3">No tasks to review</p>
+                  )}
+                </div>
+
+                {/* To be validated section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      To be validated
+                    </h3>
+                    <span className="text-xs font-medium text-emerald-500">
+                      ({validateItems.length})
+                    </span>
+                  </div>
+                  
+                  {validateItems.length > 0 ? (
+                    <div className="space-y-3">
+                      {validateItems.map(item => (
+                        <div key={item.taskId} className="p-3 rounded-lg bg-muted/30 border border-border">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Checkbox
+                              id={`validate-${item.taskId}`}
+                              checked={item.checked}
+                              onCheckedChange={(checked) => 
+                                updateTaskNote(item.taskId, 'validate', 'checked', checked as boolean)
+                              }
+                            />
+                            <label
+                              htmlFor={`validate-${item.taskId}`}
+                              className={`text-sm font-medium cursor-pointer ${
+                                item.checked ? 'line-through text-muted-foreground' : 'text-foreground'
+                              }`}
+                            >
+                              {item.taskName}
+                            </label>
+                          </div>
+                          <Textarea
+                            placeholder="Add notes..."
+                            value={item.notes}
+                            onChange={(e) => updateTaskNote(item.taskId, 'validate', 'notes', e.target.value)}
+                            className="min-h-[50px] text-sm resize-none"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic px-3">No tasks to validate</p>
+                  )}
+                </div>
               </div>
             </div>
-          </ScrollArea>
+          )}
         </DialogContent>
       </Dialog>
     </>
