@@ -269,6 +269,44 @@ export type Database = {
           },
         ]
       }
+      invoices: {
+        Row: {
+          created_at: string
+          file_path: string
+          file_size: number | null
+          id: string
+          name: string
+          project_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          name: string
+          project_id: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          name?: string
+          project_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           collapsed_by_default: boolean | null
@@ -444,6 +482,44 @@ export type Database = {
           zoom_link_default?: string | null
         }
         Relationships: []
+      }
+      quotations: {
+        Row: {
+          created_at: string
+          file_path: string
+          file_size: number | null
+          id: string
+          name: string
+          project_id: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          name: string
+          project_id: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          name?: string
+          project_id?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       step_templates: {
         Row: {

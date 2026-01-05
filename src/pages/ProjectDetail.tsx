@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TimelineEditor } from '@/components/timeline/TimelineEditor';
 import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
+import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -17,9 +18,7 @@ import {
   Settings, 
   Share2,
   BarChart3,
-  List,
   Loader2,
-  Plus,
   Building2,
   Layers,
   Clock,
@@ -33,6 +32,14 @@ interface ProjectStepWithCanonical extends ProjectStep {
   canonical_step: CanonicalStep;
 }
 
+interface ProjectDocument {
+  id: string;
+  name: string;
+  file_path: string;
+  file_size: number | null;
+  created_at: string;
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -41,6 +48,8 @@ export default function ProjectDetail() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [projectSteps, setProjectSteps] = useState<ProjectStepWithCanonical[]>([]);
+  const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
+  const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Task detail dialog state
@@ -117,11 +126,24 @@ export default function ProjectDetail() {
     }
   }, [id, navigate]);
 
+  const fetchDocuments = useCallback(async () => {
+    if (!id) return;
+
+    const [quotationsRes, invoicesRes] = await Promise.all([
+      supabase.from('quotations').select('*').eq('project_id', id).order('created_at', { ascending: false }),
+      supabase.from('invoices').select('*').eq('project_id', id).order('created_at', { ascending: false }),
+    ]);
+
+    setQuotations((quotationsRes.data as ProjectDocument[]) || []);
+    setInvoices((invoicesRes.data as ProjectDocument[]) || []);
+  }, [id]);
+
   const hasTriggeredConfetti = useRef(false);
 
   useEffect(() => {
     fetchProjectData();
-  }, [fetchProjectData]);
+    fetchDocuments();
+  }, [fetchProjectData, fetchDocuments]);
 
   // Trigger confetti when project is completed
   useEffect(() => {
@@ -369,39 +391,21 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="quotations">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <List className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Quotations</h3>
-              <p className="text-muted-foreground text-center mb-6 max-w-sm">
-                Create and manage project quotations for your clients.
-              </p>
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" />
-                Create Quotation
-              </Button>
-            </CardContent>
-          </Card>
+          <DocumentUploader
+            projectId={id!}
+            type="quotations"
+            documents={quotations}
+            onUploadComplete={fetchDocuments}
+          />
         </TabsContent>
 
         <TabsContent value="invoices">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="w-16 h-16 rounded-full bg-phase-delivery/10 flex items-center justify-center mb-4">
-                <Download className="w-8 h-8 text-phase-delivery" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Invoices</h3>
-              <p className="text-muted-foreground text-center mb-6 max-w-sm">
-                Generate and track invoices for project milestones.
-              </p>
-              <Button className="gap-2">
-                <Plus className="w-4 h-4" />
-                Create Invoice
-              </Button>
-            </CardContent>
-          </Card>
+          <DocumentUploader
+            projectId={id!}
+            type="invoices"
+            documents={invoices}
+            onUploadComplete={fetchDocuments}
+          />
         </TabsContent>
       </Tabs>
 
