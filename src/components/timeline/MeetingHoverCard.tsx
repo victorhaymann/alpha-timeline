@@ -237,6 +237,14 @@ export function MeetingHoverCard({
     }
   };
 
+  // Auto-save when closing dialog
+  const handleDialogClose = async (open: boolean) => {
+    if (!open && notesDialogOpen) {
+      await saveNotes();
+    }
+    setNotesDialogOpen(open);
+  };
+
   // Open notes dialog
   const handleOpenNotes = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -369,7 +377,7 @@ export function MeetingHoverCard({
       </HoverCard>
 
       {/* Meeting Notes Dialog */}
-      <Dialog open={notesDialogOpen} onOpenChange={setNotesDialogOpen}>
+      <Dialog open={notesDialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
             <div className="flex items-center justify-between">
