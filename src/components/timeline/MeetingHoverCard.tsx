@@ -380,25 +380,10 @@ export function MeetingHoverCard({
       <Dialog open={notesDialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-2xl h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                Meeting Notes - {format(meetingDate, 'MMM d, yyyy')}
-              </DialogTitle>
-              <Button 
-                onClick={saveNotes} 
-                disabled={isSaving}
-                size="sm"
-                className="mr-8"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Save
-              </Button>
-            </div>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Meeting Notes - {format(meetingDate, 'MMM d, yyyy')}
+            </DialogTitle>
           </DialogHeader>
           
           {isLoading ? (
