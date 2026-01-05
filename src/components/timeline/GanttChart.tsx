@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -45,9 +45,11 @@ interface GanttChartProps {
 
 type ViewMode = 'day' | 'week' | 'month';
 
+const TASK_COLUMN_WIDTH = 220;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
 const PHASE_HEADER_HEIGHT = 36;
+const MIN_COLUMN_WIDTH = 36;
 
 export function GanttChart({
   projectStartDate,
@@ -61,11 +63,13 @@ export function GanttChart({
   onAddReviewRound,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: projectStartDate,
     to: projectEndDate,
   });
+  const [containerWidth, setContainerWidth] = useState(800);
   
   const [dragging, setDragging] = useState<{
     taskId: string;
@@ -92,15 +96,6 @@ export function GanttChart({
     const allDays = eachDayOfInterval({ start: viewStart, end: viewEnd });
     return allDays.filter(day => isWorkingDay(day));
   }, [viewStart, viewEnd, isWorkingDay]);
-
-  // Calculate column width based on view mode
-  const columnWidth = useMemo(() => {
-    switch (viewMode) {
-      case 'week': return 48;
-      case 'month': return 64;
-      default: return 36;
-    }
-  }, [viewMode]);
 
   // Group working days by week or month for aggregated views
   const groupedColumns = useMemo(() => {
@@ -162,6 +157,33 @@ export function GanttChart({
       endDate: end,
     }));
   }, [workingDays, viewMode]);
+
+  // Observe container width for responsive columns
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const availableWidth = containerRef.current.clientWidth - TASK_COLUMN_WIDTH;
+        setContainerWidth(Math.max(availableWidth, 400));
+      }
+    };
+
+    updateWidth();
+    const resizeObserver = new ResizeObserver(updateWidth);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Calculate responsive column width - fills available space
+  const columnWidth = useMemo(() => {
+    const columnCount = groupedColumns.length || 1;
+    const calculatedWidth = containerWidth / columnCount;
+    
+    // Set minimum widths based on view mode
+    const minWidths = { day: MIN_COLUMN_WIDTH, week: 60, month: 80 };
+    return Math.max(calculatedWidth, minWidths[viewMode]);
+  }, [containerWidth, groupedColumns.length, viewMode]);
 
   const chartWidth = groupedColumns.length * columnWidth;
 
@@ -370,9 +392,9 @@ export function GanttChart({
 
       {/* Gantt Chart */}
       <div className="relative overflow-auto border rounded-lg bg-card" ref={containerRef}>
-        <div className="relative" style={{ width: chartWidth + 200, minHeight: totalHeight }}>
+        <div className="relative flex" style={{ minHeight: totalHeight }}>
           {/* Fixed task names column */}
-          <div className="sticky left-0 z-20 bg-card border-r" style={{ width: 200 }}>
+          <div className="sticky left-0 z-20 bg-card border-r shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
             {/* Header */}
             <div 
               className="flex items-center px-3 border-b bg-muted/50 font-medium"
@@ -444,8 +466,8 @@ export function GanttChart({
 
           {/* Timeline area */}
           <div 
-            className="absolute top-0 left-[200px]"
-            style={{ width: chartWidth }}
+            className="flex-1 min-w-0"
+            ref={timelineRef}
             onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
             onMouseUp={dragging ? handleDragEnd : undefined}
             onMouseLeave={dragging ? handleDragEnd : undefined}
