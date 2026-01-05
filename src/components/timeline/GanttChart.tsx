@@ -1130,82 +1130,94 @@ export function GanttChart({
 
                         {/* Task bar - Phase colored */}
                         {!isOutsideView && clippedWidth > 0 && (
-                          <div
-                            className={cn(
-                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
-                              "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                              "transition-all duration-300 ease-out shadow-md",
-                              isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                              isJustDropped && "animate-spring-settle",
-                              task.task_type === 'milestone' && "rounded-full"
-                            )}
-                            style={{
-                              left: clippedLeft + 2,
-                              width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
-                              background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                              boxShadow: `0 4px 12px ${sectionColor}66`,
-                            }}
-                            onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
-                          >
-                            {task.task_type !== 'milestone' && (
-                              <>
-                                {/* Resize handle - start */}
-                                {!readOnly && (
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
-                                    onMouseDown={(e) => {
-                                      e.stopPropagation();
-                                      handleDragStart(e, task, 'resize-start');
-                                    }}
-                                  />
+                          <Tooltip delayDuration={200}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                  "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                  "transition-all duration-300 ease-out shadow-md",
+                                  isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
+                                  isJustDropped && "animate-spring-settle",
+                                  task.task_type === 'milestone' && "rounded-full"
+                                )}
+                                style={{
+                                  left: clippedLeft + 2,
+                                  width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
+                                  background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                  boxShadow: `0 4px 12px ${sectionColor}66`,
+                                }}
+                                onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
+                              >
+                                {task.task_type !== 'milestone' && (
+                                  <>
+                                    {/* Resize handle - start */}
+                                    {!readOnly && (
+                                      <div
+                                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          handleDragStart(e, task, 'resize-start');
+                                        }}
+                                      />
+                                    )}
+
+                                    {/* Task name */}
+                                    <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                        {clippedWidth > 60 ? task.name : ''}
+                                      </span>
+                                    </div>
+
+                                    {/* Resize handle - end */}
+                                    {!readOnly && (
+                                      <div
+                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          handleDragStart(e, task, 'resize-end');
+                                        }}
+                                      />
+                                    )}
+                                  </>
                                 )}
 
-                                {/* Task name */}
-                                <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                  <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
-                                    {clippedWidth > 60 ? task.name : ''}
-                                  </span>
+                              {/* Duration preview tooltip during resize */}
+                              {durationChanged && (
+                                <div 
+                                  className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
+                                    <span className="text-amber-500">→</span>
+                                    <span className={cn(
+                                      "font-bold",
+                                      currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
+                                    )}>
+                                      {currentDuration}d
+                                    </span>
+                                    <span className={cn(
+                                      "text-[10px]",
+                                      currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
+                                    )}>
+                                      ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
+                                    </span>
+                                  </div>
+                                  {/* Tooltip arrow */}
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
                                 </div>
-
-                                {/* Resize handle - end */}
-                                {!readOnly && (
-                                  <div
-                                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
-                                    onMouseDown={(e) => {
-                                      e.stopPropagation();
-                                      handleDragStart(e, task, 'resize-end');
-                                    }}
-                                  />
-                                )}
-                              </>
-                            )}
-
-                          {/* Duration preview tooltip during resize */}
-                          {durationChanged && (
-                            <div 
-                              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
-                                <span className="text-amber-500">→</span>
-                                <span className={cn(
-                                  "font-bold",
-                                  currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
-                                )}>
-                                  {currentDuration}d
-                                </span>
-                                <span className={cn(
-                                  "text-[10px]",
-                                  currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
-                                )}>
-                                  ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
-                                </span>
+                              )}
                               </div>
-                              {/* Tooltip arrow */}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
-                            </div>
-                          )}
-                          </div>
+                            </TooltipTrigger>
+                            {viewMode === 'project' && (
+                              <TooltipContent side="top" className="font-semibold">
+                                <p>{task.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {format(displayStart, 'MMM d')} → {format(displayEnd, 'MMM d')}
+                                </p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
                         )}
                       </div>
                     );
