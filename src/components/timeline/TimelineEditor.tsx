@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { GanttChart } from './GanttChart';
 import { AddTaskDialog } from './AddTaskDialog';
@@ -37,6 +46,8 @@ export function TimelineEditor({
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
+  const [addMeetingDialogOpen, setAddMeetingDialogOpen] = useState(false);
+  const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
 
   const projectStartDate = new Date(project.start_date);
   const projectEndDate = new Date(project.end_date);
@@ -280,6 +291,95 @@ export function TimelineEditor({
     }
   };
 
+  // Handle open add meeting dialog
+  const handleOpenAddMeeting = () => {
+    const today = new Date();
+    const defaultDate = today < projectStartDate ? projectStartDate : today;
+    setNewMeetingDate(defaultDate);
+    setAddMeetingDialogOpen(true);
+  };
+
+  // Handle add meeting (for Client Check-ins)
+  const handleConfirmAddMeeting = async () => {
+    if (!newMeetingDate) return;
+    
+    try {
+      // Find the Client Check-ins phase
+      const checkinPhase = phases.find(p => p.name === 'Client Check-ins');
+      if (!checkinPhase) {
+        toast({
+          title: 'Error',
+          description: 'Client Check-ins phase not found.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const dateStr = format(newMeetingDate, 'yyyy-MM-dd');
+      
+      const { error } = await supabase
+        .from('tasks')
+        .insert({
+          phase_id: checkinPhase.id,
+          project_id: project.id,
+          name: 'Client Check-in',
+          task_type: 'meeting',
+          client_visible: true,
+          start_date: dateStr,
+          end_date: dateStr,
+          order_index: tasks.filter(t => t.phase_id === checkinPhase.id).length,
+          status: 'pending',
+          weight_percent: 0,
+          review_rounds: 0,
+          percentage_allocation: 0,
+          is_feedback_meeting: true,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Meeting added',
+        description: `New meeting added for ${format(newMeetingDate, 'MMM d, yyyy')}.`,
+      });
+
+      setAddMeetingDialogOpen(false);
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error adding meeting:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add meeting.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handle delete meeting
+  const handleDeleteMeeting = async (taskId: string) => {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Meeting deleted',
+        description: 'The meeting has been removed.',
+      });
+
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error deleting meeting:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete meeting.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Regenerate schedule
   const handleRegenerate = async () => {
     setIsRegenerating(true);
@@ -448,6 +548,8 @@ export function TimelineEditor({
         onAddTask={handleAddTask}
         onAddReviewRound={handleAddReviewRound}
         onDeleteTask={handleDeleteTask}
+        onAddMeeting={handleOpenAddMeeting}
+        onDeleteMeeting={handleDeleteMeeting}
       />
 
       <AddTaskDialog
@@ -457,6 +559,39 @@ export function TimelineEditor({
         projectStartDate={projectStartDate}
         projectEndDate={projectEndDate}
       />
+
+      {/* Add Meeting Dialog */}
+      <Dialog open={addMeetingDialogOpen} onOpenChange={setAddMeetingDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Meeting</DialogTitle>
+            <DialogDescription>
+              Select a date for the new client check-in meeting
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-center py-4">
+            <Calendar
+              mode="single"
+              selected={newMeetingDate}
+              onSelect={setNewMeetingDate}
+              disabled={(date) =>
+                date < projectStartDate || date > projectEndDate
+              }
+              className="rounded-md border"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddMeetingDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmAddMeeting} disabled={!newMeetingDate}>
+              Add Meeting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
