@@ -878,7 +878,7 @@ export function GanttChart({
           {/* Timeline area */}
           <div 
             className={cn(
-              "flex-1 min-w-0 bg-muted",
+              "relative flex-1 min-w-0 bg-muted",
               slideDirection === 'left' && "animate-slide-left",
               slideDirection === 'right' && "animate-slide-right"
             )}
@@ -1140,7 +1140,7 @@ export function GanttChart({
               );
             })}
 
-            {/* Today marker - Red vertical line */}
+            {/* Today marker - Red vertical line with pulse */}
             {(() => {
               const today = new Date();
               const todayColIndex = groupedColumns.findIndex(col => 
@@ -1151,14 +1151,19 @@ export function GanttChart({
               const todayX = todayColIndex * columnWidth + columnWidth / 2;
               return (
                 <div
-                  className="absolute w-0.5 bg-destructive z-30 pointer-events-none"
+                  className="absolute w-0.5 bg-destructive z-30 pointer-events-none animate-pulse-subtle"
                   style={{ 
                     left: todayX,
                     top: 0,
-                    bottom: 0,
+                    height: totalHeight,
+                    boxShadow: '0 0 8px 2px hsl(var(--destructive) / 0.4)',
                   }}
                 >
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive shadow-md" />
+                  {/* Top indicator dot */}
+                  <div 
+                    className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive animate-pulse-subtle"
+                    style={{ boxShadow: '0 0 10px 3px hsl(var(--destructive) / 0.5)' }}
+                  />
                 </div>
               );
             })()}
