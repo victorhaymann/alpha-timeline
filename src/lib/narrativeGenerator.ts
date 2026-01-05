@@ -25,28 +25,6 @@ interface NarrativeOutput {
 
 // Step-specific narrative templates
 const STEP_NARRATIVES: Record<string, Partial<NarrativeOutput>> = {
-  // Discovery
-  'Kickoff Meeting': {
-    objective: 'Align on project vision, goals, and success criteria with all stakeholders.',
-    clientProvides: 'Project brief, brand guidelines, reference materials, and key stakeholder contacts.',
-    reviewMeeting: 'Initial alignment discussion covering scope, timeline expectations, and communication protocols.',
-  },
-  'Creative Brief Review': {
-    objective: 'Finalize the creative direction and ensure all requirements are documented.',
-    clientProvides: 'Approved creative brief, brand assets, and any mandatory inclusions.',
-    reviewMeeting: 'Walk-through of the creative brief with opportunity for questions and clarifications.',
-  },
-  'Reference Gathering': {
-    objective: 'Collect and organize visual references that align with the creative vision.',
-    clientProvides: 'Examples of preferred styles, competitors to reference or avoid, and mood boards.',
-    reviewMeeting: 'Reference review to confirm aesthetic direction before moving to concepts.',
-  },
-  'Concept Development': {
-    objective: 'Explore multiple creative directions and develop initial concepts.',
-    clientProvides: 'Feedback on reference materials and preferred creative direction.',
-    reviewMeeting: 'Presentation of concept options with discussion of strengths and trade-offs.',
-  },
-
   // Pre-Production
   'Script/Storyboard Review': {
     objective: 'Establish the narrative flow and visual sequence for the project.',
@@ -138,11 +116,6 @@ const STEP_NARRATIVES: Record<string, Partial<NarrativeOutput>> = {
 
 // Phase-specific defaults for steps not in the template
 const PHASE_DEFAULTS: Record<PhaseCategory, Partial<NarrativeOutput>> = {
-  'Discovery': {
-    objective: 'Explore and define requirements for this phase of the project.',
-    clientProvides: 'Relevant reference materials and feedback on direction.',
-    reviewMeeting: 'Progress review and alignment check.',
-  },
   'Client Check-ins': {
     objective: 'Regular sync to review progress and gather feedback.',
     clientProvides: 'Availability for the meeting and prepared questions or concerns.',
