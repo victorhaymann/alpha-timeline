@@ -16,6 +16,7 @@ export interface CustomStep {
   client_visible: boolean;
   review_rounds: number | null;
   weight_percent: number | null;
+  days: number | null;
 }
 
 interface AddCustomStepDialogProps {
@@ -34,7 +35,7 @@ export function AddCustomStepDialog({
   const [name, setName] = useState('');
   const [phase, setPhase] = useState<PhaseCategory>(defaultPhase);
   const [clientVisible, setClientVisible] = useState(true);
-  const [reviewRounds, setReviewRounds] = useState<string>('');
+  const [days, setDays] = useState<string>('1');
   const [weightPercent, setWeightPercent] = useState<string>('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -46,8 +47,9 @@ export function AddCustomStepDialog({
       name: name.trim(),
       phase_category: phase,
       client_visible: clientVisible,
-      review_rounds: reviewRounds ? parseInt(reviewRounds) : null,
+      review_rounds: null,
       weight_percent: weightPercent ? parseFloat(weightPercent) : null,
+      days: days ? parseInt(days) : 1,
     };
 
     onAdd(customStep);
@@ -59,7 +61,7 @@ export function AddCustomStepDialog({
     setName('');
     setPhase(defaultPhase);
     setClientVisible(true);
-    setReviewRounds('');
+    setDays('1');
     setWeightPercent('');
     setShowAdvanced(false);
   };
@@ -115,15 +117,15 @@ export function AddCustomStepDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="review-rounds">Review Rounds Override (optional)</Label>
+            <Label htmlFor="step-days">Duration (days)</Label>
             <Input
-              id="review-rounds"
+              id="step-days"
               type="number"
-              min={0}
-              max={10}
-              value={reviewRounds}
-              onChange={(e) => setReviewRounds(e.target.value)}
-              placeholder="Leave empty to use project default"
+              min={1}
+              max={365}
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+              placeholder="Number of days"
             />
           </div>
 

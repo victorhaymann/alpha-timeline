@@ -67,6 +67,7 @@ export default function NewProject() {
   const [currentStep, setCurrentStep] = useState<WizardStep>('basics');
   const [canonicalSteps, setCanonicalSteps] = useState<CanonicalStep[]>([]);
   const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
+  const [stepDays, setStepDays] = useState<Map<string, number>>(new Map());
   const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
   const [dependencies, setDependencies] = useState<LocalDependency[]>([]);
   const [feedbackSettings, setFeedbackSettings] = useState<FeedbackSettings>(DEFAULT_FEEDBACK_SETTINGS);
@@ -125,6 +126,13 @@ export default function NewProject() {
           .map(s => s.id)
       );
       setSelectedStepIds(defaultSelected);
+      
+      // Initialize default days for each step (1 day each)
+      const defaultDays = new Map<string, number>();
+      (data as CanonicalStep[]).forEach(step => {
+        defaultDays.set(step.id, 1);
+      });
+      setStepDays(defaultDays);
     }
   };
 
@@ -138,6 +146,20 @@ export default function NewProject() {
       }
       return next;
     });
+  };
+
+  const handleStepDaysChange = (stepId: string, days: number) => {
+    setStepDays(prev => {
+      const next = new Map(prev);
+      next.set(stepId, Math.max(1, days));
+      return next;
+    });
+  };
+
+  const handleUpdateCustomStep = (stepId: string, updates: Partial<CustomStep>) => {
+    setCustomSteps(prev => prev.map(s => 
+      s.id === stepId ? { ...s, ...updates } : s
+    ));
   };
 
   const handleAddCustomStep = (step: CustomStep) => {
@@ -715,9 +737,12 @@ export default function NewProject() {
               <StepLibrary 
                 selectedSteps={selectedStepIds}
                 onStepToggle={handleStepToggle}
+                stepDays={stepDays}
+                onStepDaysChange={handleStepDaysChange}
                 customSteps={customSteps}
                 onAddCustomStep={handleAddCustomStep}
                 onRemoveCustomStep={handleRemoveCustomStep}
+                onUpdateCustomStep={handleUpdateCustomStep}
               />
             </div>
           )}
