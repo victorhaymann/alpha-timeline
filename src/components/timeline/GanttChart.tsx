@@ -45,7 +45,7 @@ interface GanttChartProps {
 
 type ViewMode = 'day' | 'week' | 'month';
 
-const TASK_COLUMN_WIDTH = 220;
+const TASK_COLUMN_WIDTH = 340;
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
 const PHASE_HEADER_HEIGHT = 36;
@@ -460,25 +460,57 @@ export function GanttChart({
                   </div>
 
                   {/* Task rows */}
-                  {phaseTasks.map((task) => (
-                    <div 
-                      key={task.id}
-                      className="flex items-center gap-2 px-3 border-b hover:bg-muted/30 group"
-                      style={{ height: ROW_HEIGHT }}
-                    >
-                      <GripVertical className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
-                      {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                      {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
-                      <span className="text-sm truncate flex-1">{task.name}</span>
-                      <button
-                        onClick={() => onAddReviewRound(task.id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded"
-                        title="Add review round"
+                  {phaseTasks.map((task) => {
+                    const startDate = task.start_date ? new Date(task.start_date) : null;
+                    const endDate = task.end_date ? new Date(task.end_date) : null;
+                    const duration = startDate && endDate 
+                      ? differenceInDays(endDate, startDate) + 1 
+                      : null;
+
+                    return (
+                      <div 
+                        key={task.id}
+                        className="flex items-center gap-2 px-3 border-b hover:bg-muted/30 group"
+                        style={{ height: ROW_HEIGHT }}
                       >
-                        <RotateCcw className="w-3 h-3 text-muted-foreground" />
-                      </button>
-                    </div>
-                  ))}
+                        <GripVertical className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
+                        {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
+                        {task.task_type === 'task' && <div className="w-3.5 shrink-0" />}
+                        <span className="text-sm truncate flex-1 min-w-0">{task.name}</span>
+                        
+                        {/* Task data: days, start, end */}
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
+                          {duration !== null && (
+                            <span className="bg-muted px-1.5 py-0.5 rounded font-medium">
+                              {duration}d
+                            </span>
+                          )}
+                          {startDate && (
+                            <span className="hidden sm:inline">
+                              {format(startDate, 'MMM d')}
+                            </span>
+                          )}
+                          {startDate && endDate && (
+                            <span className="hidden sm:inline text-muted-foreground/50">→</span>
+                          )}
+                          {endDate && (
+                            <span className="hidden sm:inline">
+                              {format(endDate, 'MMM d')}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => onAddReviewRound(task.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0"
+                          title="Add review round"
+                        >
+                          <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                      </div>
+                    );
+                  })}
 
                   {/* Add task button */}
                   <div 
