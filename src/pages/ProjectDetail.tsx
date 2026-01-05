@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TimelineEditor } from '@/components/timeline/TimelineEditor';
 import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
-import { IntegrationsPanel } from '@/components/integrations/IntegrationsPanel';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -21,12 +20,10 @@ import {
   List,
   Loader2,
   Plus,
-  Flag,
   Building2,
   Layers,
   Clock,
   Download,
-  Plug
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -293,87 +290,14 @@ export default function ProjectDetail() {
       {/* Tabs */}
       <Tabs defaultValue="timeline" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="steps">Steps</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
           <TabsTrigger value="exports" className="gap-1.5">
             <Download className="w-3.5 h-3.5" />
             Exports
           </TabsTrigger>
-          <TabsTrigger value="integrations" className="gap-1.5">
-            <Plug className="w-3.5 h-3.5" />
-            Integrations
-          </TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="quotations">Quotations</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="steps" className="space-y-4">
-          {Object.keys(stepsByPhase).length > 0 ? (
-            Object.entries(stepsByPhase).map(([category, steps]) => {
-              const color = PHASE_CATEGORY_COLORS[category as PhaseCategory] || '#6B7280';
-              return (
-                <Card key={category}>
-                  <CardHeader className="py-4">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: color }}
-                      />
-                      <CardTitle className="text-lg">{category}</CardTitle>
-                      <Badge variant="secondary">{steps.length} steps</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-2">
-                      {steps
-                        .sort((a, b) => a.canonical_step.sort_order - b.canonical_step.sort_order)
-                        .map((ps) => (
-                          <div 
-                            key={ps.id}
-                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                          >
-                            <div className="flex items-center gap-3">
-                              {ps.canonical_step.task_type === 'milestone' && (
-                                <Flag className="w-4 h-4 text-status-review" />
-                              )}
-                              {ps.canonical_step.task_type === 'meeting' && (
-                                <Users className="w-4 h-4 text-primary" />
-                              )}
-                              <span>{ps.canonical_step.name}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {ps.canonical_step.task_type}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>
-                                {ps.custom_weight_percent ?? ps.canonical_step.default_weight_percent}%
-                              </span>
-                              {(ps.custom_review_rounds ?? ps.canonical_step.default_review_rounds) > 0 && (
-                                <span>
-                                  {ps.custom_review_rounds ?? ps.canonical_step.default_review_rounds} reviews
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <Layers className="w-8 h-8 text-primary" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">No steps configured</h3>
-                <p className="text-muted-foreground text-center mb-6 max-w-sm">
-                  This project doesn't have any steps yet. Edit the project to add steps from the library.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         <TabsContent value="timeline" className="space-y-4">
           <TimelineEditor
@@ -405,36 +329,37 @@ export default function ProjectDetail() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="integrations" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Integrations</CardTitle>
-              <CardDescription>
-                Connect your favorite tools to sync meetings, share assets, and collaborate.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <IntegrationsPanel 
-                projectId={project.id}
-                zoomLink={project.zoom_link_default}
-              />
+        <TabsContent value="quotations">
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <List className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">Quotations</h3>
+              <p className="text-muted-foreground text-center mb-6 max-w-sm">
+                Create and manage project quotations for your clients.
+              </p>
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                Create Quotation
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="team">
+        <TabsContent value="invoices">
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Users className="w-8 h-8 text-primary" />
+              <div className="w-16 h-16 rounded-full bg-phase-delivery/10 flex items-center justify-center mb-4">
+                <Download className="w-8 h-8 text-phase-delivery" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Team & Invites</h3>
+              <h3 className="text-lg font-semibold mb-2">Invoices</h3>
               <p className="text-muted-foreground text-center mb-6 max-w-sm">
-                Invite clients to view the project timeline and leave comments.
+                Generate and track invoices for project milestones.
               </p>
               <Button className="gap-2">
                 <Plus className="w-4 h-4" />
-                Invite Client
+                Create Invoice
               </Button>
             </CardContent>
           </Card>

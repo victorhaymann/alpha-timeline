@@ -1,15 +1,11 @@
 import { useState } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { GanttChart } from './GanttChart';
-import { CalendarView } from './CalendarView';
 import { AddTaskDialog } from './AddTaskDialog';
 import { 
-  BarChart3, 
-  Calendar, 
   RefreshCw,
   Loader2
 } from 'lucide-react';
@@ -412,59 +408,34 @@ export function TimelineEditor({
 
   return (
     <div className="space-y-4">
-      <Tabs defaultValue="gantt" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="gantt" className="gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Gantt View
-            </TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-2">
-              <Calendar className="w-4 h-4" />
-              Calendar View
-            </TabsTrigger>
-          </TabsList>
+      <div className="flex items-center justify-end">
+        <Button
+          variant="outline"
+          onClick={handleRegenerate}
+          disabled={isRegenerating}
+          className="gap-2"
+        >
+          {isRegenerating ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+          Regenerate Schedule
+        </Button>
+      </div>
 
-          <Button
-            variant="outline"
-            onClick={handleRegenerate}
-            disabled={isRegenerating}
-            className="gap-2"
-          >
-            {isRegenerating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            Regenerate Schedule
-          </Button>
-        </div>
-
-        <TabsContent value="gantt" className="mt-0">
-          <GanttChart
-            projectStartDate={projectStartDate}
-            projectEndDate={projectEndDate}
-            phases={phases}
-            tasks={tasks}
-            workingDaysMask={project.working_days_mask}
-            onTaskUpdate={handleTaskUpdate}
-            onTaskReorder={handleTaskReorder}
-            onAddTask={handleAddTask}
-            onAddReviewRound={handleAddReviewRound}
-            onDeleteTask={handleDeleteTask}
-          />
-        </TabsContent>
-
-        <TabsContent value="calendar" className="mt-0">
-          <CalendarView
-            projectStartDate={projectStartDate}
-            projectEndDate={projectEndDate}
-            phases={phases}
-            tasks={tasks}
-            workingDaysMask={project.working_days_mask}
-          />
-        </TabsContent>
-      </Tabs>
+      <GanttChart
+        projectStartDate={projectStartDate}
+        projectEndDate={projectEndDate}
+        phases={phases}
+        tasks={tasks}
+        workingDaysMask={project.working_days_mask}
+        onTaskUpdate={handleTaskUpdate}
+        onTaskReorder={handleTaskReorder}
+        onAddTask={handleAddTask}
+        onAddReviewRound={handleAddReviewRound}
+        onDeleteTask={handleDeleteTask}
+      />
 
       <AddTaskDialog
         open={addTaskDialogOpen}
