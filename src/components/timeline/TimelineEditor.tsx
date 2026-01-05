@@ -343,14 +343,28 @@ export function TimelineEditor({
 
       if (weeklyCallTask) {
         // Update local state to include the weekly call with recurring_dates
-        // This is a client-side only task for display purposes
         const existingWeeklyCall = tasks.find(t => 
           t.name.toLowerCase().includes('weekly call') || 
-          t.name.toLowerCase().includes('bi-weekly call')
+          t.name.toLowerCase().includes('bi-weekly call') ||
+          t.name.toLowerCase().includes('client check-in')
         );
 
-        if (!existingWeeklyCall) {
-          // Add it to the local state (not persisted to DB, just for display)
+        if (existingWeeklyCall) {
+          // Update the existing weekly call with the generated recurring_dates
+          onTasksChange(
+            tasks.map(t => 
+              t.id === existingWeeklyCall.id 
+                ? { 
+                    ...t, 
+                    recurring_dates: weeklyCallTask.recurringDates,
+                    start_date: format(weeklyCallTask.startDate, 'yyyy-MM-dd'),
+                    end_date: format(weeklyCallTask.endDate, 'yyyy-MM-dd'),
+                  } 
+                : t
+            )
+          );
+        } else {
+          // Add a new one to local state (not persisted to DB, just for display)
           const weeklyCallDisplayTask: Task = {
             id: `generated-weekly-call-${Date.now()}`,
             phase_id: phases[0]?.id || '',
