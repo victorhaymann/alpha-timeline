@@ -439,6 +439,9 @@ export function TimelineEditor({
         phases={phases}
         tasks={tasks}
         workingDaysMask={project.working_days_mask}
+        checkinTime={project.checkin_time}
+        checkinDuration={project.checkin_duration}
+        checkinTimezone={project.checkin_timezone}
         onTaskUpdate={handleTaskUpdate}
         onTaskReorder={handleTaskReorder}
         onAddTask={handleAddTask}

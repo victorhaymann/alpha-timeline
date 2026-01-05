@@ -376,6 +376,9 @@ export default function SharedProjectView() {
                     phases={phases}
                     tasks={tasks}
                     workingDaysMask={project.working_days_mask || 31}
+                    checkinTime={project.checkin_time}
+                    checkinDuration={project.checkin_duration}
+                    checkinTimezone={project.checkin_timezone}
                     onTaskUpdate={() => {}}
                     onTaskReorder={() => {}}
                     onAddTask={() => {}}

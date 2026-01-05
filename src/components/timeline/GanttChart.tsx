@@ -14,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { MeetingHoverCard } from './MeetingHoverCard';
 import { 
   Flag, 
   Users, 
@@ -51,6 +52,9 @@ interface GanttChartProps {
   phases: Phase[];
   tasks: Task[];
   workingDaysMask: number;
+  checkinTime?: string | null;
+  checkinDuration?: number | null;
+  checkinTimezone?: string | null;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskReorder: (phaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
@@ -73,6 +77,9 @@ export function GanttChart({
   phases,
   tasks,
   workingDaysMask,
+  checkinTime,
+  checkinDuration,
+  checkinTimezone,
   onTaskUpdate,
   onTaskReorder,
   onAddTask,
@@ -1038,7 +1045,7 @@ export function GanttChart({
                         })}
                       </div>
 
-                      {/* Diamond markers for each recurring date */}
+                      {/* Diamond markers for each recurring date with hover card */}
                       {section.task.recurring_dates?.map((dateStr, idx) => {
                         const meetingDate = new Date(dateStr);
                         const left = dateToX(meetingDate);
@@ -1050,11 +1057,16 @@ export function GanttChart({
                         if (colIndex === -1) return null;
                         
                         return (
-                          <div
+                          <MeetingHoverCard
                             key={dateStr}
-                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm"
-                            style={{ left: left + columnWidth / 2 - 8 }}
-                            title={`Meeting ${idx + 1}: ${format(meetingDate, 'MMM d, yyyy')}`}
+                            meetingDate={meetingDate}
+                            meetingName={section.task.name}
+                            checkinTime={checkinTime ?? null}
+                            checkinDuration={checkinDuration ?? null}
+                            checkinTimezone={checkinTimezone ?? null}
+                            tasks={tasks}
+                            left={left}
+                            columnWidth={columnWidth}
                           />
                         );
                       })}

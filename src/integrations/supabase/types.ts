@@ -526,6 +526,11 @@ export type Database = {
       projects: {
         Row: {
           buffer_percentage: number | null
+          checkin_duration: number | null
+          checkin_frequency: string | null
+          checkin_time: string | null
+          checkin_timezone: string | null
+          checkin_weekday: string | null
           client_id: string | null
           client_name: string | null
           created_at: string
@@ -545,6 +550,11 @@ export type Database = {
         }
         Insert: {
           buffer_percentage?: number | null
+          checkin_duration?: number | null
+          checkin_frequency?: string | null
+          checkin_time?: string | null
+          checkin_timezone?: string | null
+          checkin_weekday?: string | null
           client_id?: string | null
           client_name?: string | null
           created_at?: string
@@ -564,6 +574,11 @@ export type Database = {
         }
         Update: {
           buffer_percentage?: number | null
+          checkin_duration?: number | null
+          checkin_frequency?: string | null
+          checkin_time?: string | null
+          checkin_timezone?: string | null
+          checkin_weekday?: string | null
           client_id?: string | null
           client_name?: string | null
           created_at?: string

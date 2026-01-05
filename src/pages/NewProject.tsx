@@ -251,7 +251,7 @@ export default function NewProject() {
         console.warn('Schedule warnings:', scheduleOutput.warnings);
       }
 
-      // 3. Create project
+      // 3. Create project with check-in settings
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -265,6 +265,11 @@ export default function NewProject() {
           default_review_rounds: formData.default_review_rounds,
           buffer_percentage: formData.buffer_percentage,
           zoom_link_default: formData.gmeet_link || null,
+          checkin_time: feedbackSettings.checkInEnabled ? feedbackSettings.checkInTime : null,
+          checkin_duration: feedbackSettings.checkInEnabled ? feedbackSettings.checkInDuration : null,
+          checkin_timezone: feedbackSettings.checkInEnabled ? feedbackSettings.checkInTimezone : null,
+          checkin_frequency: feedbackSettings.checkInEnabled ? feedbackSettings.checkInFrequency : null,
+          checkin_weekday: feedbackSettings.checkInEnabled ? feedbackSettings.checkInWeekday : null,
           owner_id: user.id,
           status: 'draft',
         })

@@ -43,6 +43,11 @@ export interface Project {
   timezone_client: string;
   working_days_mask: number; // Binary mask: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16 (Mon-Fri = 31)
   zoom_link_default: string | null;
+  checkin_time: string | null;
+  checkin_duration: number | null;
+  checkin_timezone: string | null;
+  checkin_frequency: string | null;
+  checkin_weekday: string | null;
   created_at: string;
   updated_at: string;
 }
