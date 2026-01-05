@@ -893,7 +893,7 @@ export function GanttChart({
                     className={cn(
                       "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/60",
                       isToday && "bg-destructive/10",
-                      !isToday && isAlternateWeek && "bg-muted/50"
+                      !isToday && isAlternateWeek && "bg-black/[0.04]"
                     )}
                     style={{ width: columnWidth }}
                   >
@@ -930,7 +930,7 @@ export function GanttChart({
                         return (
                           <div
                             key={col.key}
-                            className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
+                            className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
                             style={{ width: columnWidth }}
                           />
                         );
@@ -948,7 +948,7 @@ export function GanttChart({
                           return (
                             <div
                               key={col.key}
-                              className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
+                              className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
                               style={{ width: columnWidth }}
                             />
                           );
@@ -999,7 +999,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
+                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
                                 style={{ width: columnWidth }}
                               />
                             );
@@ -1038,7 +1038,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
+                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
                                 style={{ width: columnWidth }}
                               />
                             );
