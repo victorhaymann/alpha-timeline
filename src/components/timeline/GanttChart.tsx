@@ -322,21 +322,24 @@ export function GanttChart({
     return grouped;
   }, [phases, tasks, isClientCheckin]);
 
-  // Create ordered sections: phases with Client Check-ins inserted after Discovery
+  // Create ordered sections: Client Check-ins first, then phases (excluding Discovery)
   type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'checkins'; tasks: Task[] };
   
   const orderedSections = useMemo((): Section[] => {
     const sections: Section[] = [];
     
-    phases.forEach(phase => {
-      const phaseTasks = tasksByPhase.get(phase.id) || [];
-      sections.push({ type: 'phase', phase, tasks: phaseTasks });
-      
-      // Insert Client Check-ins after Discovery
-      if (phase.name === 'Discovery' && clientCheckins.length > 0) {
-        sections.push({ type: 'checkins', tasks: clientCheckins });
-      }
-    });
+    // Add Client Check-ins first
+    if (clientCheckins.length > 0) {
+      sections.push({ type: 'checkins', tasks: clientCheckins });
+    }
+    
+    // Add phases (excluding Discovery)
+    phases
+      .filter(phase => phase.name !== 'Discovery')
+      .forEach(phase => {
+        const phaseTasks = tasksByPhase.get(phase.id) || [];
+        sections.push({ type: 'phase', phase, tasks: phaseTasks });
+      });
     
     return sections;
   }, [phases, tasksByPhase, clientCheckins]);
