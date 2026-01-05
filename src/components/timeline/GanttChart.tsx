@@ -56,6 +56,7 @@ interface GanttChartProps {
   onAddTask: (phaseId: string) => void;
   onAddReviewRound: (taskId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  readOnly?: boolean;
 }
 
 type ViewMode = 'week' | 'month';
@@ -77,6 +78,7 @@ export function GanttChart({
   onAddTask,
   onAddReviewRound,
   onDeleteTask,
+  readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -758,7 +760,7 @@ export function GanttChart({
                           ? `${section.task.recurring_dates?.length || 0} mtgs`
                           : section.tasks.length}
                       </span>
-                      {section.type === 'phase' && (
+                      {section.type === 'phase' && !readOnly && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -803,22 +805,24 @@ export function GanttChart({
                         className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
                         style={{ height: ROW_HEIGHT }}
                       >
-                        {/* Drag handle + Delete - always visible on hover */}
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
-                          {onDeleteTask && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDeleteTask(task.id);
-                              }}
-                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
-                              title="Delete task"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                            </button>
-                          )}
-                        </div>
+                        {/* Drag handle + Delete - only show when not readOnly */}
+                        {!readOnly && (
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
+                            {onDeleteTask && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteTask(task.id);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
+                                title="Delete task"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                         
                         {/* Task type icon */}
                         {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
@@ -1062,18 +1066,20 @@ export function GanttChart({
                               background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                               boxShadow: `0 4px 12px ${sectionColor}66`,
                             }}
-                            onMouseDown={(e) => handleDragStart(e, task, 'move')}
+                            onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                           >
                             {task.task_type !== 'milestone' && (
                               <>
                                 {/* Resize handle - start */}
-                                <div
-                                  className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    handleDragStart(e, task, 'resize-start');
-                                  }}
-                                />
+                                {!readOnly && (
+                                  <div
+                                    className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleDragStart(e, task, 'resize-start');
+                                    }}
+                                  />
+                                )}
 
                                 {/* Task name */}
                                 <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
@@ -1083,13 +1089,15 @@ export function GanttChart({
                                 </div>
 
                                 {/* Resize handle - end */}
-                                <div
-                                  className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
-                                  onMouseDown={(e) => {
-                                    e.stopPropagation();
-                                    handleDragStart(e, task, 'resize-end');
-                                  }}
-                                />
+                                {!readOnly && (
+                                  <div
+                                    className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleDragStart(e, task, 'resize-end');
+                                    }}
+                                  />
+                                )}
                               </>
                             )}
 
