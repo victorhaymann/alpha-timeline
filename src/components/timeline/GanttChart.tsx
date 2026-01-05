@@ -24,10 +24,7 @@ import {
   format, 
   differenceInDays, 
   addDays, 
-  addWeeks,
   addMonths,
-  subDays,
-  subWeeks,
   subMonths,
   startOfDay,
   eachDayOfInterval,
@@ -53,7 +50,7 @@ interface GanttChartProps {
   onDeleteTask?: (taskId: string) => void;
 }
 
-type ViewMode = 'day' | 'week' | 'month';
+type ViewMode = 'week' | 'month';
 
 const TASK_COLUMN_WIDTH = 340;
 const ROW_HEIGHT = 40;
@@ -75,7 +72,7 @@ export function GanttChart({
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('day');
+  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: projectStartDate,
     to: projectEndDate,
@@ -128,9 +125,10 @@ export function GanttChart({
     return allDays.filter(day => isWorkingDay(day));
   }, [viewStart, viewEnd, isWorkingDay]);
 
-  // Group working days by week or month for aggregated views
+  // Group working days by day (for week view showing individual days) or by week (for month view)
   const groupedColumns = useMemo(() => {
-    if (viewMode === 'day') {
+    if (viewMode === 'week') {
+      // Weekly view: show each working day individually
       return workingDays.map(day => ({
         key: format(day, 'yyyy-MM-dd'),
         label: format(day, 'd'),
@@ -141,48 +139,24 @@ export function GanttChart({
       }));
     }
 
-    if (viewMode === 'week') {
-      const weeks = new Map<string, { days: Date[]; start: Date; end: Date }>();
-      workingDays.forEach(day => {
-        const weekStart = startOfWeek(day, { weekStartsOn: 1 });
-        const key = format(weekStart, 'yyyy-MM-dd');
-        if (!weeks.has(key)) {
-          weeks.set(key, { 
-            days: [], 
-            start: weekStart,
-            end: endOfWeek(weekStart, { weekStartsOn: 1 })
-          });
-        }
-        weeks.get(key)!.days.push(day);
-      });
-      return Array.from(weeks.entries()).map(([key, { days, start, end }]) => ({
-        key,
-        label: `W${format(start, 'w')}`,
-        subLabel: format(start, 'MMM d'),
-        days,
-        startDate: start,
-        endDate: end,
-      }));
-    }
-
-    // Month view
-    const months = new Map<string, { days: Date[]; start: Date; end: Date }>();
+    // Month view: group by week for a more compact view
+    const weeks = new Map<string, { days: Date[]; start: Date; end: Date }>();
     workingDays.forEach(day => {
-      const monthStart = startOfMonth(day);
-      const key = format(monthStart, 'yyyy-MM');
-      if (!months.has(key)) {
-        months.set(key, {
-          days: [],
-          start: monthStart,
-          end: endOfMonth(monthStart),
+      const weekStart = startOfWeek(day, { weekStartsOn: 1 });
+      const key = format(weekStart, 'yyyy-MM-dd');
+      if (!weeks.has(key)) {
+        weeks.set(key, { 
+          days: [], 
+          start: weekStart,
+          end: endOfWeek(weekStart, { weekStartsOn: 1 })
         });
       }
-      months.get(key)!.days.push(day);
+      weeks.get(key)!.days.push(day);
     });
-    return Array.from(months.entries()).map(([key, { days, start, end }]) => ({
+    return Array.from(weeks.entries()).map(([key, { days, start, end }]) => ({
       key,
-      label: format(start, 'MMM'),
-      subLabel: format(start, 'yyyy'),
+      label: `W${format(start, 'w')}`,
+      subLabel: format(start, 'MMM d'),
       days,
       startDate: start,
       endDate: end,
@@ -212,11 +186,31 @@ export function GanttChart({
     const calculatedWidth = containerWidth / columnCount;
     
     // Set minimum widths based on view mode
-    const minWidths = { day: MIN_COLUMN_WIDTH, week: 60, month: 80 };
+    const minWidths = { week: MIN_COLUMN_WIDTH, month: 60 };
     return Math.max(calculatedWidth, minWidths[viewMode]);
   }, [containerWidth, groupedColumns.length, viewMode]);
 
   const chartWidth = groupedColumns.length * columnWidth;
+
+  // Update date range when view mode changes
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    
+    const today = new Date();
+    const baseDate = dateRange?.from || projectStartDate;
+    
+    if (mode === 'week') {
+      // Weekly view: show 7 days (or working days within that range)
+      const weekStart = startOfWeek(baseDate, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+      setDateRange({ from: weekStart, to: weekEnd });
+    } else {
+      // Monthly view: show ~30 days (a full month)
+      const monthStart = startOfMonth(baseDate);
+      const monthEnd = endOfMonth(monthStart);
+      setDateRange({ from: monthStart, to: monthEnd });
+    }
+  }, [dateRange, projectStartDate]);
 
   // Navigate to previous/next period based on view mode
   const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
@@ -229,18 +223,12 @@ export function GanttChart({
     
     let newFrom: Date;
     let newTo: Date;
-    const rangeDuration = differenceInDays(dateRange.to, dateRange.from);
     
-    if (viewMode === 'day') {
-      // Move by 7 days
+    if (viewMode === 'week') {
+      // Move by 1 week
       const shift = direction === 'prev' ? -7 : 7;
       newFrom = addDays(dateRange.from, shift);
       newTo = addDays(dateRange.to, shift);
-    } else if (viewMode === 'week') {
-      // Move by 4 weeks
-      const shift = direction === 'prev' ? -4 : 4;
-      newFrom = addWeeks(dateRange.from, shift);
-      newTo = addWeeks(dateRange.to, shift);
     } else {
       // Move by 1 month
       if (direction === 'prev') {
@@ -511,13 +499,13 @@ export function GanttChart({
           
           {/* View mode toggle */}
           <div className="flex items-center rounded-lg border bg-muted/30 p-1">
-            {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
+            {(['week', 'month'] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant={viewMode === mode ? 'default' : 'ghost'}
                 size="sm"
                 className="h-7 px-3 text-xs capitalize"
-                onClick={() => setViewMode(mode)}
+                onClick={() => handleViewModeChange(mode)}
               >
                 {mode}ly
               </Button>
