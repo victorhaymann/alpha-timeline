@@ -373,13 +373,37 @@ export function GanttChart({
   const consolidatedWeeklyCall = useMemo(() => {
     if (checkinTasks.length === 0) return null;
 
-    const recurring_dates = checkinTasks
+    const first = checkinTasks[0];
+    const last = checkinTasks[checkinTasks.length - 1];
+
+    let recurring_dates = checkinTasks
       .map(t => t.start_date!)
       // de-dupe (just in case)
       .filter((d, i, arr) => arr.indexOf(d) === i);
 
-    const first = checkinTasks[0];
-    const last = checkinTasks[checkinTasks.length - 1];
+    // If the database has only a single "Weekly Call" record (no recurring dates persisted),
+    // synthesize the weekly/bi-weekly occurrences for display.
+    if (checkinTasks.length === 1 && recurring_dates.length === 1) {
+      const n = (first.name || '').toLowerCase();
+      const isWeekly = n.includes('weekly');
+      const isBiWeekly = n.includes('bi-weekly') || n.includes('biweekly');
+      const intervalDays = isBiWeekly ? 14 : isWeekly ? 7 : null;
+
+      if (intervalDays) {
+        const start = new Date(first.start_date!);
+        const generated: string[] = [first.start_date!];
+
+        let current = addDays(start, intervalDays);
+        while (current <= projectEndDate) {
+          if (isWorkingDay(current)) {
+            generated.push(format(current, 'yyyy-MM-dd'));
+          }
+          current = addDays(current, intervalDays);
+        }
+
+        recurring_dates = generated;
+      }
+    }
 
     return {
       ...first,
@@ -389,7 +413,7 @@ export function GanttChart({
       end_date: last.end_date || last.start_date,
       recurring_dates,
     } satisfies Task;
-  }, [checkinTasks]);
+  }, [checkinTasks, projectEndDate, isWorkingDay]);
 
   // Group tasks by phase (excluding check-ins)
   const tasksByPhase = useMemo(() => {
