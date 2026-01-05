@@ -14,7 +14,9 @@ import {
   GripVertical,
   Plus,
   RotateCcw,
-  CalendarIcon
+  CalendarIcon,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { 
   format, 
@@ -79,6 +81,21 @@ export function GanttChart({
     originalEnd: Date;
   } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ start: Date; end: Date } | null>(null);
+  
+  // Track collapsed sections
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+
+  const toggleSectionCollapse = useCallback((sectionKey: string) => {
+    setCollapsedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  }, []);
 
   // View date range (use custom range or project range)
   const viewStart = dateRange?.from || projectStartDate;
@@ -385,13 +402,18 @@ export function GanttChart({
     }
   });
 
-  // Calculate total chart height based on sections
+  // Calculate total chart height based on sections (accounting for collapsed state)
   let totalHeight = HEADER_HEIGHT;
   orderedSections.forEach(section => {
-    totalHeight += PHASE_HEADER_HEIGHT + (section.tasks.length * ROW_HEIGHT);
-    // Add space for "Add task" button only for phases
-    if (section.type === 'phase') {
-      totalHeight += ROW_HEIGHT;
+    const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+    const isCollapsed = collapsedSections.has(sectionKey);
+    totalHeight += PHASE_HEADER_HEIGHT;
+    if (!isCollapsed) {
+      totalHeight += section.tasks.length * ROW_HEIGHT;
+      // Add space for "Add task" button only for phases
+      if (section.type === 'phase') {
+        totalHeight += ROW_HEIGHT;
+      }
     }
   });
 
@@ -479,14 +501,21 @@ export function GanttChart({
               const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
+              const isCollapsed = collapsedSections.has(sectionKey);
 
               return (
                 <div key={sectionKey}>
                   {/* Section header */}
                   <div 
-                    className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm"
+                    className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm cursor-pointer hover:bg-muted/50 transition-colors"
                     style={{ height: PHASE_HEADER_HEIGHT }}
+                    onClick={() => toggleSectionCollapse(sectionKey)}
                   >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    )}
                     <div 
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: sectionColor }}
@@ -497,8 +526,8 @@ export function GanttChart({
                     </Badge>
                   </div>
 
-                  {/* Task rows */}
-                  {section.tasks.map((task) => {
+                  {/* Task rows - only show if not collapsed */}
+                  {!isCollapsed && section.tasks.map((task) => {
                     const startDate = task.start_date ? new Date(task.start_date) : null;
                     const endDate = task.end_date ? new Date(task.end_date) : null;
                     const duration = startDate && endDate 
@@ -552,8 +581,8 @@ export function GanttChart({
                     );
                   })}
 
-                  {/* Add task button - only for phases */}
-                  {section.type === 'phase' && (
+                  {/* Add task button - only for phases and when not collapsed */}
+                  {section.type === 'phase' && !isCollapsed && (
                     <div 
                       className="flex items-center px-3 border-b"
                       style={{ height: ROW_HEIGHT }}
@@ -609,13 +638,15 @@ export function GanttChart({
               const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
+              const isCollapsed = collapsedSections.has(sectionKey);
 
               return (
                 <div key={sectionKey}>
                   {/* Section header row */}
                   <div 
-                    className="border-b"
+                    className="border-b cursor-pointer hover:bg-muted/20 transition-colors"
                     style={{ height: PHASE_HEADER_HEIGHT }}
+                    onClick={() => toggleSectionCollapse(sectionKey)}
                   >
                     <div className="flex h-full">
                       {groupedColumns.map((col) => (
@@ -628,8 +659,8 @@ export function GanttChart({
                     </div>
                   </div>
 
-                  {/* Task bars */}
-                  {section.tasks.map((task) => {
+                  {/* Task bars - only show if not collapsed */}
+                  {!isCollapsed && section.tasks.map((task) => {
                     const isCurrentlyDragging = dragging?.taskId === task.id;
                     const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
                     const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
@@ -717,8 +748,8 @@ export function GanttChart({
                     );
                   })}
 
-                  {/* Add task row - only for phases */}
-                  {section.type === 'phase' && (
+                  {/* Add task row - only for phases and when not collapsed */}
+                  {section.type === 'phase' && !isCollapsed && (
                     <div className="border-b" style={{ height: ROW_HEIGHT }}>
                       <div className="flex h-full">
                         {groupedColumns.map((col) => (
