@@ -26,8 +26,6 @@ import { cn } from '@/lib/utils';
 interface StepLibraryProps {
   selectedSteps?: Set<string>;
   onStepToggle?: (stepId: string, included: boolean) => void;
-  stepDays?: Map<string, number>;
-  onStepDaysChange?: (stepId: string, days: number) => void;
   customSteps?: CustomStep[];
   onAddCustomStep?: (step: CustomStep) => void;
   onRemoveCustomStep?: (stepId: string) => void;
@@ -42,8 +40,6 @@ interface StepLibraryProps {
 export function StepLibrary({ 
   selectedSteps, 
   onStepToggle, 
-  stepDays,
-  onStepDaysChange,
   customSteps = [],
   onAddCustomStep,
   onRemoveCustomStep,
@@ -236,21 +232,8 @@ export function StepLibrary({
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-                          {!readOnly && onStepDaysChange ? (
-                            <div className="flex items-center gap-1">
-                              <Input
-                                type="number"
-                                min={1}
-                                max={365}
-                                value={stepDays?.get(step.id) ?? 1}
-                                onChange={(e) => onStepDaysChange(step.id, parseInt(e.target.value) || 1)}
-                                className="w-14 h-7 text-xs text-center"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <span className="text-muted-foreground">days</span>
-                            </div>
-                          ) : (
-                            <span>{stepDays?.get(step.id) ?? 1} days</span>
+                          {step.default_weight_percent && (
+                            <span className="text-muted-foreground">{step.default_weight_percent}%</span>
                           )}
                           {allowLibraryEdit && onEditCanonicalStep && (
                             <button
@@ -304,21 +287,8 @@ export function StepLibrary({
                         </div>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                        {!readOnly && onUpdateCustomStep ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={1}
-                              max={365}
-                              value={step.days ?? 1}
-                              onChange={(e) => onUpdateCustomStep(step.id, { days: parseInt(e.target.value) || 1 })}
-                              className="w-14 h-7 text-xs text-center"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <span className="text-muted-foreground">days</span>
-                          </div>
-                        ) : (
-                          <span>{step.days ?? 1} days</span>
+                        {step.weight_percent && (
+                          <span className="text-muted-foreground">{step.weight_percent}%</span>
                         )}
                         {!readOnly && onRemoveCustomStep && (
                           <button
