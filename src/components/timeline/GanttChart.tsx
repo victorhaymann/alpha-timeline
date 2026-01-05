@@ -569,7 +569,7 @@ export function GanttChart({
                         {/* Task data: days, start, end */}
                         <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
                           {duration !== null && (
-                            <span className="bg-muted px-1.5 py-0.5 rounded font-medium">
+                            <span className="bg-muted px-1.5 py-0.5 rounded font-medium transition-all duration-300">
                               {duration}d
                             </span>
                           )}
@@ -735,9 +735,10 @@ export function GanttChart({
                         {/* Task bar */}
                         <div
                           className={cn(
-                            "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move transition-shadow",
+                            "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
                             "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
-                            isCurrentlyDragging && "opacity-80 ring-2 ring-primary",
+                            "transition-all duration-300 ease-out",
+                            isCurrentlyDragging && "opacity-80 ring-2 ring-primary !transition-none",
                             task.task_type === 'milestone' && "rounded-full",
                             task.task_type === 'meeting' && "bg-primary/80"
                           )}
