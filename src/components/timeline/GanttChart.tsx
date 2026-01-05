@@ -549,14 +549,22 @@ export function GanttChart({
   orderedSections.forEach(section => {
     const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
     const isCollapsed = collapsedSections.has(sectionKey);
+    const isWeeklyCall = section.type === 'weekly-call';
+    const hasNoMeetings = isWeeklyCall && (!section.task?.recurring_dates || section.task.recurring_dates.length === 0);
+    
+    // Skip sections that won't be rendered
+    if (hasNoMeetings) return;
+    
     totalHeight += PHASE_HEADER_HEIGHT;
     if (!isCollapsed) {
       if (section.type === 'weekly-call') {
         totalHeight += ROW_HEIGHT; // Single row for weekly call
       } else {
         totalHeight += section.tasks.length * ROW_HEIGHT;
-        // Add space for "Add task" button only for phases
-        totalHeight += ROW_HEIGHT;
+        // Add space for "Add task" button only for phases and only in edit mode
+        if (!readOnly) {
+          totalHeight += ROW_HEIGHT;
+        }
       }
     }
   });
@@ -712,8 +720,8 @@ export function GanttChart({
       </div>
 
       {/* Gantt Chart - Light Theme */}
-      <div className="relative overflow-auto rounded-xl bg-background border border-border shadow-sm" ref={containerRef}>
-        <div className="relative flex" style={{ minHeight: totalHeight }}>
+      <div className="relative overflow-auto rounded-xl bg-muted/30 border border-border shadow-sm" ref={containerRef}>
+        <div className="relative flex" style={{ height: totalHeight }}>
           {/* Fixed task names column - Left Sidebar */}
           <div className="sticky left-0 z-20 bg-card border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
             {/* Header */}
