@@ -1,0 +1,109 @@
+import { Link, useLocation } from 'react-router-dom';
+import { FolderKanban, LayoutTemplate, Settings, LogOut, User } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
+
+const navItems = [
+  { path: '/projects', label: 'Projects', icon: FolderKanban },
+  { path: '/templates', label: 'Templates', icon: LayoutTemplate },
+  { path: '/settings', label: 'Settings', icon: Settings },
+];
+
+export function TopNav() {
+  const location = useLocation();
+  const { user, profile, signOut } = useAuth();
+
+  const getInitials = (name: string | null | undefined, email: string | undefined) => {
+    if (name) {
+      return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    return email?.slice(0, 2).toUpperCase() || 'U';
+  };
+
+  return (
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 glass-surface">
+      <div className="container flex h-16 items-center justify-between">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-3 group">
+          <div className="relative w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary to-cyan-400 opacity-80" />
+            <span className="relative font-bold text-primary-foreground text-sm">VT</span>
+          </div>
+          <span className="font-semibold text-lg tracking-tight group-hover:text-primary transition-colors">
+            VFX Timeline
+          </span>
+        </Link>
+
+        {/* Navigation */}
+        {user && (
+          <nav className="flex items-center gap-1">
+            {navItems.map((item) => {
+              const isActive = location.pathname.startsWith(item.path);
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    'nav-link',
+                    isActive && 'nav-link-active'
+                  )}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        )}
+
+        {/* User Menu */}
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar className="h-9 w-9 border-2 border-primary/30 hover:border-primary transition-colors">
+                  <AvatarFallback className="bg-primary/20 text-primary font-medium">
+                    {getInitials(profile?.full_name, user.email)}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <div className="flex flex-col space-y-1 p-2">
+                <p className="text-sm font-medium">{profile?.full_name || 'User'}</p>
+                <p className="text-xs text-muted-foreground">{user.email}</p>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/settings" className="cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut} className="cursor-pointer text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Link to="/auth">
+            <Button variant="default" size="sm">
+              Sign In
+            </Button>
+          </Link>
+        )}
+      </div>
+    </header>
+  );
+}
