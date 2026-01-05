@@ -255,23 +255,40 @@ export function GanttChart({
   const dateToX = useCallback((date: Date) => {
     const targetDay = startOfDay(date);
     
+    // If no columns, return 0
+    if (groupedColumns.length === 0) return 0;
+    
+    const firstColStart = startOfDay(groupedColumns[0].startDate);
+    const lastColStart = startOfDay(groupedColumns[groupedColumns.length - 1].startDate);
+    
+    // If before first column, clamp to 0
+    if (targetDay < firstColStart) {
+      return 0;
+    }
+    
+    // If after last column, clamp to end
+    if (targetDay > lastColStart) {
+      return groupedColumns.length * columnWidth;
+    }
+    
     // Find which column this date falls into
     for (let i = 0; i < groupedColumns.length; i++) {
       const col = groupedColumns[i];
       const colStart = startOfDay(col.startDate);
-      const colEnd = startOfDay(col.endDate);
       
-      if (targetDay >= colStart && targetDay <= colEnd) {
+      if (isSameDay(targetDay, colStart)) {
         return i * columnWidth;
       }
     }
     
-    // If before first column, return 0
-    if (groupedColumns.length > 0 && targetDay < startOfDay(groupedColumns[0].startDate)) {
-      return 0;
+    // If date is not a working day, find the nearest column
+    for (let i = 0; i < groupedColumns.length; i++) {
+      const colStart = startOfDay(groupedColumns[i].startDate);
+      if (targetDay < colStart) {
+        return Math.max(0, (i - 1)) * columnWidth;
+      }
     }
     
-    // If after last column, return end
     return (groupedColumns.length - 1) * columnWidth;
   }, [groupedColumns, columnWidth]);
 
@@ -282,25 +299,41 @@ export function GanttChart({
     return col?.days[0] || projectStartDate;
   }, [groupedColumns, columnWidth, projectStartDate]);
 
-  // Calculate task width (counting working days only)
+  // Calculate task width (counting working days only, clamped to visible range)
   const getTaskWidth = useCallback((start: Date, end: Date) => {
+    if (groupedColumns.length === 0) return columnWidth;
+    
     const startDay = startOfDay(start);
     const endDay = startOfDay(end);
     
-    const startCol = groupedColumns.findIndex(col => {
-      const colStart = startOfDay(col.startDate);
-      const colEnd = startOfDay(col.endDate);
-      return startDay >= colStart && startDay <= colEnd;
-    });
+    const firstColStart = startOfDay(groupedColumns[0].startDate);
+    const lastColStart = startOfDay(groupedColumns[groupedColumns.length - 1].startDate);
     
-    const endCol = groupedColumns.findIndex(col => {
-      const colStart = startOfDay(col.startDate);
-      const colEnd = startOfDay(col.endDate);
-      return endDay >= colStart && endDay <= colEnd;
-    });
+    // Clamp start and end to visible range
+    const clampedStart = startDay < firstColStart ? firstColStart : startDay;
+    const clampedEnd = endDay > lastColStart ? lastColStart : endDay;
     
-    if (startCol === -1 || endCol === -1) return columnWidth;
-    return Math.max(columnWidth, (endCol - startCol + 1) * columnWidth);
+    // Find column indices
+    let startColIndex = -1;
+    let endColIndex = -1;
+    
+    for (let i = 0; i < groupedColumns.length; i++) {
+      const colStart = startOfDay(groupedColumns[i].startDate);
+      
+      if (startColIndex === -1 && colStart >= clampedStart) {
+        startColIndex = i;
+      }
+      if (colStart <= clampedEnd) {
+        endColIndex = i;
+      }
+    }
+    
+    // If task is completely outside visible range
+    if (startColIndex === -1 || endColIndex === -1 || endColIndex < startColIndex) {
+      return 0;
+    }
+    
+    return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
   }, [groupedColumns, columnWidth]);
 
   // Helper to check if a task is a client check-in
