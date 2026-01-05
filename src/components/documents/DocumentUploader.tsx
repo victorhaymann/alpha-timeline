@@ -2,7 +2,8 @@ import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, FileText, Trash2, Download, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Upload, FileText, Trash2, Download, Loader2, Eye } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -24,6 +25,9 @@ interface DocumentUploaderProps {
 export function DocumentUploader({ projectId, type, documents, onUploadComplete }: DocumentUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -112,6 +116,35 @@ export function DocumentUploader({ projectId, type, documents, onUploadComplete 
         variant: 'destructive',
       });
     }
+  };
+
+  const handlePreview = async (doc: Document) => {
+    setPreviewDoc(doc);
+    setLoadingPreview(true);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-documents')
+        .createSignedUrl(doc.file_path, 3600); // 1 hour expiry
+
+      if (error) throw error;
+
+      setPreviewUrl(data.signedUrl);
+    } catch (error: any) {
+      toast({
+        title: 'Preview failed',
+        description: error.message || 'Failed to load preview.',
+        variant: 'destructive',
+      });
+      setPreviewDoc(null);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewDoc(null);
+    setPreviewUrl(null);
   };
 
   const handleDelete = async (doc: Document) => {
@@ -228,7 +261,16 @@ export function DocumentUploader({ projectId, type, documents, onUploadComplete 
                       <Button
                         variant="outline"
                         size="icon"
+                        onClick={() => handlePreview(doc)}
+                        title="Preview"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
                         onClick={() => handleDownload(doc)}
+                        title="Download"
                       >
                         <Download className="w-4 h-4" />
                       </Button>
@@ -252,6 +294,28 @@ export function DocumentUploader({ projectId, type, documents, onUploadComplete 
           </div>
         </div>
       )}
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={!!previewDoc} onOpenChange={(open) => !open && closePreview()}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle className="truncate pr-8">{previewDoc?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {loadingPreview ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                className="w-full h-full border-0"
+                title={previewDoc?.name}
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
