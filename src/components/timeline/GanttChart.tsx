@@ -1045,20 +1045,22 @@ export function GanttChart({
                           })}
                         </div>
 
-                        {/* Task bar - Gradient style */}
+                        {/* Task bar - Phase colored */}
                         {!isOutsideView && clippedWidth > 0 && (
                           <div
                             className={cn(
-                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move gantt-task-bar",
-                              "hover:shadow-xl hover:ring-2 hover:ring-amber-400/40",
-                              "transition-all duration-300 ease-out",
-                              isCurrentlyDragging && "opacity-90 ring-2 ring-amber-400 shadow-2xl !transition-none",
+                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                              "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                              "transition-all duration-300 ease-out shadow-md",
+                              isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
                               isJustDropped && "animate-spring-settle",
-                              task.task_type === 'milestone' && "rounded-full !bg-amber-500"
+                              task.task_type === 'milestone' && "rounded-full"
                             )}
                             style={{
                               left: clippedLeft + 2,
                               width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
+                              background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                              boxShadow: `0 4px 12px ${sectionColor}66`,
                             }}
                             onMouseDown={(e) => handleDragStart(e, task, 'move')}
                           >
