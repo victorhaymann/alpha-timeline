@@ -13,7 +13,8 @@ import {
   Clock, 
   MoreVertical,
   Search,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -21,9 +22,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const statusConfig: Record<ProjectStatus, { label: string; className: string }> = {
   draft: { label: 'Draft', className: 'bg-status-pending/20 text-status-pending border-status-pending/30' },
@@ -37,6 +49,8 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -70,6 +84,35 @@ export default function Projects() {
     if (days < 0) return 'Overdue';
     if (days === 0) return 'Due today';
     return `${days} days left`;
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, project: Project) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setProjectToDelete(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!projectToDelete) return;
+    
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectToDelete.id);
+
+      if (error) throw error;
+      
+      setProjects(projects.filter(p => p.id !== projectToDelete.id));
+      toast.success(`"${projectToDelete.name}" deleted`);
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error('Failed to delete project');
+    } finally {
+      setDeleteDialogOpen(false);
+      setProjectToDelete(null);
+    }
   };
 
   return (
@@ -147,7 +190,13 @@ export default function Projects() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem>Edit</DropdownMenuItem>
                       <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                      <DropdownMenuItem 
+                        className="text-destructive"
+                        onClick={(e) => handleDeleteClick(e, project)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </CardHeader>
@@ -199,6 +248,27 @@ export default function Projects() {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{projectToDelete?.name}" and all its phases, tasks, and dependencies. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
