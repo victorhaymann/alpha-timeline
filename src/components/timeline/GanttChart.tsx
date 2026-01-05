@@ -705,6 +705,10 @@ export function GanttChart({
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
               const isWeeklyCall = section.type === 'weekly-call';
+              
+              // Hide Client Check-ins section when it has no meetings
+              const hasNoMeetings = isWeeklyCall && (!section.task.recurring_dates || section.task.recurring_dates.length === 0);
+              if (hasNoMeetings) return null;
 
               return (
                 <div key={sectionKey} className={isWeeklyCall ? 'bg-muted/20' : ''}>
@@ -881,6 +885,10 @@ export function GanttChart({
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
               const isWeeklyCall = section.type === 'weekly-call';
+              
+              // Hide Client Check-ins section when it has no meetings
+              const hasNoMeetings = isWeeklyCall && (!section.task.recurring_dates || section.task.recurring_dates.length === 0);
+              if (hasNoMeetings) return null;
 
               return (
                 <div key={sectionKey} className={isWeeklyCall ? 'bg-muted/20' : ''}>
