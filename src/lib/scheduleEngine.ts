@@ -87,6 +87,7 @@ export interface ScheduledTask extends ScheduleTask {
   startDate: Date;
   endDate: Date;
   durationDays: number;
+  narrativeText?: string;
 }
 
 export interface ScheduleInput {

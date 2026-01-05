@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
+import type { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PhaseCategory } from '@/types/database';
+import { PHASE_CATEGORY_COLORS } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TimelineEditor } from '@/components/timeline/TimelineEditor';
+import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
+import { ExportPanel } from '@/components/exports/ExportPanel';
+import { IntegrationsPanel } from '@/components/integrations/IntegrationsPanel';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -20,7 +24,9 @@ import {
   Flag,
   Building2,
   Layers,
-  Clock
+  Clock,
+  Download,
+  Plug
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -38,6 +44,11 @@ export default function ProjectDetail() {
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [projectSteps, setProjectSteps] = useState<ProjectStepWithCanonical[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Task detail dialog state
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedTaskPhase, setSelectedTaskPhase] = useState<Phase | null>(null);
+  const [taskDetailOpen, setTaskDetailOpen] = useState(false);
 
   const fetchProjectData = useCallback(async () => {
     if (!id) return;
@@ -114,6 +125,13 @@ export default function ProjectDetail() {
 
   const handleTasksChange = (updatedTasks: Task[]) => {
     setTasks(updatedTasks);
+  };
+
+  const handleTaskClick = (task: Task) => {
+    const phase = phases.find(p => p.id === task.phase_id) || null;
+    setSelectedTask(task);
+    setSelectedTaskPhase(phase);
+    setTaskDetailOpen(true);
   };
 
   if (loading) {
@@ -273,12 +291,19 @@ export default function ProjectDetail() {
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="steps" className="space-y-6">
+      <Tabs defaultValue="timeline" className="space-y-6">
         <TabsList>
           <TabsTrigger value="steps">Steps</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="exports" className="gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            Exports
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-1.5">
+            <Plug className="w-3.5 h-3.5" />
+            Integrations
+          </TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="comments">Comments</TabsTrigger>
         </TabsList>
 
         <TabsContent value="steps" className="space-y-4">
@@ -358,7 +383,43 @@ export default function ProjectDetail() {
             dependencies={dependencies}
             onTasksChange={handleTasksChange}
             onRefresh={fetchProjectData}
+            onTaskClick={handleTaskClick}
           />
+        </TabsContent>
+
+        <TabsContent value="exports" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Timeline</CardTitle>
+              <CardDescription>
+                Download your timeline in various formats for sharing and archiving.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ExportPanel 
+                project={project}
+                phases={phases}
+                tasks={tasks}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Integrations</CardTitle>
+              <CardDescription>
+                Connect your favorite tools to sync meetings, share assets, and collaborate.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <IntegrationsPanel 
+                projectId={project.id}
+                zoomLink={project.zoom_link_default}
+              />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="team">
@@ -378,17 +439,16 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="comments">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <p className="text-muted-foreground">
-                Comments on milestones will appear here.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+
+      {/* Task Detail Dialog */}
+      <TaskDetailDialog
+        task={selectedTask}
+        phase={selectedTaskPhase}
+        open={taskDetailOpen}
+        onOpenChange={setTaskDetailOpen}
+        onUpdate={fetchProjectData}
+      />
     </div>
   );
 }

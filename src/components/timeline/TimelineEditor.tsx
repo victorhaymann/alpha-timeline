@@ -24,6 +24,7 @@ interface TimelineEditorProps {
   dependencies: Dependency[];
   onTasksChange: (tasks: Task[]) => void;
   onRefresh: () => void;
+  onTaskClick?: (task: Task) => void;
 }
 
 export function TimelineEditor({
