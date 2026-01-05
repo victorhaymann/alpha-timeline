@@ -61,8 +61,6 @@ interface GanttChartProps {
   onAddTask: (phaseId: string) => void;
   onAddReviewRound: (taskId: string) => void;
   onDeleteTask?: (taskId: string) => void;
-  onAddMeeting?: () => void;
-  onDeleteMeeting?: (taskId: string) => void;
   readOnly?: boolean;
 }
 
@@ -89,8 +87,6 @@ export function GanttChart({
   onAddTask,
   onAddReviewRound,
   onDeleteTask,
-  onAddMeeting,
-  onDeleteMeeting,
   readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -464,17 +460,6 @@ export function GanttChart({
       .filter(t => !!t.start_date)
       .sort((a, b) => new Date(a.start_date!).getTime() - new Date(b.start_date!).getTime());
   }, [tasks, isClientCheckin]);
-
-  // Map of date string -> task ID for quick lookup when deleting
-  const checkinTasksByDate = useMemo(() => {
-    const map = new Map<string, string>();
-    checkinTasks.forEach(t => {
-      if (t.start_date) {
-        map.set(t.start_date, t.id);
-      }
-    });
-    return map;
-  }, [checkinTasks]);
 
   // Build a single, consolidated "Weekly Call" task for display
   const consolidatedWeeklyCall = useMemo(() => {
@@ -875,18 +860,6 @@ export function GanttChart({
                           <Plus className="w-3.5 h-3.5" />
                         </button>
                       )}
-                      {isWeeklyCall && !readOnly && onAddMeeting && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAddMeeting();
-                          }}
-                          className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-                          title="Add meeting"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -1084,9 +1057,6 @@ export function GanttChart({
                           isSameDay(col.startDate, meetingDate)
                         );
                         if (colIndex === -1) return null;
-
-                        // Find the actual task ID for this meeting date
-                        const taskId = checkinTasksByDate.get(dateStr);
                         
                         return (
                           <MeetingHoverCard
@@ -1102,8 +1072,6 @@ export function GanttChart({
                             allMeetingDates={section.task.recurring_dates || []}
                             meetingIndex={idx}
                             projectId={projectId}
-                            readOnly={readOnly}
-                            onDelete={taskId && onDeleteMeeting ? () => onDeleteMeeting(taskId) : undefined}
                           />
                         );
                       })}
