@@ -355,53 +355,75 @@ export function GanttChart({
     return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
   }, [groupedColumns, columnWidth]);
 
-  // Helper to check if a task is a recurring weekly/bi-weekly call
-  const isRecurringCall = useCallback((task: Task) => {
-    return task.name.toLowerCase().includes('weekly call') || 
-           task.name.toLowerCase().includes('bi-weekly call') ||
-           task.recurring_dates !== undefined;
+  // Helper to check if a task is a client check-in (legacy) or consolidated call
+  const isClientCheckin = useCallback((task: Task) => {
+    const n = task.name.toLowerCase();
+    return n.includes('client check-in') || n.includes('client checkin') || n.includes('weekly call') || n.includes('bi-weekly call');
   }, []);
 
-  // Get the single recurring call task (if exists)
-  const recurringCallTask = useMemo(() => {
-    return tasks.find(t => isRecurringCall(t)) || null;
-  }, [tasks, isRecurringCall]);
+  // Collect all check-in tasks that exist in the project (usually many single-day meetings)
+  const checkinTasks = useMemo(() => {
+    return tasks
+      .filter(t => isClientCheckin(t))
+      .filter(t => !!t.start_date)
+      .sort((a, b) => new Date(a.start_date!).getTime() - new Date(b.start_date!).getTime());
+  }, [tasks, isClientCheckin]);
 
-  // Group tasks by phase (excluding recurring calls)
+  // Build a single, consolidated "Weekly Call" task for display
+  const consolidatedWeeklyCall = useMemo(() => {
+    if (checkinTasks.length === 0) return null;
+
+    const recurring_dates = checkinTasks
+      .map(t => t.start_date!)
+      // de-dupe (just in case)
+      .filter((d, i, arr) => arr.indexOf(d) === i);
+
+    const first = checkinTasks[0];
+    const last = checkinTasks[checkinTasks.length - 1];
+
+    return {
+      ...first,
+      id: 'consolidated-weekly-call',
+      name: 'Weekly Call',
+      start_date: first.start_date,
+      end_date: last.end_date || last.start_date,
+      recurring_dates,
+    } satisfies Task;
+  }, [checkinTasks]);
+
+  // Group tasks by phase (excluding check-ins)
   const tasksByPhase = useMemo(() => {
     const grouped = new Map<string, Task[]>();
     phases.forEach(phase => {
       grouped.set(
         phase.id,
         tasks
-          .filter(t => t.phase_id === phase.id && !isRecurringCall(t))
+          .filter(t => t.phase_id === phase.id && !isClientCheckin(t))
           .sort((a, b) => a.order_index - b.order_index)
       );
     });
     return grouped;
-  }, [phases, tasks, isRecurringCall]);
+  }, [phases, tasks, isClientCheckin]);
 
-  // Create ordered sections: Weekly Call first (single row), then phases (excluding Discovery)
+  // Create ordered sections: Consolidated Client Check-ins first (single row), then phases (excluding Discovery)
   type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'weekly-call'; task: Task };
-  
+
   const orderedSections = useMemo((): Section[] => {
     const sections: Section[] = [];
-    
-    // Add Weekly Call section first (single task with recurring dates)
-    if (recurringCallTask) {
-      sections.push({ type: 'weekly-call', task: recurringCallTask });
+
+    if (consolidatedWeeklyCall) {
+      sections.push({ type: 'weekly-call', task: consolidatedWeeklyCall });
     }
-    
-    // Add phases (excluding Discovery)
+
     phases
       .filter(phase => phase.name !== 'Discovery')
       .forEach(phase => {
         const phaseTasks = tasksByPhase.get(phase.id) || [];
         sections.push({ type: 'phase', phase, tasks: phaseTasks });
       });
-    
+
     return sections;
-  }, [phases, tasksByPhase, recurringCallTask]);
+  }, [phases, tasksByPhase, consolidatedWeeklyCall]);
 
   // Handle drag start
   const handleDragStart = (
