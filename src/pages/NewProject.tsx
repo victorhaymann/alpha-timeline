@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { StepLibrary } from '@/components/steps/StepLibrary';
+import { DependencyEditor, LocalDependency } from '@/components/steps/DependencyEditor';
 import { 
   Loader2, 
   ArrowLeft, 
@@ -23,7 +24,8 @@ import {
   Layers,
   Video,
   CalendarDays,
-  RotateCcw
+  RotateCcw,
+  Link2
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 
@@ -52,7 +54,7 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney',
 ];
 
-type WizardStep = 'basics' | 'steps';
+type WizardStep = 'basics' | 'steps' | 'dependencies';
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -63,6 +65,7 @@ export default function NewProject() {
   const [canonicalSteps, setCanonicalSteps] = useState<CanonicalStep[]>([]);
   const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
   const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
+  const [dependencies, setDependencies] = useState<LocalDependency[]>([]);
   
   const today = new Date();
   const defaultEndDate = addMonths(today, 3);
@@ -243,6 +246,7 @@ export default function NewProject() {
         weight_percent: number;
         review_rounds: number;
         order_index: number;
+        _stepId?: string; // Temporary field to track step ID
       }[] = [];
 
       let orderIndex = 0;
@@ -258,6 +262,7 @@ export default function NewProject() {
             weight_percent: step.default_weight_percent || 0,
             review_rounds: step.default_review_rounds || formData.default_review_rounds,
             order_index: orderIndex++,
+            _stepId: step.id,
           });
         }
       });
@@ -275,23 +280,67 @@ export default function NewProject() {
             weight_percent: step.weight_percent || 0,
             review_rounds: step.review_rounds ?? formData.default_review_rounds,
             order_index: orderIndex++,
+            _stepId: step.id,
           });
         }
       });
 
-      if (tasksToCreate.length > 0) {
-        const { error: tasksError } = await supabase
+      // Create a mapping of step IDs to preserve order for dependency creation
+      const stepIdToIndex = new Map<string, number>();
+      tasksToCreate.forEach((task, idx) => {
+        if (task._stepId) {
+          stepIdToIndex.set(task._stepId, idx);
+        }
+      });
+
+      // Remove temporary _stepId before inserting
+      const tasksForInsert = tasksToCreate.map(({ _stepId, ...task }) => task);
+
+      let createdTasks: { id: string }[] = [];
+      if (tasksForInsert.length > 0) {
+        const { data: insertedTasks, error: tasksError } = await supabase
           .from('tasks')
-          .insert(tasksToCreate);
+          .insert(tasksForInsert)
+          .select('id');
 
         if (tasksError) throw tasksError;
+        createdTasks = insertedTasks || [];
+      }
+
+      // Create dependencies using the mapping
+      if (dependencies.length > 0 && createdTasks.length > 0) {
+        // Map step IDs to task IDs
+        const stepIdToTaskId = new Map<string, string>();
+        tasksToCreate.forEach((task, idx) => {
+          if (task._stepId && createdTasks[idx]) {
+            stepIdToTaskId.set(task._stepId, createdTasks[idx].id);
+          }
+        });
+
+        const dependenciesToCreate = dependencies
+          .map(dep => ({
+            predecessor_task_id: stepIdToTaskId.get(dep.predecessorId),
+            successor_task_id: stepIdToTaskId.get(dep.successorId),
+          }))
+          .filter(dep => dep.predecessor_task_id && dep.successor_task_id) as {
+            predecessor_task_id: string;
+            successor_task_id: string;
+          }[];
+
+        if (dependenciesToCreate.length > 0) {
+          const { error: depsError } = await supabase
+            .from('dependencies')
+            .insert(dependenciesToCreate);
+
+          if (depsError) throw depsError;
+        }
       }
 
       const totalSteps = selectedStepIds.size + customSteps.length;
 
       toast({
         title: 'Project created!',
-        description: `${formData.name} has been created with ${totalSteps} steps.`,
+        description: `${formData.name} has been created with ${totalSteps} steps${dependencies.length > 0 ? ` and ${dependencies.length} dependencies` : ''}.`,
       });
 
       navigate(`/projects/${project.id}`);
@@ -310,11 +359,27 @@ export default function NewProject() {
   const wizardSteps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
     { key: 'basics', label: 'Basics', icon: <Building2 className="w-4 h-4" /> },
     { key: 'steps', label: 'Select Steps', icon: <Layers className="w-4 h-4" /> },
+    { key: 'dependencies', label: 'Dependencies', icon: <Link2 className="w-4 h-4" /> },
   ];
 
   const currentStepIndex = wizardSteps.findIndex(s => s.key === currentStep);
-  const canGoNext = currentStep !== 'steps';
+  const canGoNext = currentStep !== 'dependencies';
   const canGoBack = currentStep !== 'basics';
+
+  const handleAddDependency = (predecessorId: string, successorId: string) => {
+    setDependencies(prev => [
+      ...prev,
+      {
+        id: `dep-${Date.now()}`,
+        predecessorId,
+        successorId,
+      }
+    ]);
+  };
+
+  const handleRemoveDependency = (dependencyId: string) => {
+    setDependencies(prev => prev.filter(d => d.id !== dependencyId));
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
@@ -359,10 +424,12 @@ export default function NewProject() {
           <CardTitle className="text-2xl">
             {currentStep === 'basics' && 'Project Basics'}
             {currentStep === 'steps' && 'Select Steps'}
+            {currentStep === 'dependencies' && 'Task Dependencies'}
           </CardTitle>
           <CardDescription>
             {currentStep === 'basics' && 'Define your VFX project details and settings'}
             {currentStep === 'steps' && 'Choose which steps to include from the library'}
+            {currentStep === 'dependencies' && 'Define which tasks must complete before others can start'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -574,6 +641,17 @@ export default function NewProject() {
             </div>
           )}
 
+          {/* Dependencies Step */}
+          {currentStep === 'dependencies' && (
+            <DependencyEditor
+              canonicalSteps={canonicalSteps}
+              selectedStepIds={selectedStepIds}
+              customSteps={customSteps}
+              dependencies={dependencies}
+              onAddDependency={handleAddDependency}
+              onRemoveDependency={handleRemoveDependency}
+            />
+          )}
 
           {/* Navigation */}
           <div className="flex gap-4 pt-8 border-t mt-8">
