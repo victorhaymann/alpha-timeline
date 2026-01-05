@@ -140,8 +140,33 @@ export function GanttChart({
     return allDays.filter(day => isWorkingDay(day));
   }, [viewStart, viewEnd, isWorkingDay]);
 
-  // Both views show individual working days - just different date ranges
+  // Generate columns based on view mode
   const groupedColumns = useMemo(() => {
+    if (viewMode === 'project') {
+      // Project view: group by weeks, showing W1, W2, W3...
+      const weekGroups: Map<number, { days: Date[]; weekIndex: number }> = new Map();
+      let weekCounter = 1;
+      
+      workingDays.forEach(day => {
+        const weekNum = getWeek(day);
+        if (!weekGroups.has(weekNum)) {
+          weekGroups.set(weekNum, { days: [], weekIndex: weekCounter++ });
+        }
+        weekGroups.get(weekNum)!.days.push(day);
+      });
+      
+      return Array.from(weekGroups.entries()).map(([weekNum, { days, weekIndex }]) => ({
+        key: `week-${weekNum}`,
+        label: `W${weekIndex}`,
+        subLabel: format(days[0], 'MMM d'),
+        days,
+        startDate: days[0],
+        endDate: days[days.length - 1],
+        weekNumber: weekNum,
+      }));
+    }
+    
+    // Weekly/Monthly views: show individual working days
     return workingDays.map(day => ({
       key: format(day, 'yyyy-MM-dd'),
       label: format(day, 'd'),
@@ -151,7 +176,7 @@ export function GanttChart({
       endDate: day,
       weekNumber: getWeek(day),
     }));
-  }, [workingDays]);
+  }, [workingDays, viewMode]);
 
   // Create a map of unique week numbers to determine alternating pattern
   const weekAlternatingMap = useMemo(() => {
