@@ -12,6 +12,8 @@ import NewProject from "./pages/NewProject";
 import ProjectDetail from "./pages/ProjectDetail";
 import Templates from "./pages/Templates";
 import SettingsPage from "./pages/SettingsPage";
+import Clients from "./pages/Clients";
+import ClientDetail from "./pages/ClientDetail";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -52,6 +54,8 @@ function AppRoutes() {
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/new" element={<NewProject />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
+        <Route path="/clients" element={<Clients />} />
+        <Route path="/clients/:id" element={<ClientDetail />} />
         <Route path="/templates" element={<Templates />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
