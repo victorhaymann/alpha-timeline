@@ -723,7 +723,7 @@ export function GanttChart({
       <div className="relative overflow-auto rounded-xl bg-muted/30 border border-border shadow-sm" ref={containerRef}>
         <div className="relative flex" style={{ height: totalHeight }}>
           {/* Fixed task names column - Left Sidebar */}
-          <div className="sticky left-0 z-20 bg-card border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
+          <div className="sticky left-0 z-20 bg-muted/30 border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
             {/* Header */}
             <div 
               className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase"
