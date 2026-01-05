@@ -521,9 +521,10 @@ export function GanttChart({
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
+              const isClientCheckins = section.type === 'checkins';
 
               return (
-                <div key={sectionKey}>
+                <div key={sectionKey} className={isClientCheckins ? 'bg-muted/20' : ''}>
                   {/* Section header */}
                   <div 
                     className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm cursor-pointer hover:bg-muted/50 transition-colors"
@@ -671,12 +672,16 @@ export function GanttChart({
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
+              const isClientCheckins = section.type === 'checkins';
 
               return (
-                <div key={sectionKey}>
+                <div key={sectionKey} className={isClientCheckins ? 'bg-muted/20' : ''}>
                   {/* Section header row */}
                   <div 
-                    className="border-b cursor-pointer hover:bg-muted/20 transition-colors"
+                    className={cn(
+                      "border-b cursor-pointer hover:bg-muted/20 transition-colors",
+                      isClientCheckins && "bg-muted/30"
+                    )}
                     style={{ height: PHASE_HEADER_HEIGHT }}
                     onClick={() => toggleSectionCollapse(sectionKey)}
                   >
