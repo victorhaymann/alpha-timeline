@@ -125,43 +125,17 @@ export function GanttChart({
     return allDays.filter(day => isWorkingDay(day));
   }, [viewStart, viewEnd, isWorkingDay]);
 
-  // Group working days by day (for week view showing individual days) or by week (for month view)
+  // Both views show individual working days - just different date ranges
   const groupedColumns = useMemo(() => {
-    if (viewMode === 'week') {
-      // Weekly view: show each working day individually
-      return workingDays.map(day => ({
-        key: format(day, 'yyyy-MM-dd'),
-        label: format(day, 'd'),
-        subLabel: format(day, 'EEE'),
-        days: [day],
-        startDate: day,
-        endDate: day,
-      }));
-    }
-
-    // Month view: group by week for a more compact view
-    const weeks = new Map<string, { days: Date[]; start: Date; end: Date }>();
-    workingDays.forEach(day => {
-      const weekStart = startOfWeek(day, { weekStartsOn: 1 });
-      const key = format(weekStart, 'yyyy-MM-dd');
-      if (!weeks.has(key)) {
-        weeks.set(key, { 
-          days: [], 
-          start: weekStart,
-          end: endOfWeek(weekStart, { weekStartsOn: 1 })
-        });
-      }
-      weeks.get(key)!.days.push(day);
-    });
-    return Array.from(weeks.entries()).map(([key, { days, start, end }]) => ({
-      key,
-      label: `W${format(start, 'w')}`,
-      subLabel: format(start, 'MMM d'),
-      days,
-      startDate: start,
-      endDate: end,
+    return workingDays.map(day => ({
+      key: format(day, 'yyyy-MM-dd'),
+      label: format(day, 'd'),
+      subLabel: format(day, 'EEE'),
+      days: [day],
+      startDate: day,
+      endDate: day,
     }));
-  }, [workingDays, viewMode]);
+  }, [workingDays]);
 
   // Observe container width for responsive columns
   useEffect(() => {
