@@ -82,8 +82,10 @@ export function GanttChart({
     startX: number;
     originalStart: Date;
     originalEnd: Date;
+    originalDuration: number;
   } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ start: Date; end: Date } | null>(null);
+  const [justDropped, setJustDropped] = useState<string | null>(null);
   
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -353,16 +355,21 @@ export function GanttChart({
     e.preventDefault();
     if (!task.start_date || !task.end_date) return;
 
+    const startDate = new Date(task.start_date);
+    const endDate = new Date(task.end_date);
+    const originalDuration = differenceInDays(endDate, startDate) + 1;
+
     setDragging({
       taskId: task.id,
       type,
       startX: e.clientX,
-      originalStart: new Date(task.start_date),
-      originalEnd: new Date(task.end_date),
+      originalStart: startDate,
+      originalEnd: endDate,
+      originalDuration,
     });
     setDragPreview({
-      start: new Date(task.start_date),
-      end: new Date(task.end_date),
+      start: startDate,
+      end: endDate,
     });
   };
 
@@ -400,6 +407,10 @@ export function GanttChart({
   // Handle drag end
   const handleDragEnd = useCallback(() => {
     if (dragging && dragPreview) {
+      // Trigger spring animation
+      setJustDropped(dragging.taskId);
+      setTimeout(() => setJustDropped(null), 400);
+      
       onTaskUpdate(dragging.taskId, {
         start_date: format(dragPreview.start, 'yyyy-MM-dd'),
         end_date: format(dragPreview.end, 'yyyy-MM-dd'),
@@ -699,8 +710,15 @@ export function GanttChart({
                   {/* Task bars - only show if not collapsed */}
                   {!isCollapsed && section.tasks.map((task) => {
                     const isCurrentlyDragging = dragging?.taskId === task.id;
+                    const isJustDropped = justDropped === task.id;
                     const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
                     const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
+
+                    // Calculate durations for preview
+                    const currentDuration = displayStart && displayEnd ? differenceInDays(displayEnd, displayStart) + 1 : null;
+                    const originalDuration = dragging?.originalDuration;
+                    const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
+                    const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
 
                     if (!displayStart || !displayEnd) return (
                       <div key={task.id} className="border-b" style={{ height: ROW_HEIGHT }}>
@@ -738,7 +756,8 @@ export function GanttChart({
                             "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
                             "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
                             "transition-all duration-300 ease-out",
-                            isCurrentlyDragging && "opacity-80 ring-2 ring-primary !transition-none",
+                            isCurrentlyDragging && "opacity-90 ring-2 ring-primary shadow-xl !transition-none",
+                            isJustDropped && "animate-spring-settle",
                             task.task_type === 'milestone' && "rounded-full",
                             task.task_type === 'meeting' && "bg-primary/80"
                           )}
@@ -780,6 +799,32 @@ export function GanttChart({
                                 }}
                               />
                             </>
+                          )}
+
+                          {/* Duration preview tooltip during resize */}
+                          {durationChanged && (
+                            <div 
+                              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-foreground text-background px-2.5 py-1.5 rounded-md shadow-lg text-xs font-medium whitespace-nowrap z-50 animate-fade-in"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
+                                <span className="text-primary">→</span>
+                                <span className={cn(
+                                  "font-bold",
+                                  currentDuration! > originalDuration! ? "text-green-400" : "text-amber-400"
+                                )}>
+                                  {currentDuration}d
+                                </span>
+                                <span className={cn(
+                                  "text-[10px]",
+                                  currentDuration! > originalDuration! ? "text-green-400" : "text-amber-400"
+                                )}>
+                                  ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
+                                </span>
+                              </div>
+                              {/* Tooltip arrow */}
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-foreground" />
+                            </div>
                           )}
                         </div>
                       </div>

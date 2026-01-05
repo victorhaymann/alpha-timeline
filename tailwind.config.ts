@@ -114,6 +114,12 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.7" },
         },
+        "spring-settle": {
+          "0%": { transform: "translateY(-50%) scale(1.05)" },
+          "40%": { transform: "translateY(-50%) scale(0.97)" },
+          "70%": { transform: "translateY(-50%) scale(1.02)" },
+          "100%": { transform: "translateY(-50%) scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -121,6 +127,7 @@ export default {
         "fade-in": "fade-in 0.3s ease-out",
         "slide-in-right": "slide-in-right 0.3s ease-out",
         "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
+        "spring-settle": "spring-settle 0.4s ease-out",
       },
     },
   },
