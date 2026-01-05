@@ -16,7 +16,8 @@ import {
   RotateCcw,
   CalendarIcon,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { 
   format, 
@@ -43,6 +44,7 @@ interface GanttChartProps {
   onTaskReorder: (phaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
   onAddReviewRound: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
 }
 
 type ViewMode = 'day' | 'week' | 'month';
@@ -63,6 +65,7 @@ export function GanttChart({
   onTaskReorder,
   onAddTask,
   onAddReviewRound,
+  onDeleteTask,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -575,6 +578,19 @@ export function GanttChart({
                             title="Add review round"
                           >
                             <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        )}
+
+                        {onDeleteTask && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteTask(task.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/10 rounded shrink-0"
+                            title="Delete task"
+                          >
+                            <Trash2 className="w-3 h-3 text-destructive" />
                           </button>
                         )}
                       </div>
