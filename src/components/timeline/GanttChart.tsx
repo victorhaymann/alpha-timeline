@@ -283,7 +283,7 @@ export function GanttChart({
       return groupedColumns.length * columnWidth;
     }
     
-    // Find which column this date falls into
+    // Find which column this date falls into (exact match)
     for (let i = 0; i < groupedColumns.length; i++) {
       const col = groupedColumns[i];
       const colStart = startOfDay(col.startDate);
@@ -293,11 +293,11 @@ export function GanttChart({
       }
     }
     
-    // If date is not a working day, find the nearest column
+    // If date is not a working day, find the next working day column
     for (let i = 0; i < groupedColumns.length; i++) {
       const colStart = startOfDay(groupedColumns[i].startDate);
-      if (targetDay < colStart) {
-        return Math.max(0, (i - 1)) * columnWidth;
+      if (colStart > targetDay) {
+        return i * columnWidth;
       }
     }
     
@@ -326,23 +326,28 @@ export function GanttChart({
       return 0; // Task is completely outside visible range
     }
     
-    // Find start column index
+    // Find start column index - the first column that is >= task start date
     let startColIndex = 0;
     for (let i = 0; i < groupedColumns.length; i++) {
       const colStart = startOfDay(groupedColumns[i].startDate);
-      if (colStart >= startDay) {
+      if (isSameDay(colStart, startDay)) {
+        startColIndex = i;
+        break;
+      } else if (colStart > startDay) {
         startColIndex = i;
         break;
       }
-      startColIndex = i; // If task starts before visible range, use first column
     }
     
-    // Find end column index
+    // Find end column index - the last column that is <= task end date
     let endColIndex = groupedColumns.length - 1;
-    for (let i = groupedColumns.length - 1; i >= 0; i--) {
+    for (let i = 0; i < groupedColumns.length; i++) {
       const colStart = startOfDay(groupedColumns[i].startDate);
-      if (colStart <= endDay) {
+      if (isSameDay(colStart, endDay)) {
         endColIndex = i;
+        break;
+      } else if (colStart > endDay) {
+        endColIndex = Math.max(0, i - 1);
         break;
       }
     }
@@ -743,6 +748,7 @@ export function GanttChart({
               {groupedColumns.map((col) => {
                 const isToday = col.days.some(d => isSameDay(d, new Date()));
                 const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                const monthLabel = format(col.startDate, 'MMM');
 
                 return (
                   <div
@@ -756,6 +762,7 @@ export function GanttChart({
                   >
                     <span className="font-medium">{col.label}</span>
                     <span className="text-muted-foreground text-[10px]">{col.subLabel}</span>
+                    <span className="text-muted-foreground/60 text-[8px]">{monthLabel}</span>
                   </div>
                 );
               })}
