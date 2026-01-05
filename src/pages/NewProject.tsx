@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { StepLibrary } from '@/components/steps/StepLibrary';
 import { DependencyEditor, LocalDependency } from '@/components/steps/DependencyEditor';
+import { FeedbackConfig, FeedbackSettings, DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
 import { 
   Loader2, 
   ArrowLeft, 
@@ -25,7 +26,8 @@ import {
   Video,
   CalendarDays,
   RotateCcw,
-  Link2
+  Link2,
+  MessageSquare
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 
@@ -54,7 +56,7 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney',
 ];
 
-type WizardStep = 'basics' | 'steps' | 'dependencies';
+type WizardStep = 'basics' | 'steps' | 'feedback' | 'dependencies';
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -66,6 +68,7 @@ export default function NewProject() {
   const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
   const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
   const [dependencies, setDependencies] = useState<LocalDependency[]>([]);
+  const [feedbackSettings, setFeedbackSettings] = useState<FeedbackSettings>(DEFAULT_FEEDBACK_SETTINGS);
   
   const today = new Date();
   const defaultEndDate = addMonths(today, 3);
@@ -95,6 +98,16 @@ export default function NewProject() {
   useEffect(() => {
     fetchCanonicalSteps();
   }, []);
+
+  // Sync check-in timezone with client timezone by default
+  useEffect(() => {
+    if (formData.timezone_client && feedbackSettings.checkInTimezone === 'UTC') {
+      setFeedbackSettings(prev => ({
+        ...prev,
+        checkInTimezone: formData.timezone_client,
+      }));
+    }
+  }, [formData.timezone_client]);
 
   const fetchCanonicalSteps = async () => {
     const { data, error } = await supabase
@@ -359,12 +372,19 @@ export default function NewProject() {
   const wizardSteps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
     { key: 'basics', label: 'Basics', icon: <Building2 className="w-4 h-4" /> },
     { key: 'steps', label: 'Select Steps', icon: <Layers className="w-4 h-4" /> },
+    { key: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { key: 'dependencies', label: 'Dependencies', icon: <Link2 className="w-4 h-4" /> },
   ];
 
   const currentStepIndex = wizardSteps.findIndex(s => s.key === currentStep);
   const canGoNext = currentStep !== 'dependencies';
   const canGoBack = currentStep !== 'basics';
+
+  // Get available step names for milestone selection
+  const availableStepNames = [
+    ...canonicalSteps.filter(s => selectedStepIds.has(s.id)).map(s => s.name),
+    ...customSteps.map(s => s.name),
+  ];
 
   const handleAddDependency = (predecessorId: string, successorId: string) => {
     setDependencies(prev => [
@@ -424,11 +444,13 @@ export default function NewProject() {
           <CardTitle className="text-2xl">
             {currentStep === 'basics' && 'Project Basics'}
             {currentStep === 'steps' && 'Select Steps'}
+            {currentStep === 'feedback' && 'Feedback Configuration'}
             {currentStep === 'dependencies' && 'Task Dependencies'}
           </CardTitle>
           <CardDescription>
             {currentStep === 'basics' && 'Define your VFX project details and settings'}
             {currentStep === 'steps' && 'Choose which steps to include from the library'}
+            {currentStep === 'feedback' && 'Configure client check-ins, milestone reviews, and rework buffers'}
             {currentStep === 'dependencies' && 'Define which tasks must complete before others can start'}
           </CardDescription>
         </CardHeader>
@@ -639,6 +661,17 @@ export default function NewProject() {
                 onRemoveCustomStep={handleRemoveCustomStep}
               />
             </div>
+          )}
+
+          {/* Feedback Configuration Step */}
+          {currentStep === 'feedback' && (
+            <FeedbackConfig
+              settings={feedbackSettings}
+              onChange={setFeedbackSettings}
+              defaultZoomLink={formData.gmeet_link}
+              clientTimezone={formData.timezone_client}
+              availableStepNames={availableStepNames}
+            />
           )}
 
           {/* Dependencies Step */}
