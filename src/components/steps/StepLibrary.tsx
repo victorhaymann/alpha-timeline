@@ -32,6 +32,8 @@ interface StepLibraryProps {
   onRemoveCustomStep?: (stepId: string) => void;
   onUpdateCustomStep?: (stepId: string, updates: Partial<CustomStep>) => void;
   readOnly?: boolean;
+  allowLibraryEdit?: boolean;
+  onDeleteCanonicalStep?: (stepId: string) => void;
 }
 
 export function StepLibrary({ 
@@ -43,7 +45,9 @@ export function StepLibrary({
   onAddCustomStep,
   onRemoveCustomStep,
   onUpdateCustomStep,
-  readOnly = false 
+  readOnly = false,
+  allowLibraryEdit = false,
+  onDeleteCanonicalStep
 }: StepLibraryProps) {
   const [steps, setSteps] = useState<CanonicalStep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -242,6 +246,18 @@ export function StepLibrary({
                             </div>
                           ) : (
                             <span>{stepDays?.get(step.id) ?? 1} days</span>
+                          )}
+                          {allowLibraryEdit && onDeleteCanonicalStep && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteCanonicalStep(step.id);
+                              }}
+                              className="p-1 hover:bg-destructive/20 rounded text-destructive"
+                              title="Delete step from library"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           )}
                         </div>
                       </div>
