@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { CanonicalStep, PHASE_CATEGORIES, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
 import { CustomStep } from './AddCustomStepDialog';
+import { DependencyGraph } from './DependencyGraph';
 import { 
   ArrowRight,
   Link2,
@@ -20,7 +22,10 @@ import {
   ChevronRight,
   Layers,
   Flag,
-  Users
+  Users,
+  List,
+  GitBranch,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +63,7 @@ export function DependencyEditor({
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [selectedPredecessor, setSelectedPredecessor] = useState<string>('');
   const [selectedSuccessor, setSelectedSuccessor] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('graph');
 
   // Combine canonical and custom steps into unified list
   const allSteps: UnifiedStep[] = useMemo(() => {
@@ -129,6 +135,11 @@ export function DependencyEditor({
     return dependencies.filter(d => d.predecessorId === stepId);
   };
 
+  // Check if a task can run in parallel (no incoming dependencies)
+  const isParallelCapable = (stepId: string) => {
+    return !dependencies.some(d => d.successorId === stepId);
+  };
+
   const getTypeIcon = (type?: string) => {
     switch (type) {
       case 'milestone': return <Flag className="w-3.5 h-3.5" />;
@@ -148,15 +159,48 @@ export function DependencyEditor({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Quick Add Dependency */}
-      <Card className="bg-accent/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Add Dependency
-          </CardTitle>
-        </CardHeader>
+    <div className="space-y-4">
+      {/* View Mode Tabs */}
+      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'list' | 'graph')}>
+        <div className="flex items-center justify-between mb-4">
+          <TabsList>
+            <TabsTrigger value="graph" className="gap-2">
+              <GitBranch className="w-4 h-4" />
+              Graph View
+            </TabsTrigger>
+            <TabsTrigger value="list" className="gap-2">
+              <List className="w-4 h-4" />
+              List View
+            </TabsTrigger>
+          </TabsList>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Zap className="w-4 h-4 text-primary" />
+            <span>Tasks without dependencies run in parallel</span>
+          </div>
+        </div>
+
+        {/* Graph View */}
+        <TabsContent value="graph" className="mt-0">
+          <DependencyGraph
+            canonicalSteps={canonicalSteps}
+            selectedStepIds={selectedStepIds}
+            customSteps={customSteps}
+            dependencies={dependencies}
+            onAddDependency={onAddDependency}
+            onRemoveDependency={onRemoveDependency}
+          />
+        </TabsContent>
+
+        {/* List View */}
+        <TabsContent value="list" className="mt-0 space-y-6">
+          {/* Quick Add Dependency */}
+          <Card className="bg-accent/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Add Dependency
+              </CardTitle>
+            </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
             <Select value={selectedPredecessor} onValueChange={setSelectedPredecessor}>
@@ -269,6 +313,12 @@ export function DependencyEditor({
                                 Custom
                               </Badge>
                             )}
+                            {isParallelCapable(step.id) && (
+                              <Badge variant="secondary" className="text-xs gap-1">
+                                <Zap className="w-3 h-3" />
+                                Parallel
+                              </Badge>
+                            )}
                           </div>
                           
                           {/* Dependencies (what this step depends on) */}
@@ -325,11 +375,13 @@ export function DependencyEditor({
         })}
       </div>
 
-      {/* Summary */}
-      <div className="text-center text-sm text-muted-foreground">
-        <Link2 className="w-4 h-4 inline mr-1" />
-        {dependencies.length} {dependencies.length === 1 ? 'dependency' : 'dependencies'} configured
-      </div>
+          {/* Summary */}
+          <div className="text-center text-sm text-muted-foreground">
+            <Link2 className="w-4 h-4 inline mr-1" />
+            {dependencies.length} {dependencies.length === 1 ? 'dependency' : 'dependencies'} configured
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
