@@ -249,6 +249,39 @@ export function TimelineEditor({
     }
   };
 
+  // Handle delete task
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      // First delete any dependencies involving this task
+      await supabase
+        .from('dependencies')
+        .delete()
+        .or(`predecessor_task_id.eq.${taskId},successor_task_id.eq.${taskId}`);
+
+      // Then delete the task
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Task deleted',
+        description: 'The task has been removed.',
+      });
+
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete task.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Regenerate schedule
   const handleRegenerate = async () => {
     setIsRegenerating(true);
@@ -362,6 +395,7 @@ export function TimelineEditor({
             onTaskReorder={handleTaskReorder}
             onAddTask={handleAddTask}
             onAddReviewRound={handleAddReviewRound}
+            onDeleteTask={handleDeleteTask}
           />
         </TabsContent>
 
