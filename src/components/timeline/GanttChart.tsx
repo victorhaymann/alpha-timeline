@@ -17,12 +17,18 @@ import {
   CalendarIcon,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Trash2
 } from 'lucide-react';
 import { 
   format, 
   differenceInDays, 
   addDays, 
+  addWeeks,
+  addMonths,
+  subDays,
+  subWeeks,
+  subMonths,
   startOfDay,
   eachDayOfInterval,
   startOfWeek,
@@ -89,6 +95,9 @@ export function GanttChart({
   
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  
+  // Slide animation state
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
 
   const toggleSectionCollapse = useCallback((sectionKey: string) => {
     setCollapsedSections(prev => {
@@ -209,11 +218,46 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
-  // Keyboard navigation for horizontal scrolling
+  // Navigate to previous/next period based on view mode
+  const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
+    if (!dateRange?.from || !dateRange?.to) return;
+    
+    setSlideDirection(direction === 'prev' ? 'right' : 'left');
+    
+    // Clear slide direction after animation
+    setTimeout(() => setSlideDirection(null), 350);
+    
+    let newFrom: Date;
+    let newTo: Date;
+    const rangeDuration = differenceInDays(dateRange.to, dateRange.from);
+    
+    if (viewMode === 'day') {
+      // Move by 7 days
+      const shift = direction === 'prev' ? -7 : 7;
+      newFrom = addDays(dateRange.from, shift);
+      newTo = addDays(dateRange.to, shift);
+    } else if (viewMode === 'week') {
+      // Move by 4 weeks
+      const shift = direction === 'prev' ? -4 : 4;
+      newFrom = addWeeks(dateRange.from, shift);
+      newTo = addWeeks(dateRange.to, shift);
+    } else {
+      // Move by 1 month
+      if (direction === 'prev') {
+        newFrom = subMonths(dateRange.from, 1);
+        newTo = subMonths(dateRange.to, 1);
+      } else {
+        newFrom = addMonths(dateRange.from, 1);
+        newTo = addMonths(dateRange.to, 1);
+      }
+    }
+    
+    setDateRange({ from: newFrom, to: newTo });
+  }, [dateRange, viewMode]);
+
+  // Keyboard navigation for horizontal scrolling and period navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!containerRef.current) return;
-      
       // Only handle if Gantt chart is focused or no other input is focused
       const activeElement = document.activeElement;
       const isInputFocused = activeElement?.tagName === 'INPUT' || 
@@ -222,26 +266,28 @@ export function GanttChart({
       
       if (isInputFocused) return;
 
-      const scrollAmount = columnWidth * 3; // Scroll 3 columns at a time
-      
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        containerRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+        navigatePeriod('prev');
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        containerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+        navigatePeriod('next');
       } else if (e.key === 'Home') {
         e.preventDefault();
-        containerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+        setSlideDirection('right');
+        setTimeout(() => setSlideDirection(null), 350);
+        setDateRange({ from: projectStartDate, to: projectEndDate });
       } else if (e.key === 'End') {
         e.preventDefault();
-        containerRef.current.scrollTo({ left: containerRef.current.scrollWidth, behavior: 'smooth' });
+        if (containerRef.current) {
+          containerRef.current.scrollTo({ left: containerRef.current.scrollWidth, behavior: 'smooth' });
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [columnWidth]);
+  }, [navigatePeriod, projectStartDate, projectEndDate]);
 
   // Calculate position from date (accounting for working days only)
   const dateToX = useCallback((date: Date) => {
@@ -451,19 +497,42 @@ export function GanttChart({
     <div className="flex flex-col gap-3">
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* View mode toggle */}
-        <div className="flex items-center rounded-lg border bg-muted/30 p-1">
-          {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
-            <Button
-              key={mode}
-              variant={viewMode === mode ? 'default' : 'ghost'}
-              size="sm"
-              className="h-7 px-3 text-xs capitalize"
-              onClick={() => setViewMode(mode)}
-            >
-              {mode}ly
-            </Button>
-          ))}
+        {/* Navigation arrows */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => navigatePeriod('prev')}
+            title="Previous period (← Arrow)"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          
+          {/* View mode toggle */}
+          <div className="flex items-center rounded-lg border bg-muted/30 p-1">
+            {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
+              <Button
+                key={mode}
+                variant={viewMode === mode ? 'default' : 'ghost'}
+                size="sm"
+                className="h-7 px-3 text-xs capitalize"
+                onClick={() => setViewMode(mode)}
+              >
+                {mode}ly
+              </Button>
+            ))}
+          </div>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={() => navigatePeriod('next')}
+            title="Next period (→ Arrow)"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Date range picker */}
@@ -647,7 +716,11 @@ export function GanttChart({
 
           {/* Timeline area */}
           <div 
-            className="flex-1 min-w-0"
+            className={cn(
+              "flex-1 min-w-0",
+              slideDirection === 'left' && "animate-slide-left",
+              slideDirection === 'right' && "animate-slide-right"
+            )}
             ref={timelineRef}
             onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
             onMouseUp={dragging ? handleDragEnd : undefined}
