@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import type { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PhaseCategory } from '@/types/database';
@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import confetti from 'canvas-confetti';
 
 interface ProjectStepWithCanonical extends ProjectStep {
   canonical_step: CanonicalStep;
@@ -116,9 +117,42 @@ export default function ProjectDetail() {
     }
   }, [id, navigate]);
 
+  const hasTriggeredConfetti = useRef(false);
+
   useEffect(() => {
     fetchProjectData();
   }, [fetchProjectData]);
+
+  // Trigger confetti when project is completed
+  useEffect(() => {
+    if (project?.status === 'completed' && !hasTriggeredConfetti.current) {
+      hasTriggeredConfetti.current = true;
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 3,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: ['#10b981', '#22c55e', '#4ade80', '#86efac']
+        });
+        confetti({
+          particleCount: 3,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: ['#10b981', '#22c55e', '#4ade80', '#86efac']
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+      frame();
+    }
+  }, [project?.status]);
 
   const handleTasksChange = (updatedTasks: Task[]) => {
     setTasks(updatedTasks);
@@ -280,7 +314,12 @@ export default function ProjectDetail() {
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div 
-              className="h-full bg-gradient-to-r from-primary to-cyan-400 transition-all duration-500"
+              className={cn(
+                "h-full transition-all duration-500",
+                progress < 50 && "bg-destructive",
+                progress >= 50 && progress < 90 && "bg-orange-500",
+                progress >= 90 && "bg-status-completed"
+              )}
               style={{ width: `${progress}%` }}
             />
           </div>
