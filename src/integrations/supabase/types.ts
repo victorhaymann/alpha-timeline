@@ -148,6 +148,65 @@ export type Database = {
           },
         ]
       }
+      client_users: {
+        Row: {
+          client_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_users_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           author_role: string | null
@@ -429,6 +488,7 @@ export type Database = {
       projects: {
         Row: {
           buffer_percentage: number | null
+          client_id: string | null
           client_name: string | null
           created_at: string
           default_review_rounds: number | null
@@ -447,6 +507,7 @@ export type Database = {
         }
         Insert: {
           buffer_percentage?: number | null
+          client_id?: string | null
           client_name?: string | null
           created_at?: string
           default_review_rounds?: number | null
@@ -465,6 +526,7 @@ export type Database = {
         }
         Update: {
           buffer_percentage?: number | null
+          client_id?: string | null
           client_name?: string | null
           created_at?: string
           default_review_rounds?: number | null
@@ -481,7 +543,15 @@ export type Database = {
           working_days_mask?: number | null
           zoom_link_default?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "projects_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quotations: {
         Row: {
@@ -664,6 +734,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_client_access: {
+        Args: { _client_id: string; _user_id: string }
+        Returns: boolean
+      }
       has_project_access: {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
