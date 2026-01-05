@@ -81,7 +81,7 @@ export default function NewProject() {
     end_date: format(defaultEndDate, 'yyyy-MM-dd'),
     timezone_pm: Intl.DateTimeFormat().resolvedOptions().timeZone,
     timezone_client: 'UTC',
-    working_days_mask: 127, // All days enabled (Mon-Sun = 1+2+4+8+16+32+64)
+    working_days_mask: 31, // Mon-Fri enabled (1+2+4+8+16), Sat/Sun disabled
     default_review_rounds: 2,
     buffer_percentage: 12,
     gmeet_link: '',
