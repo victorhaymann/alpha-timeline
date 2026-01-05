@@ -313,7 +313,7 @@ export function GanttChart({
     if (groupedColumns.length === 0) return 0;
     
     const firstColStart = startOfDay(groupedColumns[0].startDate);
-    const lastColStart = startOfDay(groupedColumns[groupedColumns.length - 1].startDate);
+    const lastColEnd = startOfDay(groupedColumns[groupedColumns.length - 1].endDate);
     
     // If before first column, clamp to 0
     if (targetDay < firstColStart) {
@@ -321,16 +321,26 @@ export function GanttChart({
     }
     
     // If after last column, clamp to end
-    if (targetDay > lastColStart) {
+    if (targetDay > lastColEnd) {
       return groupedColumns.length * columnWidth;
     }
     
-    // Find which column this date falls into (exact match)
+    // Find which column this date falls into
     for (let i = 0; i < groupedColumns.length; i++) {
       const col = groupedColumns[i];
       const colStart = startOfDay(col.startDate);
+      const colEnd = startOfDay(col.endDate);
       
-      if (isSameDay(targetDay, colStart)) {
+      // Check if target falls within this column's date range
+      if (targetDay >= colStart && targetDay <= colEnd) {
+        // In project view with week columns, calculate position within the week
+        if (viewMode === 'project' && col.days.length > 1) {
+          const dayIndex = col.days.findIndex(d => isSameDay(startOfDay(d), targetDay));
+          if (dayIndex >= 0) {
+            const dayFraction = dayIndex / col.days.length;
+            return i * columnWidth + dayFraction * columnWidth;
+          }
+        }
         return i * columnWidth;
       }
     }
@@ -344,14 +354,23 @@ export function GanttChart({
     }
     
     return (groupedColumns.length - 1) * columnWidth;
-  }, [groupedColumns, columnWidth]);
+  }, [groupedColumns, columnWidth, viewMode]);
 
   // Calculate date from position
   const xToDate = useCallback((x: number) => {
-    const colIndex = Math.round(x / columnWidth);
+    const colIndex = Math.floor(x / columnWidth);
     const col = groupedColumns[Math.min(Math.max(0, colIndex), groupedColumns.length - 1)];
+    
+    // In project view with week columns, calculate which day within the week
+    if (viewMode === 'project' && col && col.days.length > 1) {
+      const withinColX = x - colIndex * columnWidth;
+      const dayFraction = withinColX / columnWidth;
+      const dayIndex = Math.min(Math.floor(dayFraction * col.days.length), col.days.length - 1);
+      return col.days[dayIndex] || col.days[0];
+    }
+    
     return col?.days[0] || projectStartDate;
-  }, [groupedColumns, columnWidth, projectStartDate]);
+  }, [groupedColumns, columnWidth, projectStartDate, viewMode]);
 
   // Calculate task width (counting working days only, clamped to visible range)
   const getTaskWidth = useCallback((start: Date, end: Date) => {
@@ -361,14 +380,37 @@ export function GanttChart({
     const endDay = startOfDay(end);
     
     const firstColStart = startOfDay(groupedColumns[0].startDate);
-    const lastColStart = startOfDay(groupedColumns[groupedColumns.length - 1].startDate);
+    const lastColEnd = startOfDay(groupedColumns[groupedColumns.length - 1].endDate);
     
     // Check if task overlaps with visible range at all
-    if (endDay < firstColStart || startDay > lastColStart) {
+    if (endDay < firstColStart || startDay > lastColEnd) {
       return 0; // Task is completely outside visible range
     }
     
-    // Find start column index - the first column that is >= task start date
+    // In project view with week columns, calculate precise width based on days
+    if (viewMode === 'project') {
+      let totalDays = 0;
+      let taskDays = 0;
+      
+      for (const col of groupedColumns) {
+        for (const day of col.days) {
+          const d = startOfDay(day);
+          totalDays++;
+          if (d >= startDay && d <= endDay) {
+            taskDays++;
+          }
+        }
+      }
+      
+      if (taskDays === 0) return columnWidth;
+      
+      // Calculate width proportionally
+      const totalWidth = groupedColumns.length * columnWidth;
+      const widthPerDay = totalWidth / totalDays;
+      return Math.max(widthPerDay, taskDays * widthPerDay);
+    }
+    
+    // Weekly/Monthly views: count columns
     let startColIndex = 0;
     for (let i = 0; i < groupedColumns.length; i++) {
       const colStart = startOfDay(groupedColumns[i].startDate);
@@ -381,7 +423,6 @@ export function GanttChart({
       }
     }
     
-    // Find end column index - the last column that is <= task end date
     let endColIndex = groupedColumns.length - 1;
     for (let i = 0; i < groupedColumns.length; i++) {
       const colStart = startOfDay(groupedColumns[i].startDate);
@@ -395,7 +436,7 @@ export function GanttChart({
     }
     
     return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
-  }, [groupedColumns, columnWidth]);
+  }, [groupedColumns, columnWidth, viewMode]);
 
   // Helper to check if a task is a client check-in (legacy) or consolidated call
   const isClientCheckin = useCallback((task: Task) => {
