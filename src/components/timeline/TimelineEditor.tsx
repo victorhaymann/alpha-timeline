@@ -336,6 +336,48 @@ export function TimelineEditor({
           .eq('id', update.id);
       }
 
+      // Handle generated weekly call task
+      const weeklyCallTask = scheduleOutput.scheduledTasks.find(
+        st => st.generatedType === 'check-in' && st.recurringDates
+      );
+
+      if (weeklyCallTask) {
+        // Update local state to include the weekly call with recurring_dates
+        // This is a client-side only task for display purposes
+        const existingWeeklyCall = tasks.find(t => 
+          t.name.toLowerCase().includes('weekly call') || 
+          t.name.toLowerCase().includes('bi-weekly call')
+        );
+
+        if (!existingWeeklyCall) {
+          // Add it to the local state (not persisted to DB, just for display)
+          const weeklyCallDisplayTask: Task = {
+            id: `generated-weekly-call-${Date.now()}`,
+            phase_id: phases[0]?.id || '',
+            project_id: project.id,
+            name: weeklyCallTask.name,
+            description: null,
+            start_date: format(weeklyCallTask.startDate, 'yyyy-MM-dd'),
+            end_date: format(weeklyCallTask.endDate, 'yyyy-MM-dd'),
+            status: 'pending',
+            task_type: 'meeting',
+            percentage_allocation: 0,
+            weight_percent: 0,
+            is_milestone: false,
+            is_feedback_meeting: true,
+            client_visible: true,
+            review_rounds: 0,
+            narrative_text: null,
+            order_index: -1, // Show at top
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            recurring_dates: weeklyCallTask.recurringDates,
+          };
+          
+          onTasksChange([weeklyCallDisplayTask, ...tasks]);
+        }
+      }
+
       toast({
         title: 'Schedule regenerated',
         description: `Updated dates for ${updates.length} tasks. ${scheduleOutput.warnings.length > 0 ? scheduleOutput.warnings[0] : ''}`,

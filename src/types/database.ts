@@ -80,6 +80,7 @@ export interface Task {
   order_index: number;
   created_at: string;
   updated_at: string;
+  recurring_dates?: string[]; // For recurring meetings (e.g., weekly calls) - client-side only
 }
 
 export interface Dependency {

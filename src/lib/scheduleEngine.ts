@@ -76,6 +76,7 @@ export interface ScheduleTask {
   clientVisible: boolean;
   isGenerated?: boolean; // For meetings/milestones/buffers added by engine
   generatedType?: 'check-in' | 'phase-milestone' | 'step-review' | 'rework-buffer';
+  recurringDates?: string[]; // For recurring meetings (e.g., weekly calls)
 }
 
 export interface ScheduleDependency {
@@ -167,7 +168,8 @@ function nextWorkingDay(date: Date, mask: number): Date {
 }
 
 /**
- * Generate recurring check-in meetings
+ * Generate a single recurring check-in task with all meeting dates
+ * Returns a single task with recurringDates array instead of multiple tasks
  */
 function generateCheckInMeetings(
   projectStart: Date,
@@ -177,39 +179,45 @@ function generateCheckInMeetings(
 ): ScheduleTask[] {
   if (!settings.checkInEnabled) return [];
   
-  const meetings: ScheduleTask[] = [];
   const weekdayMap: Record<string, number> = {
     'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5
   };
   const targetDayOfWeek = weekdayMap[settings.checkInWeekday] || 3;
   const intervalDays = settings.checkInFrequency === 'weekly' ? 7 : 14;
   
-  // Find first occurrence of target weekday
+  // Collect all check-in dates
+  const recurringDates: string[] = [];
   let current = new Date(projectStart);
+  
+  // Find first occurrence of target weekday
   while (current.getDay() !== targetDayOfWeek) {
     current = addDays(current, 1);
   }
   
-  let meetingIndex = 1;
   while (current <= projectEnd) {
     if (isWorkingDay(current, mask)) {
-      meetings.push({
-        _stepId: `checkin-${meetingIndex}`,
-        name: `Client Check-in #${meetingIndex}`,
-        phaseCategory: 'Production', // Default to Production phase
-        taskType: 'meeting',
-        weightPercent: 0, // Meetings don't take weight from tasks
-        reviewRounds: 0,
-        clientVisible: true,
-        isGenerated: true,
-        generatedType: 'check-in',
-      });
-      meetingIndex++;
+      recurringDates.push(format(current, 'yyyy-MM-dd'));
     }
     current = addDays(current, intervalDays);
   }
   
-  return meetings;
+  if (recurringDates.length === 0) return [];
+  
+  // Return a single task with all dates stored
+  const frequencyLabel = settings.checkInFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly';
+  
+  return [{
+    _stepId: 'weekly-call',
+    name: `${frequencyLabel} Call`,
+    phaseCategory: 'Client Check-ins',
+    taskType: 'meeting',
+    weightPercent: 0,
+    reviewRounds: 0,
+    clientVisible: true,
+    isGenerated: true,
+    generatedType: 'check-in',
+    recurringDates, // Array of all meeting dates
+  }];
 }
 
 /**
@@ -659,29 +667,23 @@ export function computeSchedule(input: ScheduleInput): ScheduleOutput {
     }
   }
   
-  // 13. Add check-in meetings at their specific dates
-  checkInMeetings.forEach((meeting, index) => {
-    const intervalDays = feedbackSettings.checkInFrequency === 'weekly' ? 7 : 14;
-    const weekdayMap: Record<string, number> = {
-      'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5
-    };
-    const targetDayOfWeek = weekdayMap[feedbackSettings.checkInWeekday] || 3;
+  // 13. Add the single weekly call task with its recurring dates
+  if (checkInMeetings.length > 0) {
+    const weeklyCallTask = checkInMeetings[0]; // Now there's only one
+    const recurringDates = weeklyCallTask.recurringDates || [];
     
-    let meetingDate = new Date(projectStartDate);
-    while (meetingDate.getDay() !== targetDayOfWeek) {
-      meetingDate = addDays(meetingDate, 1);
-    }
-    meetingDate = addDays(meetingDate, index * intervalDays);
-    
-    if (meetingDate <= projectEndDate) {
+    if (recurringDates.length > 0) {
+      const firstDate = new Date(recurringDates[0]);
+      const lastDate = new Date(recurringDates[recurringDates.length - 1]);
+      
       scheduledTasks.push({
-        ...meeting,
-        startDate: meetingDate,
-        endDate: meetingDate,
-        durationDays: 1,
+        ...weeklyCallTask,
+        startDate: firstDate,
+        endDate: lastDate,
+        durationDays: recurringDates.length,
       });
     }
-  });
+  }
   
   // Sort by start date
   scheduledTasks.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
@@ -699,11 +701,12 @@ export function computeSchedule(input: ScheduleInput): ScheduleOutput {
  */
 export function formatScheduleForDb(
   scheduled: ScheduledTask[]
-): { name: string; start_date: string; end_date: string; task_type: string }[] {
+): { name: string; start_date: string; end_date: string; task_type: string; recurring_dates?: string[] }[] {
   return scheduled.map(task => ({
     name: task.name,
     start_date: format(task.startDate, 'yyyy-MM-dd'),
     end_date: format(task.endDate, 'yyyy-MM-dd'),
     task_type: task.taskType,
+    recurring_dates: task.recurringDates,
   }));
 }
