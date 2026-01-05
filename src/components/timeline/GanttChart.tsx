@@ -309,28 +309,30 @@ export function GanttChart({
     const firstColStart = startOfDay(groupedColumns[0].startDate);
     const lastColStart = startOfDay(groupedColumns[groupedColumns.length - 1].startDate);
     
-    // Clamp start and end to visible range
-    const clampedStart = startDay < firstColStart ? firstColStart : startDay;
-    const clampedEnd = endDay > lastColStart ? lastColStart : endDay;
-    
-    // Find column indices
-    let startColIndex = -1;
-    let endColIndex = -1;
-    
-    for (let i = 0; i < groupedColumns.length; i++) {
-      const colStart = startOfDay(groupedColumns[i].startDate);
-      
-      if (startColIndex === -1 && colStart >= clampedStart) {
-        startColIndex = i;
-      }
-      if (colStart <= clampedEnd) {
-        endColIndex = i;
-      }
+    // Check if task overlaps with visible range at all
+    if (endDay < firstColStart || startDay > lastColStart) {
+      return 0; // Task is completely outside visible range
     }
     
-    // If task is completely outside visible range
-    if (startColIndex === -1 || endColIndex === -1 || endColIndex < startColIndex) {
-      return 0;
+    // Find start column index
+    let startColIndex = 0;
+    for (let i = 0; i < groupedColumns.length; i++) {
+      const colStart = startOfDay(groupedColumns[i].startDate);
+      if (colStart >= startDay) {
+        startColIndex = i;
+        break;
+      }
+      startColIndex = i; // If task starts before visible range, use first column
+    }
+    
+    // Find end column index
+    let endColIndex = groupedColumns.length - 1;
+    for (let i = groupedColumns.length - 1; i >= 0; i--) {
+      const colStart = startOfDay(groupedColumns[i].startDate);
+      if (colStart <= endDay) {
+        endColIndex = i;
+        break;
+      }
     }
     
     return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
