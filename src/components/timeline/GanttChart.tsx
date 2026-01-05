@@ -1140,24 +1140,27 @@ export function GanttChart({
               );
             })}
 
-            {/* Today marker - Red line */}
+            {/* Today marker - Red vertical line */}
             {(() => {
               const today = new Date();
               const todayColIndex = groupedColumns.findIndex(col => 
-                col.days.some(d => isSameDay(d, today))
+                isSameDay(col.startDate, today)
               );
-              if (todayColIndex !== -1) {
-                const todayX = todayColIndex * columnWidth;
-                return (
-                  <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-destructive z-30 pointer-events-none"
-                    style={{ left: todayX + columnWidth / 2 }}
-                  >
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive" />
-                  </div>
-                );
-              }
-              return null;
+              if (todayColIndex === -1) return null;
+              
+              const todayX = todayColIndex * columnWidth + columnWidth / 2;
+              return (
+                <div
+                  className="absolute w-0.5 bg-destructive z-30 pointer-events-none"
+                  style={{ 
+                    left: todayX,
+                    top: 0,
+                    bottom: 0,
+                  }}
+                >
+                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive shadow-md" />
+                </div>
+              );
             })()}
           </div>
         </div>
