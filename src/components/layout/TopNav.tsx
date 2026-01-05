@@ -30,8 +30,8 @@ export function TopNav() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 glass-surface">
-      <div className="container flex h-16 items-center justify-between">
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-16 items-center justify-between px-6 lg:px-8">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
           <div className="relative w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center overflow-hidden">
