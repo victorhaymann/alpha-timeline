@@ -87,14 +87,15 @@ export function PhaseTimelineSlider({
       const newPositions = [...prev];
       
       // Calculate boundaries for this handle
+      // Handle 0: min is MIN_PHASE_PERCENT, max is handle 1 position minus MIN_PHASE_PERCENT
+      // Handle 1: min is handle 0 position plus MIN_PHASE_PERCENT, max is 100 - MIN_PHASE_PERCENT
       const minPos = draggingHandle === 0 
         ? MIN_PHASE_PERCENT 
-        : prev[draggingHandle - 1] + MIN_PHASE_PERCENT;
+        : prev[0] + MIN_PHASE_PERCENT;
       
-      // With only 2 handles, handle 1 max is 100 - min
-      const maxPos = draggingHandle === 1 
-        ? 100 - MIN_PHASE_PERCENT 
-        : prev[draggingHandle + 1] - MIN_PHASE_PERCENT;
+      const maxPos = draggingHandle === 0 
+        ? prev[1] - MIN_PHASE_PERCENT 
+        : 100 - MIN_PHASE_PERCENT;
 
       newPositions[draggingHandle] = Math.max(minPos, Math.min(maxPos, percent));
       
