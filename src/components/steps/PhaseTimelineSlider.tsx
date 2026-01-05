@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils';
 import { format, addDays, differenceInDays, eachDayOfInterval, isWeekend } from 'date-fns';
 
 // Phases in order (left to right on the bar)
-const PHASES: PhaseCategory[] = ['Pre-Production', 'Production', 'Post-Production', 'Delivery'];
+// Only show weightable phases - Delivery is just the end date of Post-Production
+const PHASES: PhaseCategory[] = ['Pre-Production', 'Production', 'Post-Production'];
 
 export type PhaseWeightConfig = Record<PhaseCategory, number>;
 
@@ -59,8 +60,9 @@ export function PhaseTimelineSlider({
     
     newWeights['Pre-Production'] = Math.max(MIN_PHASE_PERCENT, Math.round(positions[0]));
     newWeights['Production'] = Math.max(MIN_PHASE_PERCENT, Math.round(positions[1] - positions[0]));
-    newWeights['Post-Production'] = Math.max(MIN_PHASE_PERCENT, Math.round(positions[2] - positions[1]));
-    newWeights['Delivery'] = Math.max(MIN_PHASE_PERCENT, Math.round(100 - positions[2]));
+    newWeights['Post-Production'] = Math.max(MIN_PHASE_PERCENT, Math.round(100 - positions[1]));
+    // Delivery is 0% as it's just a date marker (end of Post-Production)
+    newWeights['Delivery'] = 0;
     
     return newWeights;
   }, [weights]);
@@ -88,7 +90,8 @@ export function PhaseTimelineSlider({
         ? MIN_PHASE_PERCENT 
         : prev[draggingHandle - 1] + MIN_PHASE_PERCENT;
       
-      const maxPos = draggingHandle === 2 
+      // With only 2 handles, handle 1 max is 100 - min
+      const maxPos = draggingHandle === 1 
         ? 100 - MIN_PHASE_PERCENT 
         : prev[draggingHandle + 1] - MIN_PHASE_PERCENT;
 
