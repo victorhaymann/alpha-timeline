@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { StepLibrary } from '@/components/steps/StepLibrary';
 import { DependencyEditor, LocalDependency } from '@/components/steps/DependencyEditor';
 import { FeedbackConfig, FeedbackSettings, DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
+import { PhaseWeightsConfig, PhaseWeightConfig, DEFAULT_PHASE_WEIGHTS } from '@/components/steps/PhaseWeightsConfig';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { 
   Loader2, 
@@ -28,7 +29,8 @@ import {
   CalendarDays,
   RotateCcw,
   Link2,
-  MessageSquare
+  MessageSquare,
+  Clock
 } from 'lucide-react';
 import { format, addMonths, parse } from 'date-fns';
 
@@ -57,7 +59,7 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney',
 ];
 
-type WizardStep = 'basics' | 'steps' | 'feedback' | 'dependencies';
+type WizardStep = 'basics' | 'phases' | 'steps' | 'feedback' | 'dependencies';
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -70,6 +72,7 @@ export default function NewProject() {
   const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
   const [dependencies, setDependencies] = useState<LocalDependency[]>([]);
   const [feedbackSettings, setFeedbackSettings] = useState<FeedbackSettings>(DEFAULT_FEEDBACK_SETTINGS);
+  const [phaseWeights, setPhaseWeights] = useState<PhaseWeightConfig>({ ...DEFAULT_PHASE_WEIGHTS });
   
   const today = new Date();
   const defaultEndDate = addMonths(today, 3);
@@ -184,6 +187,19 @@ export default function NewProject() {
       return;
     }
 
+    // Validate phase weights sum to 100%
+    const weightablePhases = ['Pre-Production', 'Production', 'Post-Production', 'Delivery'] as const;
+    const totalWeight = weightablePhases.reduce((sum, phase) => sum + (phaseWeights[phase] || 0), 0);
+    if (totalWeight !== 100) {
+      toast({
+        title: 'Validation error',
+        description: `Phase weights must sum to 100% (currently ${totalWeight}%).`,
+        variant: 'destructive',
+      });
+      setCurrentStep('phases');
+      return;
+    }
+
     setIsSubmitting(true);
     
     try {
@@ -227,6 +243,7 @@ export default function NewProject() {
         tasks: scheduleTasks,
         dependencies: scheduleDependencies,
         feedbackSettings,
+        phaseWeightOverrides: phaseWeights,
       });
 
       // Log warnings if any
@@ -436,6 +453,7 @@ export default function NewProject() {
 
   const wizardSteps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
     { key: 'basics', label: 'Basics', icon: <Building2 className="w-4 h-4" /> },
+    { key: 'phases', label: 'Phase Weights', icon: <Clock className="w-4 h-4" /> },
     { key: 'steps', label: 'Select Steps', icon: <Layers className="w-4 h-4" /> },
     { key: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
     { key: 'dependencies', label: 'Dependencies', icon: <Link2 className="w-4 h-4" /> },
@@ -508,12 +526,14 @@ export default function NewProject() {
         <CardHeader>
           <CardTitle className="text-2xl">
             {currentStep === 'basics' && 'Project Basics'}
+            {currentStep === 'phases' && 'Phase Time Allocation'}
             {currentStep === 'steps' && 'Select Steps'}
             {currentStep === 'feedback' && 'Feedback Configuration'}
             {currentStep === 'dependencies' && 'Task Dependencies'}
           </CardTitle>
           <CardDescription>
             {currentStep === 'basics' && 'Define your VFX project details and settings'}
+            {currentStep === 'phases' && 'Configure how project time is distributed across phases'}
             {currentStep === 'steps' && 'Choose which steps to include from the library'}
             {currentStep === 'feedback' && 'Configure client check-ins, milestone reviews, and rework buffers'}
             {currentStep === 'dependencies' && 'Define which tasks must complete before others can start'}
@@ -702,6 +722,14 @@ export default function NewProject() {
                 />
               </div>
             </div>
+          )}
+
+          {/* Phase Weights Configuration */}
+          {currentStep === 'phases' && (
+            <PhaseWeightsConfig
+              weights={phaseWeights}
+              onChange={setPhaseWeights}
+            />
           )}
 
           {/* Steps Selection */}
