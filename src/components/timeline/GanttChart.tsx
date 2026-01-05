@@ -800,32 +800,51 @@ export function GanttChart({
                     return (
                       <div 
                         key={task.id}
-                        className="flex items-center gap-3 px-4 group hover:bg-muted/30 transition-colors"
+                        className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
                         style={{ height: ROW_HEIGHT }}
                       >
-                        <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0 transition-opacity" />
-                        {task.task_type === 'milestone' && <Flag className="w-4 h-4 text-amber-500 shrink-0" />}
-                        {task.task_type === 'meeting' && <Users className="w-4 h-4 text-amber-500 shrink-0" />}
-                        {task.task_type === 'task' && <div className="w-4 shrink-0" />}
-                        <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
+                        {/* Drag handle + Delete - always visible on hover */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
+                          {onDeleteTask && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteTask(task.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
+                              title="Delete task"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                            </button>
+                          )}
+                        </div>
                         
-                        {/* Task data: days, start → end */}
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+                        {/* Task type icon */}
+                        {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                        {task.task_type === 'task' && <div className="w-3.5 shrink-0" />}
+                        
+                        {/* Task name - more space */}
+                        <span className="text-xs font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
+                        
+                        {/* Task data: days, start → end - pushed to the right */}
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                           {duration !== null && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
                               {duration}d
                             </span>
                           )}
                           {startDate && (
-                            <span className="hidden sm:inline font-medium">
+                            <span className="font-medium">
                               {format(startDate, 'MMM d')}
                             </span>
                           )}
                           {startDate && endDate && (
-                            <span className="hidden sm:inline opacity-50">→</span>
+                            <span className="opacity-50">→</span>
                           )}
                           {endDate && (
-                            <span className="hidden sm:inline font-medium">
+                            <span className="font-medium">
                               {format(endDate, 'MMM d')}
                             </span>
                           )}
@@ -833,24 +852,11 @@ export function GanttChart({
 
                         <button
                           onClick={() => onAddReviewRound(task.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-muted rounded shrink-0 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0 transition-all"
                           title="Add review round"
                         >
-                          <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
+                          <RotateCcw className="w-3 h-3 text-muted-foreground" />
                         </button>
-
-                        {onDeleteTask && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteTask(task.id);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-destructive/20 rounded shrink-0 transition-all"
-                            title="Delete task"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                          </button>
-                        )}
                       </div>
                     );
                   })}
@@ -885,9 +891,9 @@ export function GanttChart({
                   <div
                     key={col.key}
                     className={cn(
-                      "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/40",
+                      "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/60",
                       isToday && "bg-destructive/10",
-                      !isToday && isAlternateWeek && "bg-muted/30"
+                      !isToday && isAlternateWeek && "bg-muted/50"
                     )}
                     style={{ width: columnWidth }}
                   >
@@ -924,7 +930,7 @@ export function GanttChart({
                         return (
                           <div
                             key={col.key}
-                            className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
+                            className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
                             style={{ width: columnWidth }}
                           />
                         );
@@ -942,7 +948,7 @@ export function GanttChart({
                           return (
                             <div
                               key={col.key}
-                              className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
+                              className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
                               style={{ width: columnWidth }}
                             />
                           );
@@ -993,7 +999,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
+                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
                                 style={{ width: columnWidth }}
                               />
                             );
@@ -1032,7 +1038,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
+                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-muted/50")}
                                 style={{ width: columnWidth }}
                               />
                             );
