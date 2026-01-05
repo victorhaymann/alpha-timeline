@@ -885,7 +885,7 @@ export function GanttChart({
                   <div
                     key={col.key}
                     className={cn(
-                      "flex flex-col items-center justify-center text-xs shrink-0",
+                      "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/40",
                       isToday && "bg-destructive/10",
                       !isToday && isAlternateWeek && "bg-muted/30"
                     )}
@@ -924,7 +924,7 @@ export function GanttChart({
                         return (
                           <div
                             key={col.key}
-                            className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
+                            className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
                             style={{ width: columnWidth }}
                           />
                         );
@@ -942,7 +942,7 @@ export function GanttChart({
                           return (
                             <div
                               key={col.key}
-                              className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
+                              className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
                               style={{ width: columnWidth }}
                             />
                           );
@@ -993,7 +993,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
+                                className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
                                 style={{ width: columnWidth }}
                               />
                             );
@@ -1032,7 +1032,7 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
+                                className={cn("shrink-0 border-r border-border/40", isAlternateWeek && "bg-muted/20")}
                                 style={{ width: columnWidth }}
                               />
                             );
