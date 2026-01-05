@@ -118,6 +118,14 @@ export function GanttChart({
   const [dragPreview, setDragPreview] = useState<{ start: Date; end: Date } | null>(null);
   const [justDropped, setJustDropped] = useState<string | null>(null);
   
+  // State for meeting diamond dragging
+  const [meetingDragging, setMeetingDragging] = useState<{
+    taskId: string;
+    startX: number;
+    originalDate: Date;
+  } | null>(null);
+  const [meetingDragPreview, setMeetingDragPreview] = useState<Date | null>(null);
+  
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   
@@ -467,50 +475,37 @@ export function GanttChart({
 
   // Map of date string -> task ID for quick lookup when deleting
   const checkinTasksByDate = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, string[]>();
     checkinTasks.forEach(t => {
       if (t.start_date) {
-        map.set(t.start_date, t.id);
+        const existing = map.get(t.start_date) || [];
+        map.set(t.start_date, [...existing, t.id]);
       }
     });
     return map;
   }, [checkinTasks]);
 
-  // Build a single, consolidated "Weekly Call" task for display
+  // Build individual meeting items for rendering (supports multiple per date)
+  const meetingItems = useMemo(() => {
+    if (checkinTasks.length === 0) return [];
+    
+    // Return all meeting tasks as individual items
+    return checkinTasks
+      .filter(t => t.start_date)
+      .map(t => ({
+        taskId: t.id,
+        date: t.start_date!,
+        name: t.name,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [checkinTasks]);
+
+  // Build a single, consolidated "Weekly Call" task for display (header only)
   const consolidatedWeeklyCall = useMemo(() => {
     if (checkinTasks.length === 0) return null;
 
     const first = checkinTasks[0];
     const last = checkinTasks[checkinTasks.length - 1];
-
-    let recurring_dates = checkinTasks
-      .map(t => t.start_date!)
-      // de-dupe (just in case)
-      .filter((d, i, arr) => arr.indexOf(d) === i);
-
-    // If the database has only a single "Weekly Call" record (no recurring dates persisted),
-    // synthesize the weekly/bi-weekly occurrences for display.
-    if (checkinTasks.length === 1 && recurring_dates.length === 1) {
-      const n = (first.name || '').toLowerCase();
-      const isWeekly = n.includes('weekly');
-      const isBiWeekly = n.includes('bi-weekly') || n.includes('biweekly');
-      const intervalDays = isBiWeekly ? 14 : isWeekly ? 7 : null;
-
-      if (intervalDays) {
-        const start = new Date(first.start_date!);
-        const generated: string[] = [first.start_date!];
-
-        let current = addDays(start, intervalDays);
-        while (current <= projectEndDate) {
-          if (isWorkingDay(current)) {
-            generated.push(format(current, 'yyyy-MM-dd'));
-          }
-          current = addDays(current, intervalDays);
-        }
-
-        recurring_dates = generated;
-      }
-    }
 
     return {
       ...first,
@@ -518,9 +513,10 @@ export function GanttChart({
       name: 'Weekly Call',
       start_date: first.start_date,
       end_date: last.end_date || last.start_date,
-      recurring_dates,
+      // Keep all dates including duplicates
+      recurring_dates: checkinTasks.map(t => t.start_date!),
     } satisfies Task;
-  }, [checkinTasks, projectEndDate, isWorkingDay]);
+  }, [checkinTasks]);
 
   // Group tasks by phase (excluding check-ins)
   const tasksByPhase = useMemo(() => {
@@ -630,8 +626,30 @@ export function GanttChart({
     setDragPreview(null);
   }, [dragging, dragPreview, onTaskUpdate]);
 
+  // Handle meeting drag move
+  const handleMeetingDragMove = useCallback((e: MouseEvent) => {
+    if (!meetingDragging) return;
+
+    const deltaX = e.clientX - meetingDragging.startX;
+    const newDate = xToDate(dateToX(meetingDragging.originalDate) + deltaX);
+    setMeetingDragPreview(newDate);
+  }, [meetingDragging, dateToX, xToDate]);
+
+  // Handle meeting drag end
+  const handleMeetingDragEnd = useCallback(() => {
+    if (meetingDragging && meetingDragPreview) {
+      const newDateStr = format(meetingDragPreview, 'yyyy-MM-dd');
+      onTaskUpdate(meetingDragging.taskId, {
+        start_date: newDateStr,
+        end_date: newDateStr,
+      });
+    }
+    setMeetingDragging(null);
+    setMeetingDragPreview(null);
+  }, [meetingDragging, meetingDragPreview, onTaskUpdate]);
+
   // Attach global mouse listeners when dragging
-  useState(() => {
+  useEffect(() => {
     if (dragging) {
       window.addEventListener('mousemove', handleDragMove);
       window.addEventListener('mouseup', handleDragEnd);
@@ -640,7 +658,19 @@ export function GanttChart({
         window.removeEventListener('mouseup', handleDragEnd);
       };
     }
-  });
+  }, [dragging, handleDragMove, handleDragEnd]);
+
+  // Attach global mouse listeners when dragging meetings
+  useEffect(() => {
+    if (meetingDragging) {
+      window.addEventListener('mousemove', handleMeetingDragMove);
+      window.addEventListener('mouseup', handleMeetingDragEnd);
+      return () => {
+        window.removeEventListener('mousemove', handleMeetingDragMove);
+        window.removeEventListener('mouseup', handleMeetingDragEnd);
+      };
+    }
+  }, [meetingDragging, handleMeetingDragMove, handleMeetingDragEnd]);
 
   // Calculate total chart height based on sections (accounting for collapsed state)
   let totalHeight = HEADER_HEIGHT;
@@ -1074,36 +1104,51 @@ export function GanttChart({
                         })}
                       </div>
 
-                      {/* Diamond markers for each recurring date with hover card */}
-                      {section.task.recurring_dates?.map((dateStr, idx) => {
-                        const meetingDate = new Date(dateStr);
-                        const left = dateToX(meetingDate);
+                      {/* Diamond markers for each meeting - now using meetingItems to support multiple per date */}
+                      {meetingItems.map((meeting, idx) => {
+                        const meetingDate = new Date(meeting.date);
+                        const isMeetingDragging = meetingDragging?.taskId === meeting.taskId;
+                        const displayDate = isMeetingDragging && meetingDragPreview ? meetingDragPreview : meetingDate;
+                        const left = dateToX(displayDate);
                         
                         // Check if this date is visible in current view
                         const colIndex = groupedColumns.findIndex(col => 
-                          isSameDay(col.startDate, meetingDate)
+                          isSameDay(col.startDate, displayDate)
                         );
                         if (colIndex === -1) return null;
 
-                        // Find the actual task ID for this meeting date
-                        const taskId = checkinTasksByDate.get(dateStr);
+                        // Count how many meetings are on the same date for offset
+                        const sameDateMeetings = meetingItems.filter(m => m.date === meeting.date);
+                        const sameDateIndex = sameDateMeetings.findIndex(m => m.taskId === meeting.taskId);
+                        const verticalOffset = sameDateMeetings.length > 1 ? (sameDateIndex - (sameDateMeetings.length - 1) / 2) * 8 : 0;
                         
                         return (
                           <MeetingHoverCard
-                            key={dateStr}
-                            meetingDate={meetingDate}
-                            meetingName={section.task.name}
+                            key={meeting.taskId}
+                            meetingDate={displayDate}
+                            meetingName={meeting.name}
                             checkinTime={checkinTime ?? null}
                             checkinDuration={checkinDuration ?? null}
                             checkinTimezone={checkinTimezone ?? null}
                             tasks={tasks}
                             left={left}
                             columnWidth={columnWidth}
-                            allMeetingDates={section.task.recurring_dates || []}
+                            allMeetingDates={meetingItems.map(m => m.date)}
                             meetingIndex={idx}
                             projectId={projectId}
                             readOnly={readOnly}
-                            onDelete={taskId && onDeleteMeeting ? () => onDeleteMeeting(taskId) : undefined}
+                            onDelete={onDeleteMeeting ? () => onDeleteMeeting(meeting.taskId) : undefined}
+                            verticalOffset={verticalOffset}
+                            isDragging={isMeetingDragging}
+                            onDragStart={readOnly ? undefined : (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMeetingDragging({
+                                taskId: meeting.taskId,
+                                startX: e.clientX,
+                                originalDate: meetingDate,
+                              });
+                            }}
                           />
                         );
                       })}
