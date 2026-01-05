@@ -32,7 +32,8 @@ import {
   endOfWeek,
   startOfMonth,
   endOfMonth,
-  isSameDay
+  isSameDay,
+  getWeek
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DateRange } from 'react-day-picker';
@@ -134,8 +135,19 @@ export function GanttChart({
       days: [day],
       startDate: day,
       endDate: day,
+      weekNumber: getWeek(day),
     }));
   }, [workingDays]);
+
+  // Create a map of unique week numbers to determine alternating pattern
+  const weekAlternatingMap = useMemo(() => {
+    const uniqueWeeks = [...new Set(groupedColumns.map(col => col.weekNumber))];
+    const map: Record<number, boolean> = {};
+    uniqueWeeks.forEach((week, index) => {
+      map[week] = index % 2 === 1; // Odd index weeks get shaded
+    });
+    return map;
+  }, [groupedColumns]);
 
   // Observe container width for responsive columns
   useEffect(() => {
@@ -730,13 +742,15 @@ export function GanttChart({
             >
               {groupedColumns.map((col) => {
                 const isToday = col.days.some(d => isSameDay(d, new Date()));
+                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
 
                 return (
                   <div
                     key={col.key}
                     className={cn(
                       "flex flex-col items-center justify-center border-r text-xs shrink-0",
-                      isToday && "bg-primary/10"
+                      isToday && "bg-primary/10",
+                      !isToday && isAlternateWeek && "bg-muted/40"
                     )}
                     style={{ width: columnWidth }}
                   >
@@ -767,13 +781,16 @@ export function GanttChart({
                     onClick={() => toggleSectionCollapse(sectionKey)}
                   >
                     <div className="flex h-full">
-                      {groupedColumns.map((col) => (
-                        <div
-                          key={col.key}
-                          className="border-r shrink-0"
-                          style={{ width: columnWidth }}
-                        />
-                      ))}
+                      {groupedColumns.map((col) => {
+                        const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                        return (
+                          <div
+                            key={col.key}
+                            className={cn("border-r shrink-0", isAlternateWeek && "bg-muted/40")}
+                            style={{ width: columnWidth }}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -793,13 +810,16 @@ export function GanttChart({
                     if (!displayStart || !displayEnd) return (
                       <div key={task.id} className="border-b" style={{ height: ROW_HEIGHT }}>
                         <div className="flex h-full">
-                          {groupedColumns.map((col) => (
-                            <div
-                              key={col.key}
-                              className="border-r shrink-0"
-                              style={{ width: columnWidth }}
-                            />
-                          ))}
+                          {groupedColumns.map((col) => {
+                            const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                            return (
+                              <div
+                                key={col.key}
+                                className={cn("border-r shrink-0", isAlternateWeek && "bg-muted/40")}
+                                style={{ width: columnWidth }}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     );
@@ -811,13 +831,16 @@ export function GanttChart({
                       <div key={task.id} className="relative border-b" style={{ height: ROW_HEIGHT }}>
                         {/* Grid background */}
                         <div className="absolute inset-0 flex">
-                          {groupedColumns.map((col) => (
-                            <div
-                              key={col.key}
-                              className="border-r shrink-0"
-                              style={{ width: columnWidth }}
-                            />
-                          ))}
+                          {groupedColumns.map((col) => {
+                            const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                            return (
+                              <div
+                                key={col.key}
+                                className={cn("border-r shrink-0", isAlternateWeek && "bg-muted/40")}
+                                style={{ width: columnWidth }}
+                              />
+                            );
+                          })}
                         </div>
 
                         {/* Task bar */}
