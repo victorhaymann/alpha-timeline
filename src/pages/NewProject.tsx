@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { CanonicalStep, PHASE_CATEGORIES } from '@/types/database';
+import { CanonicalStep, PHASE_CATEGORIES, PhaseCategory } from '@/types/database';
 import { CustomStep } from '@/components/steps/AddCustomStepDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { StepLibrary } from '@/components/steps/StepLibrary';
 import { DependencyEditor, LocalDependency } from '@/components/steps/DependencyEditor';
 import { FeedbackConfig, FeedbackSettings, DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
+import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { 
   Loader2, 
   ArrowLeft, 
@@ -29,7 +30,7 @@ import {
   Link2,
   MessageSquare
 } from 'lucide-react';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, parse } from 'date-fns';
 
 const WEEKDAYS = [
   { key: 0, label: 'Mon', bit: 1 },
@@ -180,7 +181,54 @@ export default function NewProject() {
     setIsSubmitting(true);
     
     try {
-      // Create project
+      // 1. Prepare schedule input from selected steps
+      const selectedCanonical = canonicalSteps.filter(s => selectedStepIds.has(s.id));
+      
+      const scheduleTasks: ScheduleTask[] = [
+        // Canonical steps
+        ...selectedCanonical.map(step => ({
+          _stepId: step.id,
+          name: step.name,
+          phaseCategory: step.phase_category as PhaseCategory,
+          taskType: step.task_type as 'task' | 'milestone' | 'meeting',
+          weightPercent: step.default_weight_percent || 0,
+          reviewRounds: step.default_review_rounds || formData.default_review_rounds,
+          clientVisible: true,
+        })),
+        // Custom steps
+        ...customSteps.map(step => ({
+          _stepId: step.id,
+          name: step.name,
+          phaseCategory: step.phase_category as PhaseCategory,
+          taskType: 'task' as const,
+          weightPercent: step.weight_percent || 0,
+          reviewRounds: step.review_rounds ?? formData.default_review_rounds,
+          clientVisible: step.client_visible,
+        })),
+      ];
+
+      const scheduleDependencies: ScheduleDependency[] = dependencies.map(dep => ({
+        predecessorId: dep.predecessorId,
+        successorId: dep.successorId,
+      }));
+
+      // 2. Run the schedule engine
+      const scheduleOutput = computeSchedule({
+        projectStartDate: parse(formData.start_date, 'yyyy-MM-dd', new Date()),
+        projectEndDate: parse(formData.end_date, 'yyyy-MM-dd', new Date()),
+        workingDaysMask: formData.working_days_mask,
+        bufferPercentage: formData.buffer_percentage,
+        tasks: scheduleTasks,
+        dependencies: scheduleDependencies,
+        feedbackSettings,
+      });
+
+      // Log warnings if any
+      if (scheduleOutput.warnings.length > 0) {
+        console.warn('Schedule warnings:', scheduleOutput.warnings);
+      }
+
+      // 3. Create project
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -202,7 +250,7 @@ export default function NewProject() {
 
       if (projectError) throw projectError;
 
-      // Create project_steps for selected canonical steps
+      // 4. Create project_steps for selected canonical steps
       if (selectedStepIds.size > 0) {
         const projectSteps = Array.from(selectedStepIds).map(stepId => ({
           project_id: project.id,
@@ -217,16 +265,15 @@ export default function NewProject() {
         if (stepsError) throw stepsError;
       }
 
-      // Create phases for each category that has selected steps or custom steps
-      const selectedCanonical = canonicalSteps.filter(s => selectedStepIds.has(s.id));
-      const usedCategories = new Set([
-        ...selectedCanonical.map(s => s.phase_category),
-        ...customSteps.map(s => s.phase_category)
-      ]);
+      // 5. Determine all phases needed (including generated tasks)
+      const allPhasesUsed = new Set<string>();
+      scheduleOutput.scheduledTasks.forEach(task => {
+        allPhasesUsed.add(task.phaseCategory);
+      });
 
       const phaseRecords: { project_id: string; name: string; order_index: number }[] = [];
       PHASE_CATEGORIES.forEach((category, index) => {
-        if (usedCategories.has(category)) {
+        if (allPhasesUsed.has(category)) {
           phaseRecords.push({
             project_id: project.id,
             name: category,
@@ -246,10 +293,9 @@ export default function NewProject() {
         createdPhases = phases || [];
       }
 
-      // Create a map of phase name to phase id
       const phaseMap = new Map(createdPhases.map(p => [p.name, p.id]));
 
-      // Create tasks from selected canonical steps
+      // 6. Create tasks with scheduled dates
       const tasksToCreate: {
         project_id: string;
         phase_id: string;
@@ -259,46 +305,32 @@ export default function NewProject() {
         weight_percent: number;
         review_rounds: number;
         order_index: number;
-        _stepId?: string; // Temporary field to track step ID
+        start_date: string;
+        end_date: string;
+        _stepId?: string;
       }[] = [];
 
       let orderIndex = 0;
-      selectedCanonical.forEach(step => {
-        const phaseId = phaseMap.get(step.phase_category);
+      scheduleOutput.scheduledTasks.forEach(scheduledTask => {
+        const phaseId = phaseMap.get(scheduledTask.phaseCategory);
         if (phaseId) {
           tasksToCreate.push({
             project_id: project.id,
             phase_id: phaseId,
-            name: step.name,
-            task_type: step.task_type,
-            client_visible: true,
-            weight_percent: step.default_weight_percent || 0,
-            review_rounds: step.default_review_rounds || formData.default_review_rounds,
+            name: scheduledTask.name,
+            task_type: scheduledTask.taskType,
+            client_visible: scheduledTask.clientVisible,
+            weight_percent: scheduledTask.weightPercent,
+            review_rounds: scheduledTask.reviewRounds,
             order_index: orderIndex++,
-            _stepId: step.id,
+            start_date: format(scheduledTask.startDate, 'yyyy-MM-dd'),
+            end_date: format(scheduledTask.endDate, 'yyyy-MM-dd'),
+            _stepId: scheduledTask._stepId,
           });
         }
       });
 
-      // Create tasks from custom steps
-      customSteps.forEach(step => {
-        const phaseId = phaseMap.get(step.phase_category);
-        if (phaseId) {
-          tasksToCreate.push({
-            project_id: project.id,
-            phase_id: phaseId,
-            name: step.name,
-            task_type: 'task',
-            client_visible: step.client_visible,
-            weight_percent: step.weight_percent || 0,
-            review_rounds: step.review_rounds ?? formData.default_review_rounds,
-            order_index: orderIndex++,
-            _stepId: step.id,
-          });
-        }
-      });
-
-      // Create a mapping of step IDs to preserve order for dependency creation
+      // Map step IDs to their index for dependency creation
       const stepIdToIndex = new Map<string, number>();
       tasksToCreate.forEach((task, idx) => {
         if (task._stepId) {
@@ -320,40 +352,67 @@ export default function NewProject() {
         createdTasks = insertedTasks || [];
       }
 
-      // Create dependencies using the mapping
-      if (dependencies.length > 0 && createdTasks.length > 0) {
-        // Map step IDs to task IDs
-        const stepIdToTaskId = new Map<string, string>();
-        tasksToCreate.forEach((task, idx) => {
-          if (task._stepId && createdTasks[idx]) {
-            stepIdToTaskId.set(task._stepId, createdTasks[idx].id);
-          }
-        });
-
-        const dependenciesToCreate = dependencies
-          .map(dep => ({
-            predecessor_task_id: stepIdToTaskId.get(dep.predecessorId),
-            successor_task_id: stepIdToTaskId.get(dep.successorId),
-          }))
-          .filter(dep => dep.predecessor_task_id && dep.successor_task_id) as {
-            predecessor_task_id: string;
-            successor_task_id: string;
-          }[];
-
-        if (dependenciesToCreate.length > 0) {
-          const { error: depsError } = await supabase
-            .from('dependencies')
-            .insert(dependenciesToCreate);
-
-          if (depsError) throw depsError;
+      // 7. Create dependencies (original + generated from schedule engine)
+      // Map step IDs to task IDs
+      const stepIdToTaskId = new Map<string, string>();
+      tasksToCreate.forEach((task, idx) => {
+        if (task._stepId && createdTasks[idx]) {
+          stepIdToTaskId.set(task._stepId, createdTasks[idx].id);
         }
+      });
+
+      // Include both original user dependencies and generated dependencies
+      const allDependencies = [...dependencies];
+      
+      // Add dependencies for generated tasks (reviews depend on their parent, buffers depend on reviews)
+      scheduleOutput.scheduledTasks.forEach(task => {
+        if (task.isGenerated) {
+          if (task.generatedType === 'step-review') {
+            const parentStepId = task._stepId.replace('review-', '');
+            if (stepIdToTaskId.has(parentStepId)) {
+              allDependencies.push({
+                id: `gen-${task._stepId}`,
+                predecessorId: parentStepId,
+                successorId: task._stepId,
+              });
+            }
+          } else if (task.generatedType === 'rework-buffer') {
+            const reviewId = task._stepId.replace('buffer-', '');
+            if (stepIdToTaskId.has(reviewId)) {
+              allDependencies.push({
+                id: `gen-${task._stepId}`,
+                predecessorId: reviewId,
+                successorId: task._stepId,
+              });
+            }
+          }
+        }
+      });
+
+      const dependenciesToCreate = allDependencies
+        .map(dep => ({
+          predecessor_task_id: stepIdToTaskId.get(dep.predecessorId),
+          successor_task_id: stepIdToTaskId.get(dep.successorId),
+        }))
+        .filter(dep => dep.predecessor_task_id && dep.successor_task_id) as {
+          predecessor_task_id: string;
+          successor_task_id: string;
+        }[];
+
+      if (dependenciesToCreate.length > 0) {
+        const { error: depsError } = await supabase
+          .from('dependencies')
+          .insert(dependenciesToCreate);
+
+        if (depsError) throw depsError;
       }
 
-      const totalSteps = selectedStepIds.size + customSteps.length;
+      const totalTasks = scheduleOutput.scheduledTasks.length;
+      const generatedTasks = scheduleOutput.scheduledTasks.filter(t => t.isGenerated).length;
 
       toast({
         title: 'Project created!',
-        description: `${formData.name} has been created with ${totalSteps} steps${dependencies.length > 0 ? ` and ${dependencies.length} dependencies` : ''}.`,
+        description: `${formData.name} created with ${totalTasks} tasks (${generatedTasks} auto-generated). Schedule spans ${scheduleOutput.totalWorkingDays} working days with ${scheduleOutput.bufferDays} buffer days.`,
       });
 
       navigate(`/projects/${project.id}`);
