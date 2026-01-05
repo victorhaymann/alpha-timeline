@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StepLibrary } from '@/components/steps/StepLibrary';
+import { AddCanonicalStepDialog } from '@/components/steps/AddCanonicalStepDialog';
+import { EditCanonicalStepDialog } from '@/components/steps/EditCanonicalStepDialog';
 import { Library, FolderPlus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { CanonicalStep, PhaseCategory } from '@/types/database';
 
 export default function Templates() {
   const { toast } = useToast();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogPhase, setAddDialogPhase] = useState<PhaseCategory>('Production');
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingStep, setEditingStep] = useState<CanonicalStep | null>(null);
 
   const handleDeleteCanonicalStep = async (stepId: string) => {
     const confirmed = window.confirm('Are you sure you want to delete this step from the library? This will affect all future projects.');
@@ -31,6 +38,86 @@ export default function Templates() {
       });
       setRefreshKey(k => k + 1);
     }
+  };
+
+  const handleAddCanonicalStep = async (step: {
+    name: string;
+    description: string;
+    phase_category: PhaseCategory;
+    task_type: 'task' | 'milestone' | 'meeting';
+    is_optional: boolean;
+  }) => {
+    // Get max sort_order for the phase
+    const { data: existingSteps } = await supabase
+      .from('canonical_steps')
+      .select('sort_order')
+      .eq('phase_category', step.phase_category)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+
+    const maxSortOrder = existingSteps?.[0]?.sort_order ?? 0;
+
+    const { error } = await supabase
+      .from('canonical_steps')
+      .insert({
+        name: step.name,
+        description: step.description || null,
+        phase_category: step.phase_category,
+        task_type: step.task_type,
+        is_optional: step.is_optional,
+        sort_order: maxSortOrder + 1,
+      });
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add step: ' + error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Step added',
+        description: `${step.name} has been added to ${step.phase_category}.`,
+      });
+      setRefreshKey(k => k + 1);
+    }
+  };
+
+  const handleEditCanonicalStep = async (stepId: string, updates: {
+    name: string;
+    description: string | null;
+    phase_category: PhaseCategory;
+    task_type: 'task' | 'milestone' | 'meeting';
+    is_optional: boolean;
+  }) => {
+    const { error } = await supabase
+      .from('canonical_steps')
+      .update(updates)
+      .eq('id', stepId);
+
+    if (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update step: ' + error.message,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Step updated',
+        description: 'The step has been updated.',
+      });
+      setRefreshKey(k => k + 1);
+    }
+  };
+
+  const openAddDialog = (phase: PhaseCategory) => {
+    setAddDialogPhase(phase);
+    setAddDialogOpen(true);
+  };
+
+  const openEditDialog = (step: CanonicalStep) => {
+    setEditingStep(step);
+    setEditDialogOpen(true);
   };
 
   return (
@@ -61,6 +148,8 @@ export default function Templates() {
             readOnly 
             allowLibraryEdit 
             onDeleteCanonicalStep={handleDeleteCanonicalStep}
+            onEditCanonicalStep={openEditDialog}
+            onAddCanonicalStep={openAddDialog}
           />
         </TabsContent>
 
@@ -73,6 +162,20 @@ export default function Templates() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <AddCanonicalStepDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        onAdd={handleAddCanonicalStep}
+        defaultPhase={addDialogPhase}
+      />
+
+      <EditCanonicalStepDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        step={editingStep}
+        onSave={handleEditCanonicalStep}
+      />
     </div>
   );
 }
