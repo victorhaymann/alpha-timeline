@@ -16,6 +16,7 @@ import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
 import ClientPortal from "./pages/ClientPortal";
 import ClientProjectView from "./pages/ClientProjectView";
+import SharedProjectView from "./pages/SharedProjectView";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -46,6 +47,7 @@ function AppRoutes() {
       {/* Public routes */}
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
+      <Route path="/share/:token" element={<SharedProjectView />} />
       
       {/* Protected routes with layout */}
       <Route element={

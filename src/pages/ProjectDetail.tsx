@@ -11,6 +11,7 @@ import { TimelineEditor } from '@/components/timeline/TimelineEditor';
 import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
+import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -56,6 +57,9 @@ export default function ProjectDetail() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedTaskPhase, setSelectedTaskPhase] = useState<Phase | null>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
+  
+  // Share dialog state
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const fetchProjectData = useCallback(async () => {
     if (!id) return;
@@ -247,7 +251,12 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => setShareDialogOpen(true)}
+          >
             <Share2 className="w-4 h-4" />
             Share
           </Button>
@@ -416,6 +425,14 @@ export default function ProjectDetail() {
         open={taskDetailOpen}
         onOpenChange={setTaskDetailOpen}
         onUpdate={fetchProjectData}
+      />
+
+      {/* Share Dialog */}
+      <ShareProjectDialog
+        projectId={id!}
+        projectName={project.name}
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
       />
     </div>
   );
