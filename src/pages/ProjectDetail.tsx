@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Project, Phase, Task } from '@/types/database';
+import { Project, Phase, Task, CanonicalStep, ProjectStep, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,10 +15,18 @@ import {
   BarChart3,
   List,
   Loader2,
-  Plus
+  Plus,
+  Flag,
+  Building2,
+  Layers,
+  Clock
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+
+interface ProjectStepWithCanonical extends ProjectStep {
+  canonical_step: CanonicalStep;
+}
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +34,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [projectSteps, setProjectSteps] = useState<ProjectStepWithCanonical[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,6 +75,20 @@ export default function ProjectDetail() {
 
         setTasks((tasksData as Task[]) || []);
       }
+
+      // Fetch project steps with canonical step data
+      const { data: stepsData } = await supabase
+        .from('project_steps')
+        .select(`
+          *,
+          canonical_step:canonical_steps(*)
+        `)
+        .eq('project_id', id)
+        .eq('is_included', true);
+
+      if (stepsData) {
+        setProjectSteps(stepsData as unknown as ProjectStepWithCanonical[]);
+      }
     } catch (error) {
       console.error('Error fetching project:', error);
       navigate('/projects');
@@ -90,6 +113,14 @@ export default function ProjectDetail() {
   const daysElapsed = differenceInDays(new Date(), new Date(project.start_date));
   const progress = Math.max(0, Math.min(100, (daysElapsed / totalDays) * 100));
 
+  // Group project steps by phase category
+  const stepsByPhase = projectSteps.reduce((acc, ps) => {
+    const category = ps.canonical_step.phase_category;
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(ps);
+    return acc;
+  }, {} as Record<string, ProjectStepWithCanonical[]>);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -113,9 +144,17 @@ export default function ProjectDetail() {
               {project.status}
             </Badge>
           </div>
-          {project.description && (
-            <p className="text-muted-foreground ml-11">{project.description}</p>
-          )}
+          <div className="flex items-center gap-4 ml-11 text-sm text-muted-foreground">
+            {project.client_name && (
+              <span className="flex items-center gap-1.5">
+                <Building2 className="w-4 h-4" />
+                {project.client_name}
+              </span>
+            )}
+            {project.description && (
+              <span>{project.description}</span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2">
@@ -130,7 +169,7 @@ export default function ProjectDetail() {
       </div>
 
       {/* Project Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -161,11 +200,11 @@ export default function ProjectDetail() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-phase-preproduction/10">
-                <List className="w-5 h-5 text-phase-preproduction" />
+                <Layers className="w-5 h-5 text-phase-preproduction" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Phases</p>
-                <p className="text-lg font-semibold">{phases.length}</p>
+                <p className="text-sm text-muted-foreground">Steps</p>
+                <p className="text-lg font-semibold">{projectSteps.length}</p>
               </div>
             </div>
           </CardContent>
@@ -174,11 +213,24 @@ export default function ProjectDetail() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-status-review/10">
-                <Users className="w-5 h-5 text-status-review" />
+                <Clock className="w-5 h-5 text-status-review" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Buffer</p>
                 <p className="text-lg font-semibold">{project.buffer_percentage}%</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-phase-delivery/10">
+                <Users className="w-5 h-5 text-phase-delivery" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Reviews</p>
+                <p className="text-lg font-semibold">{project.default_review_rounds}</p>
               </div>
             </div>
           </CardContent>
@@ -202,13 +254,82 @@ export default function ProjectDetail() {
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="timeline" className="space-y-6">
+      <Tabs defaultValue="steps" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="steps">Steps</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="phases">Phases & Tasks</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="comments">Comments</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="steps" className="space-y-4">
+          {Object.keys(stepsByPhase).length > 0 ? (
+            Object.entries(stepsByPhase).map(([category, steps]) => {
+              const color = PHASE_CATEGORY_COLORS[category as PhaseCategory] || '#6B7280';
+              return (
+                <Card key={category}>
+                  <CardHeader className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: color }}
+                      />
+                      <CardTitle className="text-lg">{category}</CardTitle>
+                      <Badge variant="secondary">{steps.length} steps</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-2">
+                      {steps
+                        .sort((a, b) => a.canonical_step.sort_order - b.canonical_step.sort_order)
+                        .map((ps) => (
+                          <div 
+                            key={ps.id}
+                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                          >
+                            <div className="flex items-center gap-3">
+                              {ps.canonical_step.task_type === 'milestone' && (
+                                <Flag className="w-4 h-4 text-status-review" />
+                              )}
+                              {ps.canonical_step.task_type === 'meeting' && (
+                                <Users className="w-4 h-4 text-primary" />
+                              )}
+                              <span>{ps.canonical_step.name}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {ps.canonical_step.task_type}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>
+                                {ps.custom_weight_percent ?? ps.canonical_step.default_weight_percent}%
+                              </span>
+                              {(ps.custom_review_rounds ?? ps.canonical_step.default_review_rounds) > 0 && (
+                                <span>
+                                  {ps.custom_review_rounds ?? ps.canonical_step.default_review_rounds} reviews
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Layers className="w-8 h-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No steps configured</h3>
+                <p className="text-muted-foreground text-center mb-6 max-w-sm">
+                  This project doesn't have any steps yet. Edit the project to add steps from the library.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         <TabsContent value="timeline" className="space-y-4">
           <Card className="border-dashed">
@@ -219,75 +340,10 @@ export default function ProjectDetail() {
               <h3 className="text-lg font-semibold mb-2">Gantt Chart Coming Soon</h3>
               <p className="text-muted-foreground text-center max-w-sm">
                 The interactive Gantt chart and calendar view will be available here.
-                Add phases and tasks to see your timeline.
+                The schedule engine will auto-generate dates based on your step weights.
               </p>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="phases" className="space-y-4">
-          {phases.length > 0 ? (
-            phases.map((phase) => {
-              const phaseTasks = tasks.filter(t => t.phase_id === phase.id);
-              return (
-                <Card key={phase.id}>
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: phase.color }}
-                      />
-                      <CardTitle className="text-lg">{phase.name}</CardTitle>
-                      <Badge variant="secondary">{phase.percentage_allocation}%</Badge>
-                    </div>
-                    {phase.description && (
-                      <CardDescription>{phase.description}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    {phaseTasks.length > 0 ? (
-                      <div className="space-y-2">
-                        {phaseTasks.map((task) => (
-                          <div 
-                            key={task.id}
-                            className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                          >
-                            <div className="flex items-center gap-3">
-                              {task.is_milestone && (
-                                <div className="w-2 h-2 rounded-full bg-status-review" />
-                              )}
-                              <span>{task.name}</span>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {task.status.replace('_', ' ')}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No tasks yet</p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                  <List className="w-8 h-8 text-primary" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">No phases yet</h3>
-                <p className="text-muted-foreground text-center mb-6 max-w-sm">
-                  Start by adding phases to organize your project timeline.
-                </p>
-                <Button className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  Add Phase
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         <TabsContent value="team">

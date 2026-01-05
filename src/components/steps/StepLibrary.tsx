@@ -1,0 +1,205 @@
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { CanonicalStep, PHASE_CATEGORIES, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { 
+  Loader2, 
+  Flag, 
+  Users, 
+  Layers,
+  ChevronDown,
+  ChevronRight,
+  Sparkles
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface StepLibraryProps {
+  selectedSteps?: Set<string>;
+  onStepToggle?: (stepId: string, included: boolean) => void;
+  readOnly?: boolean;
+}
+
+export function StepLibrary({ selectedSteps, onStepToggle, readOnly = false }: StepLibraryProps) {
+  const [steps, setSteps] = useState<CanonicalStep[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    fetchSteps();
+  }, []);
+
+  const fetchSteps = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('canonical_steps')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+      setSteps((data as CanonicalStep[]) || []);
+    } catch (error) {
+      console.error('Error fetching canonical steps:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePhaseCollapse = (phase: string) => {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(phase)) {
+        next.delete(phase);
+      } else {
+        next.add(phase);
+      }
+      return next;
+    });
+  };
+
+  const groupedSteps = PHASE_CATEGORIES.reduce((acc, category) => {
+    acc[category] = steps.filter(s => s.phase_category === category);
+    return acc;
+  }, {} as Record<PhaseCategory, CanonicalStep[]>);
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'milestone': return <Flag className="w-3.5 h-3.5" />;
+      case 'meeting': return <Users className="w-3.5 h-3.5" />;
+      default: return <Layers className="w-3.5 h-3.5" />;
+    }
+  };
+
+  const getTypeBadgeClass = (type: string) => {
+    switch (type) {
+      case 'milestone': return 'bg-status-review/20 text-status-review border-status-review/30';
+      case 'meeting': return 'bg-primary/20 text-primary border-primary/30';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {PHASE_CATEGORIES.map((category) => {
+        const categorySteps = groupedSteps[category];
+        if (categorySteps.length === 0) return null;
+
+        const isCollapsed = collapsedPhases.has(category);
+        const color = PHASE_CATEGORY_COLORS[category];
+        const isImmersive = category === 'Immersive';
+        
+        const includedCount = selectedSteps 
+          ? categorySteps.filter(s => selectedSteps.has(s.id)).length 
+          : categorySteps.filter(s => !s.is_optional).length;
+
+        return (
+          <Card key={category} className="overflow-hidden">
+            <CardHeader 
+              className="cursor-pointer hover:bg-accent/50 transition-colors py-4"
+              onClick={() => togglePhaseCollapse(category)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {isCollapsed ? (
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <div 
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  <CardTitle className="text-base">{category}</CardTitle>
+                  {isImmersive && (
+                    <Badge variant="outline" className="gap-1 text-xs bg-pink-500/10 text-pink-400 border-pink-500/30">
+                      <Sparkles className="w-3 h-3" />
+                      Add-on
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs">
+                    {includedCount}/{categorySteps.length} steps
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            
+            {!isCollapsed && (
+              <CardContent className="pt-0 pb-4">
+                <div className="space-y-2">
+                  {categorySteps.map((step) => {
+                    const isIncluded = selectedSteps 
+                      ? selectedSteps.has(step.id)
+                      : !step.is_optional;
+
+                    return (
+                      <div 
+                        key={step.id}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg transition-colors",
+                          isIncluded ? "bg-accent/50" : "bg-muted/30",
+                          !readOnly && "hover:bg-accent"
+                        )}
+                      >
+                        {!readOnly && (
+                          <Checkbox
+                            checked={isIncluded}
+                            onCheckedChange={(checked) => onStepToggle?.(step.id, checked as boolean)}
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-medium text-sm",
+                              !isIncluded && "text-muted-foreground"
+                            )}>
+                              {step.name}
+                            </span>
+                            <Badge 
+                              variant="outline" 
+                              className={cn("text-xs gap-1", getTypeBadgeClass(step.task_type))}
+                            >
+                              {getTypeIcon(step.task_type)}
+                              {step.task_type}
+                            </Badge>
+                            {step.is_optional && (
+                              <Badge variant="outline" className="text-xs bg-muted/50">
+                                Optional
+                              </Badge>
+                            )}
+                          </div>
+                          {step.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              {step.description}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                          <span>{step.default_weight_percent}%</span>
+                          {step.default_review_rounds > 0 && (
+                            <span>{step.default_review_rounds} reviews</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
