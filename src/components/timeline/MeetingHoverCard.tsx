@@ -17,7 +17,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Users, Clock, CheckCircle2, PlayCircle, FileText, Save, Loader2, NotebookPen } from 'lucide-react';
+import { Users, Clock, CheckCircle2, PlayCircle, FileText, Loader2, NotebookPen, Trash2 } from 'lucide-react';
 import { format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns';
 
 interface MeetingHoverCardProps {
@@ -32,6 +32,8 @@ interface MeetingHoverCardProps {
   allMeetingDates: string[];
   meetingIndex: number;
   projectId: string;
+  onDelete?: () => void;
+  readOnly?: boolean;
 }
 
 interface TaskNote {
@@ -54,6 +56,8 @@ export function MeetingHoverCard({
   allMeetingDates,
   meetingIndex,
   projectId,
+  onDelete,
+  readOnly = false,
 }: MeetingHoverCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -287,15 +291,31 @@ export function MeetingHoverCard({
         >
           {/* Header */}
           <div className="bg-muted/50 px-4 py-3 border-b border-border relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 h-7 w-7 hover:bg-background"
-              onClick={handleOpenNotes}
-              title="Meeting Notes"
-            >
-              <FileText className="h-4 w-4" />
-            </Button>
+            <div className="absolute top-2 right-2 flex items-center gap-1">
+              {!readOnly && onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  title="Delete meeting"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 hover:bg-background"
+                onClick={handleOpenNotes}
+                title="Meeting Notes"
+              >
+                <FileText className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="flex items-center gap-2 mb-1 pr-8">
               <Users className="w-4 h-4 text-primary" />
               <span className="font-semibold text-sm text-foreground">{meetingName}</span>
