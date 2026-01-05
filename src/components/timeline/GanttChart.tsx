@@ -248,13 +248,18 @@ export function GanttChart({
     // Find which column this date falls into
     for (let i = 0; i < groupedColumns.length; i++) {
       const col = groupedColumns[i];
-      if (targetDay >= col.startDate && targetDay <= col.endDate) {
+      const colStart = startOfDay(col.startDate);
+      const colEnd = startOfDay(col.endDate);
+      
+      if (targetDay >= colStart && targetDay <= colEnd) {
         return i * columnWidth;
       }
     }
     
     // If before first column, return 0
-    if (targetDay < groupedColumns[0]?.startDate) return 0;
+    if (groupedColumns.length > 0 && targetDay < startOfDay(groupedColumns[0].startDate)) {
+      return 0;
+    }
     
     // If after last column, return end
     return (groupedColumns.length - 1) * columnWidth;
@@ -269,12 +274,20 @@ export function GanttChart({
 
   // Calculate task width (counting working days only)
   const getTaskWidth = useCallback((start: Date, end: Date) => {
-    const startCol = groupedColumns.findIndex(col => 
-      start >= col.startDate && start <= col.endDate
-    );
-    const endCol = groupedColumns.findIndex(col => 
-      end >= col.startDate && end <= col.endDate
-    );
+    const startDay = startOfDay(start);
+    const endDay = startOfDay(end);
+    
+    const startCol = groupedColumns.findIndex(col => {
+      const colStart = startOfDay(col.startDate);
+      const colEnd = startOfDay(col.endDate);
+      return startDay >= colStart && startDay <= colEnd;
+    });
+    
+    const endCol = groupedColumns.findIndex(col => {
+      const colStart = startOfDay(col.startDate);
+      const colEnd = startOfDay(col.endDate);
+      return endDay >= colStart && endDay <= colEnd;
+    });
     
     if (startCol === -1 || endCol === -1) return columnWidth;
     return Math.max(columnWidth, (endCol - startCol + 1) * columnWidth);
