@@ -8,6 +8,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { 
   Flag, 
   Users, 
@@ -18,7 +24,8 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronLeft,
-  Trash2
+  Trash2,
+  HelpCircle
 } from 'lucide-react';
 import { 
   format, 
@@ -639,6 +646,43 @@ export function GanttChart({
         <span className="text-xs text-muted-foreground ml-auto">
           {workingDays.length} working days
         </span>
+
+        {/* Legend tooltip */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground hover:text-foreground">
+                <HelpCircle className="h-3.5 w-3.5" />
+                <span className="text-xs">Legend</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end" className="w-64 p-3">
+              <div className="space-y-2.5 text-xs">
+                <div className="font-medium text-sm mb-2">Chart Symbols</div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-primary rotate-45 rounded-sm shrink-0" />
+                  <span><strong>Diamond</strong> — Recurring meeting (Weekly Call)</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Flag className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span><strong>Flag</strong> — Milestone</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-3 bg-primary/80 rounded-sm shrink-0" />
+                  <span><strong>Bar</strong> — Task duration</span>
+                </div>
+                
+                <div className="border-t pt-2 mt-2 text-muted-foreground">
+                  <p><strong>Weekly view:</strong> Each diamond = one weekly meeting</p>
+                  <p className="mt-1"><strong>Monthly view:</strong> Diamonds show all scheduled calls in the period</p>
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {/* Gantt Chart */}
