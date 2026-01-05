@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Project, Phase, Task, CanonicalStep, ProjectStep, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
+import { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TimelineEditor } from '@/components/timeline/TimelineEditor';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -34,16 +35,13 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [projectSteps, setProjectSteps] = useState<ProjectStepWithCanonical[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (id) {
-      fetchProjectData();
-    }
-  }, [id]);
-
-  const fetchProjectData = async () => {
+  const fetchProjectData = useCallback(async () => {
+    if (!id) return;
+    
     try {
       // Fetch project
       const { data: projectData, error: projectError } = await supabase
@@ -65,15 +63,28 @@ export default function ProjectDetail() {
       setPhases((phasesData as Phase[]) || []);
 
       // Fetch tasks for all phases
+      let tasksData: Task[] = [];
       if (phasesData && phasesData.length > 0) {
         const phaseIds = phasesData.map(p => p.id);
-        const { data: tasksData } = await supabase
+        const { data } = await supabase
           .from('tasks')
           .select('*')
           .in('phase_id', phaseIds)
           .order('order_index');
 
-        setTasks((tasksData as Task[]) || []);
+        tasksData = (data as Task[]) || [];
+        setTasks(tasksData);
+      }
+
+      // Fetch dependencies for all tasks
+      if (tasksData.length > 0) {
+        const taskIds = tasksData.map(t => t.id);
+        const { data: depsData } = await supabase
+          .from('dependencies')
+          .select('*')
+          .or(`predecessor_task_id.in.(${taskIds.join(',')}),successor_task_id.in.(${taskIds.join(',')})`);
+
+        setDependencies((depsData as Dependency[]) || []);
       }
 
       // Fetch project steps with canonical step data
@@ -95,6 +106,14 @@ export default function ProjectDetail() {
     } finally {
       setLoading(false);
     }
+  }, [id, navigate]);
+
+  useEffect(() => {
+    fetchProjectData();
+  }, [fetchProjectData]);
+
+  const handleTasksChange = (updatedTasks: Task[]) => {
+    setTasks(updatedTasks);
   };
 
   if (loading) {
@@ -332,18 +351,14 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="timeline" className="space-y-4">
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <BarChart3 className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Gantt Chart Coming Soon</h3>
-              <p className="text-muted-foreground text-center max-w-sm">
-                The interactive Gantt chart and calendar view will be available here.
-                The schedule engine will auto-generate dates based on your step weights.
-              </p>
-            </CardContent>
-          </Card>
+          <TimelineEditor
+            project={project}
+            phases={phases}
+            tasks={tasks}
+            dependencies={dependencies}
+            onTasksChange={handleTasksChange}
+            onRefresh={fetchProjectData}
+          />
         </TabsContent>
 
         <TabsContent value="team">
