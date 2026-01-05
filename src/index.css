@@ -2,15 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
-/* VFX Timeline Pro - Clean Light Theme Design System
+/* VFX Timeline Pro - Dark Luxurious Design System
    Typography: Manrope (400, 500, 600, 700, 800)
-   Style: Clean, modern sans-serif with excellent readability
+   Style: Sleek, modern, luxurious dark mode with rich accents
    All colors MUST be HSL.
 */
 
 @layer base {
   :root {
-    /* Light theme - Clean, modern, high-contrast */
+    /* Light theme fallback */
     --background: 0 0% 97%;
     --foreground: 0 0% 10%;
 
@@ -20,7 +20,6 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    /* Primary - Black for buttons and key actions */
     --primary: 0 0% 10%;
     --primary-foreground: 0 0% 100%;
 
@@ -33,11 +32,9 @@
     --accent: 0 0% 96%;
     --accent-foreground: 0 0% 10%;
 
-    /* Success green */
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
 
-    /* Destructive red */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
@@ -47,20 +44,20 @@
 
     --radius: 0.5rem;
 
-    /* Status colors - Grayscale with semantic accents */
+    /* Status colors */
     --status-pending: 0 0% 60%;
     --status-in-progress: 0 0% 30%;
     --status-review: 0 0% 42%;
     --status-completed: 142 71% 45%;
     --status-blocked: 0 84% 60%;
 
-    /* Phase colors - Grayscale palette */
-    --phase-preproduction: 0 0% 60%;
-    --phase-production: 0 0% 30%;
-    --phase-postproduction: 0 0% 45%;
-    --phase-delivery: 0 0% 20%;
+    /* Phase colors - Rich palette */
+    --phase-preproduction: 38 92% 50%;
+    --phase-production: 24 95% 53%;
+    --phase-postproduction: 142 71% 45%;
+    --phase-delivery: 142 71% 45%;
 
-    /* Chart colors - Grayscale */
+    /* Chart colors */
     --chart-1: 0 0% 10%;
     --chart-2: 0 0% 30%;
     --chart-3: 0 0% 60%;
@@ -78,28 +75,39 @@
     --sidebar-accent-foreground: 0 0% 10%;
     --sidebar-border: 0 0% 90%;
     --sidebar-ring: 0 0% 10%;
+
+    /* Gantt specific */
+    --gantt-bg: 220 13% 18%;
+    --gantt-surface: 220 13% 22%;
+    --gantt-surface-elevated: 220 13% 26%;
+    --gantt-border: 220 13% 30%;
+    --gantt-text: 0 0% 95%;
+    --gantt-text-muted: 220 9% 60%;
+    --gantt-accent-warm: 38 92% 50%;
+    --gantt-accent-orange: 24 95% 53%;
+    --gantt-today: 0 84% 60%;
   }
 
   .dark {
-    --background: 0 0% 8%;
+    --background: 220 13% 10%;
     --foreground: 0 0% 95%;
 
-    --card: 0 0% 12%;
+    --card: 220 13% 14%;
     --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 12%;
+    --popover: 220 13% 14%;
     --popover-foreground: 0 0% 95%;
 
     --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 10%;
+    --primary-foreground: 220 13% 10%;
 
-    --secondary: 0 0% 18%;
+    --secondary: 220 13% 20%;
     --secondary-foreground: 0 0% 95%;
 
-    --muted: 0 0% 18%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 220 13% 20%;
+    --muted-foreground: 220 9% 55%;
 
-    --accent: 0 0% 18%;
+    --accent: 220 13% 20%;
     --accent-foreground: 0 0% 95%;
 
     --success: 142 71% 45%;
@@ -108,17 +116,17 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
+    --border: 220 13% 25%;
+    --input: 220 13% 25%;
     --ring: 0 0% 100%;
 
-    --sidebar-background: 0 0% 10%;
+    --sidebar-background: 220 13% 12%;
     --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 0 0% 10%;
-    --sidebar-accent: 0 0% 18%;
+    --sidebar-primary-foreground: 220 13% 10%;
+    --sidebar-accent: 220 13% 20%;
     --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 0 0% 20%;
+    --sidebar-border: 220 13% 25%;
     --sidebar-ring: 0 0% 100%;
   }
 }
@@ -195,5 +203,72 @@
 
   .table-cell-center {
     @apply text-center;
+  }
+
+  /* Gantt Chart - Dark Luxurious Theme */
+  .gantt-container {
+    background: hsl(var(--gantt-bg));
+    color: hsl(var(--gantt-text));
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-header {
+    background: hsl(var(--gantt-surface));
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-sidebar {
+    background: hsl(var(--gantt-surface));
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-section-header {
+    background: hsl(var(--gantt-surface-elevated));
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-row {
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-row:hover {
+    background: hsl(var(--gantt-surface-elevated) / 0.5);
+  }
+
+  .gantt-column {
+    border-color: hsl(var(--gantt-border));
+  }
+
+  .gantt-column-alt {
+    background: hsl(var(--gantt-surface) / 0.5);
+  }
+
+  .gantt-text-muted {
+    color: hsl(var(--gantt-text-muted));
+  }
+
+  /* Gantt task bar gradient */
+  .gantt-task-bar {
+    background: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(24 95% 53%) 100%);
+    box-shadow: 0 4px 12px hsl(24 95% 53% / 0.4);
+  }
+
+  /* Gantt milestone diamond */
+  .gantt-diamond {
+    background: linear-gradient(135deg, hsl(220 13% 35%) 0%, hsl(220 13% 25%) 100%);
+    box-shadow: 0 2px 8px hsl(0 0% 0% / 0.4);
+  }
+
+  /* Gantt badge pill */
+  .gantt-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide;
+    background: hsl(var(--gantt-surface-elevated));
+    color: hsl(var(--gantt-text-muted));
+  }
+
+  /* Today marker */
+  .gantt-today-marker {
+    background: hsl(var(--gantt-today));
+    box-shadow: 0 0 12px hsl(var(--gantt-today) / 0.6);
   }
 }
