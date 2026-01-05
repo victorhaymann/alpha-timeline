@@ -809,8 +809,8 @@ export function GanttChart({
                         {task.task_type === 'task' && <div className="w-4 shrink-0" />}
                         <span className="text-sm font-medium text-[hsl(var(--gantt-text))] truncate flex-1 min-w-0">{task.name}</span>
                         
-                        {/* Task data: days, start → end */}
-                        <div className="flex items-center gap-2 text-xs text-[hsl(var(--gantt-text-muted))] shrink-0">
+                        {/* Task data: days, start → end - Right aligned */}
+                        <div className="flex items-center gap-2 text-xs text-[hsl(var(--gantt-text-muted))] shrink-0 ml-auto">
                           {duration !== null && (
                             <span className="gantt-badge font-semibold">
                               {duration}d
