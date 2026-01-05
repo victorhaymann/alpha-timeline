@@ -355,44 +355,41 @@ export function GanttChart({
     return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
   }, [groupedColumns, columnWidth]);
 
-  // Helper to check if a task is a client check-in
-  const isClientCheckin = useCallback((task: Task) => {
-    return task.name.toLowerCase().includes('client check-in') || 
-           task.name.toLowerCase().includes('client checkin');
+  // Helper to check if a task is a recurring weekly/bi-weekly call
+  const isRecurringCall = useCallback((task: Task) => {
+    return task.name.toLowerCase().includes('weekly call') || 
+           task.name.toLowerCase().includes('bi-weekly call') ||
+           task.recurring_dates !== undefined;
   }, []);
 
-  // Separate client check-ins from regular tasks
-  const clientCheckins = useMemo(() => {
-    return tasks.filter(t => isClientCheckin(t)).sort((a, b) => {
-      const aDate = a.start_date ? new Date(a.start_date).getTime() : 0;
-      const bDate = b.start_date ? new Date(b.start_date).getTime() : 0;
-      return aDate - bDate;
-    });
-  }, [tasks, isClientCheckin]);
+  // Get the single recurring call task (if exists)
+  const recurringCallTask = useMemo(() => {
+    return tasks.find(t => isRecurringCall(t)) || null;
+  }, [tasks, isRecurringCall]);
 
-  // Group tasks by phase (excluding client check-ins)
+  // Group tasks by phase (excluding recurring calls)
   const tasksByPhase = useMemo(() => {
     const grouped = new Map<string, Task[]>();
     phases.forEach(phase => {
       grouped.set(
         phase.id,
         tasks
-          .filter(t => t.phase_id === phase.id && !isClientCheckin(t))
+          .filter(t => t.phase_id === phase.id && !isRecurringCall(t))
           .sort((a, b) => a.order_index - b.order_index)
       );
     });
     return grouped;
-  }, [phases, tasks, isClientCheckin]);
+  }, [phases, tasks, isRecurringCall]);
 
-  // Create ordered sections: Client Check-ins first, then phases (excluding Discovery)
-  type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'checkins'; tasks: Task[] };
+  // Create ordered sections: Weekly Call first (single row), then phases (excluding Discovery)
+  type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'weekly-call'; task: Task };
   
   const orderedSections = useMemo((): Section[] => {
     const sections: Section[] = [];
     
-    // Add Client Check-ins first
-    if (clientCheckins.length > 0) {
-      sections.push({ type: 'checkins', tasks: clientCheckins });
+    // Add Weekly Call section first (single task with recurring dates)
+    if (recurringCallTask) {
+      sections.push({ type: 'weekly-call', task: recurringCallTask });
     }
     
     // Add phases (excluding Discovery)
@@ -404,7 +401,7 @@ export function GanttChart({
       });
     
     return sections;
-  }, [phases, tasksByPhase, clientCheckins]);
+  }, [phases, tasksByPhase, recurringCallTask]);
 
   // Handle drag start
   const handleDragStart = (
@@ -495,13 +492,15 @@ export function GanttChart({
   // Calculate total chart height based on sections (accounting for collapsed state)
   let totalHeight = HEADER_HEIGHT;
   orderedSections.forEach(section => {
-    const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+    const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
     const isCollapsed = collapsedSections.has(sectionKey);
     totalHeight += PHASE_HEADER_HEIGHT;
     if (!isCollapsed) {
-      totalHeight += section.tasks.length * ROW_HEIGHT;
-      // Add space for "Add task" button only for phases
-      if (section.type === 'phase') {
+      if (section.type === 'weekly-call') {
+        totalHeight += ROW_HEIGHT; // Single row for weekly call
+      } else {
+        totalHeight += section.tasks.length * ROW_HEIGHT;
+        // Add space for "Add task" button only for phases
         totalHeight += ROW_HEIGHT;
       }
     }
@@ -611,14 +610,14 @@ export function GanttChart({
 
             {/* Section rows (phases + client check-ins) */}
             {orderedSections.map((section, sectionIndex) => {
-              const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+              const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
-              const isClientCheckins = section.type === 'checkins';
+              const isWeeklyCall = section.type === 'weekly-call';
 
               return (
-                <div key={sectionKey} className={isClientCheckins ? 'bg-muted/20' : ''}>
+                <div key={sectionKey} className={isWeeklyCall ? 'bg-muted/20' : ''}>
                   {/* Section header */}
                   <div 
                     className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm cursor-pointer hover:bg-muted/50 transition-colors"
@@ -636,12 +635,32 @@ export function GanttChart({
                     />
                     <span className="truncate">{sectionName}</span>
                     <Badge variant="secondary" className="ml-auto text-xs">
-                      {section.tasks.length}
+                      {section.type === 'weekly-call' 
+                        ? section.task.recurring_dates?.length || 0
+                        : section.tasks.length}
                     </Badge>
                   </div>
 
-                  {/* Task rows - only show if not collapsed */}
-                  {!isCollapsed && section.tasks.map((task) => {
+                  {/* Weekly call row - single row with meeting count */}
+                  {isWeeklyCall && !isCollapsed && (
+                    <div 
+                      className="flex items-center gap-2 px-3 border-b hover:bg-muted/30 group"
+                      style={{ height: ROW_HEIGHT }}
+                    >
+                      <div className="w-3 shrink-0" />
+                      <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="text-sm truncate flex-1 min-w-0">{section.task.name}</span>
+                      
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
+                        <span className="bg-muted px-1.5 py-0.5 rounded font-medium">
+                          {section.task.recurring_dates?.length || 0} meetings
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Task rows - only show if not collapsed (for phases only) */}
+                  {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
                     const startDate = task.start_date ? new Date(task.start_date) : null;
                     const endDate = task.end_date ? new Date(task.end_date) : null;
                     const duration = startDate && endDate 
@@ -682,15 +701,13 @@ export function GanttChart({
                           )}
                         </div>
 
-                        {section.type === 'phase' && (
-                          <button
-                            onClick={() => onAddReviewRound(task.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0"
-                            title="Add review round"
-                          >
-                            <RotateCcw className="w-3 h-3 text-muted-foreground" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => onAddReviewRound(task.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0"
+                          title="Add review round"
+                        >
+                          <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                        </button>
 
                         {onDeleteTask && (
                           <button
@@ -770,19 +787,19 @@ export function GanttChart({
 
             {/* Section rows with task bars */}
             {orderedSections.map((section, sectionIndex) => {
-              const sectionKey = section.type === 'phase' ? section.phase.id : 'client-checkins';
+              const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
               const isCollapsed = collapsedSections.has(sectionKey);
-              const isClientCheckins = section.type === 'checkins';
+              const isWeeklyCall = section.type === 'weekly-call';
 
               return (
-                <div key={sectionKey} className={isClientCheckins ? 'bg-muted/20' : ''}>
+                <div key={sectionKey} className={isWeeklyCall ? 'bg-muted/20' : ''}>
                   {/* Section header row */}
                   <div 
                     className={cn(
                       "border-b cursor-pointer hover:bg-muted/20 transition-colors",
-                      isClientCheckins && "bg-muted/30"
+                      isWeeklyCall && "bg-muted/30"
                     )}
                     style={{ height: PHASE_HEADER_HEIGHT }}
                     onClick={() => toggleSectionCollapse(sectionKey)}
@@ -801,8 +818,48 @@ export function GanttChart({
                     </div>
                   </div>
 
-                  {/* Task bars - only show if not collapsed */}
-                  {!isCollapsed && section.tasks.map((task) => {
+                  {/* Weekly call row with diamond markers */}
+                  {isWeeklyCall && !isCollapsed && (
+                    <div className="relative border-b" style={{ height: ROW_HEIGHT }}>
+                      {/* Grid background */}
+                      <div className="absolute inset-0 flex">
+                        {groupedColumns.map((col) => {
+                          const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                          return (
+                            <div
+                              key={col.key}
+                              className={cn("border-r shrink-0", isAlternateWeek && "bg-muted")}
+                              style={{ width: columnWidth }}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      {/* Diamond markers for each recurring date */}
+                      {section.task.recurring_dates?.map((dateStr, idx) => {
+                        const meetingDate = new Date(dateStr);
+                        const left = dateToX(meetingDate);
+                        
+                        // Check if this date is visible in current view
+                        const colIndex = groupedColumns.findIndex(col => 
+                          isSameDay(col.startDate, meetingDate)
+                        );
+                        if (colIndex === -1) return null;
+                        
+                        return (
+                          <div
+                            key={dateStr}
+                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-primary rotate-45 rounded-sm shadow-md hover:scale-125 transition-transform cursor-default"
+                            style={{ left: left + columnWidth / 2 - 8 }}
+                            title={`Meeting ${idx + 1}: ${format(meetingDate, 'MMM d, yyyy')}`}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Task bars - only show if not collapsed (for phases only) */}
+                  {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
                     const isCurrentlyDragging = dragging?.taskId === task.id;
                     const isJustDropped = justDropped === task.id;
                     const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
