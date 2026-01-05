@@ -1096,21 +1096,6 @@ export function GanttChart({
                       </div>
                     );
                   })}
-
-                  {/* Add task row - only for phases and when not collapsed */}
-                  {section.type === 'phase' && !isCollapsed && (
-                    <div className="border-b" style={{ height: ROW_HEIGHT }}>
-                      <div className="flex h-full">
-                        {groupedColumns.map((col) => (
-                          <div
-                            key={col.key}
-                            className="border-r shrink-0"
-                            style={{ width: columnWidth }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
