@@ -14,12 +14,12 @@ import { PhaseCategory } from '@/types/database';
 
 // Default phase weights (must sum to 100)
 export const DEFAULT_PHASE_WEIGHTS: Record<PhaseCategory, number> = {
-  'Discovery': 6,
+  'Discovery': 0,
   'Client Check-ins': 0, // Check-ins don't consume allocation
-  'Pre-Production': 14,
-  'Production': 48,
-  'Post-Production': 24,
-  'Delivery': 8,
+  'Pre-Production': 20,
+  'Production': 59,
+  'Post-Production': 20,
+  'Delivery': 1,
   'Immersive': 0, // Add-on, allocated separately
 };
 
