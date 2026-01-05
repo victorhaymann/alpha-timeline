@@ -561,13 +561,13 @@ export function GanttChart({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Controls - Premium Dark Header */}
-      <div className="flex items-center gap-4 px-4 py-3 rounded-xl gantt-header border">
+      {/* Controls - Light Header */}
+      <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-card border border-border">
         {/* Breadcrumb placeholder */}
         <div className="flex items-center gap-2 text-sm">
-          <span className="gantt-text-muted">Projects</span>
-          <ChevronRight className="w-3.5 h-3.5 gantt-text-muted" />
-          <span className="font-medium text-[hsl(var(--gantt-text))]">Timeline</span>
+          <span className="text-muted-foreground">Projects</span>
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="font-medium text-foreground">Timeline</span>
         </div>
 
         {/* Center controls */}
@@ -576,15 +576,15 @@ export function GanttChart({
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 hover:bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text))]"
+            className="h-9 w-9 p-0 hover:bg-accent text-foreground"
             onClick={() => navigatePeriod('prev')}
             title="Previous period (← Arrow)"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           
-          {/* View mode toggle - Premium segmented control */}
-          <div className="flex items-center rounded-lg p-1 bg-[hsl(var(--gantt-bg))] border border-[hsl(var(--gantt-border))]">
+          {/* View mode toggle - Segmented control */}
+          <div className="flex items-center rounded-lg p-1 bg-muted border border-border">
             {(['week', 'month'] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
@@ -593,8 +593,8 @@ export function GanttChart({
                 className={cn(
                   "h-8 px-4 text-xs font-semibold tracking-wide capitalize transition-all duration-200",
                   viewMode === mode 
-                    ? "bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text))] shadow-md" 
-                    : "text-[hsl(var(--gantt-text-muted))] hover:text-[hsl(var(--gantt-text))]"
+                    ? "bg-background text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
                 )}
                 onClick={() => handleViewModeChange(mode)}
               >
@@ -606,22 +606,22 @@ export function GanttChart({
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 hover:bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text))]"
+            className="h-9 w-9 p-0 hover:bg-accent text-foreground"
             onClick={() => navigatePeriod('next')}
             title="Next period (→ Arrow)"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
 
-          {/* Date range picker - Premium style */}
+          {/* Date range picker */}
           <Popover>
             <PopoverTrigger asChild>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-9 gap-2 px-4 hover:bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text))] border border-[hsl(var(--gantt-border))] rounded-lg"
+                className="h-9 gap-2 px-4 hover:bg-accent text-foreground border border-border rounded-lg"
               >
-                <CalendarIcon className="h-3.5 w-3.5 text-[hsl(var(--gantt-text-muted))]" />
+                <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-medium tracking-wide">
                   {dateRange?.from ? (
                     dateRange.to ? (
@@ -637,7 +637,7 @@ export function GanttChart({
                 </span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-[hsl(var(--gantt-surface))] border-[hsl(var(--gantt-border))]" align="start">
+            <PopoverContent className="w-auto p-0 bg-card border-border" align="start">
               <Calendar
                 mode="range"
                 defaultMonth={dateRange?.from}
@@ -646,12 +646,12 @@ export function GanttChart({
                 numberOfMonths={2}
                 className="pointer-events-auto"
               />
-              <div className="flex items-center justify-between p-3 border-t border-[hsl(var(--gantt-border))]">
+              <div className="flex items-center justify-between p-3 border-t border-border">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setDateRange({ from: projectStartDate, to: projectEndDate })}
-                  className="text-[hsl(var(--gantt-text-muted))] hover:text-[hsl(var(--gantt-text))]"
+                  className="text-muted-foreground hover:text-foreground"
                 >
                   Reset to project dates
                 </Button>
@@ -663,7 +663,7 @@ export function GanttChart({
         {/* Right side info */}
         <div className="flex items-center gap-4 ml-auto">
           {/* Working days badge */}
-          <span className="gantt-badge">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
             {workingDays.length} working days left
           </span>
 
@@ -674,17 +674,17 @@ export function GanttChart({
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="h-9 w-9 p-0 hover:bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text-muted))] hover:text-[hsl(var(--gantt-text))]"
+                  className="h-9 w-9 p-0 hover:bg-accent text-muted-foreground hover:text-foreground"
                 >
                   <HelpCircle className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="end" className="w-64 p-3 bg-[hsl(var(--gantt-surface))] border-[hsl(var(--gantt-border))] text-[hsl(var(--gantt-text))]">
+              <TooltipContent side="bottom" align="end" className="w-64 p-3 bg-card border-border text-foreground">
                 <div className="space-y-2.5 text-xs">
                   <div className="font-semibold text-sm mb-2 tracking-wide">Chart Legend</div>
                   
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 gantt-diamond rotate-45 rounded-sm shrink-0" />
+                    <div className="w-4 h-4 bg-foreground/80 rotate-45 rounded-sm shrink-0" />
                     <span><strong>Diamond</strong> — Recurring meeting</span>
                   </div>
                   
@@ -698,7 +698,7 @@ export function GanttChart({
                     <span><strong>Bar</strong> — Task duration</span>
                   </div>
                   
-                  <div className="border-t border-[hsl(var(--gantt-border))] pt-2 mt-2 text-[hsl(var(--gantt-text-muted))]">
+                  <div className="border-t border-border pt-2 mt-2 text-muted-foreground">
                     <p><strong>Weekly view:</strong> 7 days per period</p>
                     <p className="mt-1"><strong>Monthly view:</strong> Full month view</p>
                   </div>
@@ -709,17 +709,17 @@ export function GanttChart({
         </div>
       </div>
 
-      {/* Gantt Chart - Dark Luxurious Theme */}
-      <div className="relative overflow-auto rounded-xl gantt-container border shadow-2xl" ref={containerRef}>
+      {/* Gantt Chart - Light Theme */}
+      <div className="relative overflow-auto rounded-xl bg-background border border-border shadow-sm" ref={containerRef}>
         <div className="relative flex" style={{ minHeight: totalHeight }}>
           {/* Fixed task names column - Left Sidebar */}
-          <div className="sticky left-0 z-20 gantt-sidebar border-r shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
+          <div className="sticky left-0 z-20 bg-card border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
             {/* Header */}
             <div 
-              className="flex items-center px-4 border-b gantt-section-header font-semibold text-sm tracking-wide uppercase"
+              className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase"
               style={{ height: HEADER_HEIGHT }}
             >
-              <span className="text-[hsl(var(--gantt-text))]">Tasks</span>
+              <span className="text-foreground">Tasks</span>
             </div>
 
             {/* Section rows (phases + client check-ins) */}
@@ -736,24 +736,24 @@ export function GanttChart({
 
               return (
                 <div key={sectionKey}>
-                  {/* Section header - Premium style */}
+                  {/* Section header */}
                   <div 
-                    className="flex items-center gap-3 px-4 border-b gantt-section-header cursor-pointer hover:bg-[hsl(var(--gantt-surface-elevated))] transition-colors"
+                    className="flex items-center gap-3 px-4 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
                     style={{ height: PHASE_HEADER_HEIGHT }}
                     onClick={() => toggleSectionCollapse(sectionKey)}
                   >
                     {isCollapsed ? (
-                      <ChevronRight className="w-4 h-4 text-[hsl(var(--gantt-text-muted))] shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-[hsl(var(--gantt-text-muted))] shrink-0" />
+                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                     )}
                     <div 
                       className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
                       style={{ backgroundColor: sectionColor }}
                     />
-                    <span className="font-semibold text-sm tracking-wide text-[hsl(var(--gantt-text))] truncate">{sectionName}</span>
+                    <span className="font-semibold text-sm tracking-wide text-foreground truncate">{sectionName}</span>
                     <div className="ml-auto flex items-center gap-3">
-                      <span className="gantt-badge">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
                         {section.type === 'weekly-call' 
                           ? `${section.task.recurring_dates?.length || 0} mtgs`
                           : section.tasks.length}
@@ -764,7 +764,7 @@ export function GanttChart({
                             e.stopPropagation();
                             onAddTask(section.phase.id);
                           }}
-                          className="flex items-center justify-center w-6 h-6 text-[hsl(var(--gantt-text-muted))] hover:text-[hsl(var(--gantt-text))] hover:bg-[hsl(var(--gantt-bg))] rounded transition-colors"
+                          className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
                           title="Add task"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -776,14 +776,14 @@ export function GanttChart({
                   {/* Weekly call row - single row with meeting count */}
                   {isWeeklyCall && !isCollapsed && (
                     <div 
-                      className="flex items-center gap-3 px-4 border-b gantt-row group"
+                      className="flex items-center gap-3 px-4 group"
                       style={{ height: ROW_HEIGHT }}
                     >
                       <div className="w-4 shrink-0" />
-                      <Users className="w-4 h-4 text-[hsl(var(--gantt-accent-warm))] shrink-0" />
-                      <span className="text-sm font-medium text-[hsl(var(--gantt-text))] truncate flex-1 min-w-0">{section.task.name}</span>
+                      <Users className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{section.task.name}</span>
                       
-                      <span className="gantt-badge">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
                         {section.task.recurring_dates?.length || 0} meetings
                       </span>
                     </div>
@@ -800,19 +800,19 @@ export function GanttChart({
                     return (
                       <div 
                         key={task.id}
-                        className="flex items-center gap-3 px-4 border-b gantt-row group"
+                        className="flex items-center gap-3 px-4 group hover:bg-muted/30 transition-colors"
                         style={{ height: ROW_HEIGHT }}
                       >
-                        <GripVertical className="w-3.5 h-3.5 text-[hsl(var(--gantt-text-muted))] opacity-0 group-hover:opacity-100 cursor-grab shrink-0 transition-opacity" />
+                        <GripVertical className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0 transition-opacity" />
                         {task.task_type === 'milestone' && <Flag className="w-4 h-4 text-amber-500 shrink-0" />}
-                        {task.task_type === 'meeting' && <Users className="w-4 h-4 text-[hsl(var(--gantt-accent-warm))] shrink-0" />}
+                        {task.task_type === 'meeting' && <Users className="w-4 h-4 text-amber-500 shrink-0" />}
                         {task.task_type === 'task' && <div className="w-4 shrink-0" />}
-                        <span className="text-sm font-medium text-[hsl(var(--gantt-text))] truncate flex-1 min-w-0">{task.name}</span>
+                        <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
                         
                         {/* Task data: days, start → end */}
-                        <div className="flex items-center gap-2 text-xs text-[hsl(var(--gantt-text-muted))] shrink-0">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                           {duration !== null && (
-                            <span className="gantt-badge font-semibold">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted">
                               {duration}d
                             </span>
                           )}
@@ -833,10 +833,10 @@ export function GanttChart({
 
                         <button
                           onClick={() => onAddReviewRound(task.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-[hsl(var(--gantt-surface-elevated))] rounded shrink-0 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-muted rounded shrink-0 transition-all"
                           title="Add review round"
                         >
-                          <RotateCcw className="w-3.5 h-3.5 text-[hsl(var(--gantt-text-muted))]" />
+                          <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
 
                         {onDeleteTask && (
@@ -872,9 +872,9 @@ export function GanttChart({
             onMouseUp={dragging ? handleDragEnd : undefined}
             onMouseLeave={dragging ? handleDragEnd : undefined}
           >
-            {/* Column headers - Premium dark style */}
+            {/* Column headers */}
             <div 
-              className="flex border-b gantt-section-header sticky top-0 z-10"
+              className="flex border-b border-border bg-muted/50 sticky top-0 z-10"
               style={{ height: HEADER_HEIGHT }}
             >
               {groupedColumns.map((col) => {
@@ -885,14 +885,14 @@ export function GanttChart({
                   <div
                     key={col.key}
                     className={cn(
-                      "flex flex-col items-center justify-center border-r border-[hsl(var(--gantt-border))] text-xs shrink-0",
-                      isToday && "bg-[hsl(var(--gantt-today))]/.15",
-                      !isToday && isAlternateWeek && "gantt-column-alt"
+                      "flex flex-col items-center justify-center text-xs shrink-0",
+                      isToday && "bg-destructive/10",
+                      !isToday && isAlternateWeek && "bg-muted/30"
                     )}
                     style={{ width: columnWidth }}
                   >
-                    <span className="font-bold text-[hsl(var(--gantt-text))] tracking-wide">{col.label}</span>
-                    <span className="text-[hsl(var(--gantt-text-muted))] text-[10px] font-medium uppercase tracking-wider">{col.subLabel}</span>
+                    <span className="font-bold text-foreground tracking-wide">{col.label}</span>
+                    <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">{col.subLabel}</span>
                   </div>
                 );
               })}
@@ -914,7 +914,7 @@ export function GanttChart({
                 <div key={sectionKey}>
                   {/* Section header row */}
                   <div 
-                    className="border-b border-[hsl(var(--gantt-border))] cursor-pointer gantt-section-header hover:bg-[hsl(var(--gantt-surface-elevated))] transition-colors"
+                    className="cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
                     style={{ height: PHASE_HEADER_HEIGHT }}
                     onClick={() => toggleSectionCollapse(sectionKey)}
                   >
@@ -924,7 +924,7 @@ export function GanttChart({
                         return (
                           <div
                             key={col.key}
-                            className={cn("border-r border-[hsl(var(--gantt-border))] shrink-0", isAlternateWeek && "gantt-column-alt")}
+                            className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
                             style={{ width: columnWidth }}
                           />
                         );
@@ -934,7 +934,7 @@ export function GanttChart({
 
                   {/* Weekly call row with diamond markers */}
                   {isWeeklyCall && !isCollapsed && (
-                    <div className="relative border-b border-[hsl(var(--gantt-border))]" style={{ height: ROW_HEIGHT }}>
+                    <div className="relative" style={{ height: ROW_HEIGHT }}>
                       {/* Grid background */}
                       <div className="absolute inset-0 flex">
                         {groupedColumns.map((col) => {
@@ -942,14 +942,14 @@ export function GanttChart({
                           return (
                             <div
                               key={col.key}
-                              className={cn("border-r border-[hsl(var(--gantt-border))] shrink-0", isAlternateWeek && "gantt-column-alt")}
+                              className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
                               style={{ width: columnWidth }}
                             />
                           );
                         })}
                       </div>
 
-                      {/* Diamond markers for each recurring date - Premium metallic style */}
+                      {/* Diamond markers for each recurring date */}
                       {section.task.recurring_dates?.map((dateStr, idx) => {
                         const meetingDate = new Date(dateStr);
                         const left = dateToX(meetingDate);
@@ -963,7 +963,7 @@ export function GanttChart({
                         return (
                           <div
                             key={dateStr}
-                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 gantt-diamond rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer"
+                            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm"
                             style={{ left: left + columnWidth / 2 - 8 }}
                             title={`Meeting ${idx + 1}: ${format(meetingDate, 'MMM d, yyyy')}`}
                           />
@@ -986,14 +986,14 @@ export function GanttChart({
                     const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
 
                     if (!displayStart || !displayEnd) return (
-                      <div key={task.id} className="border-b border-[hsl(var(--gantt-border))]" style={{ height: ROW_HEIGHT }}>
+                      <div key={task.id} style={{ height: ROW_HEIGHT }}>
                         <div className="flex h-full">
                           {groupedColumns.map((col) => {
                             const isAlternateWeek = weekAlternatingMap[col.weekNumber];
                             return (
                               <div
                                 key={col.key}
-                                className={cn("border-r border-[hsl(var(--gantt-border))] shrink-0", isAlternateWeek && "gantt-column-alt")}
+                                className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
                                 style={{ width: columnWidth }}
                               />
                             );
@@ -1024,7 +1024,7 @@ export function GanttChart({
                     }
 
                     return (
-                      <div key={task.id} className="relative border-b border-[hsl(var(--gantt-border))]" style={{ height: ROW_HEIGHT }}>
+                      <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
                         {/* Grid background */}
                         <div className="absolute inset-0 flex">
                           {groupedColumns.map((col) => {
@@ -1032,14 +1032,14 @@ export function GanttChart({
                             return (
                               <div
                                 key={col.key}
-                                className={cn("border-r border-[hsl(var(--gantt-border))] shrink-0", isAlternateWeek && "gantt-column-alt")}
+                                className={cn("shrink-0", isAlternateWeek && "bg-muted/20")}
                                 style={{ width: columnWidth }}
                               />
                             );
                           })}
                         </div>
 
-                        {/* Task bar - Premium gradient style */}
+                        {/* Task bar - Gradient style */}
                         {!isOutsideView && clippedWidth > 0 && (
                           <div
                             className={cn(
@@ -1067,7 +1067,7 @@ export function GanttChart({
                                   }}
                                 />
 
-                                {/* Task name - Premium typography */}
+                                {/* Task name */}
                                 <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
                                   <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
                                     {clippedWidth > 60 ? task.name : ''}
@@ -1088,26 +1088,26 @@ export function GanttChart({
                           {/* Duration preview tooltip during resize */}
                           {durationChanged && (
                             <div 
-                              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[hsl(var(--gantt-surface-elevated))] text-[hsl(var(--gantt-text))] px-3 py-2 rounded-lg shadow-2xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-[hsl(var(--gantt-border))]"
+                              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
                             >
                               <div className="flex items-center gap-2">
-                                <span className="text-[hsl(var(--gantt-text-muted))] line-through opacity-70">{originalDuration}d</span>
+                                <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
                                 <span className="text-amber-500">→</span>
                                 <span className={cn(
                                   "font-bold",
-                                  currentDuration! > originalDuration! ? "text-green-400" : "text-amber-400"
+                                  currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
                                 )}>
                                   {currentDuration}d
                                 </span>
                                 <span className={cn(
                                   "text-[10px]",
-                                  currentDuration! > originalDuration! ? "text-green-400" : "text-amber-400"
+                                  currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
                                 )}>
                                   ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
                                 </span>
                               </div>
                               {/* Tooltip arrow */}
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[hsl(var(--gantt-surface-elevated))]" />
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
                             </div>
                           )}
                           </div>
@@ -1119,7 +1119,7 @@ export function GanttChart({
               );
             })}
 
-            {/* Today marker - Premium red line with glow */}
+            {/* Today marker - Red line */}
             {(() => {
               const today = new Date();
               const todayColIndex = groupedColumns.findIndex(col => 
@@ -1129,10 +1129,10 @@ export function GanttChart({
                 const todayX = todayColIndex * columnWidth;
                 return (
                   <div
-                    className="absolute top-0 bottom-0 w-0.5 gantt-today-marker z-30 pointer-events-none"
+                    className="absolute top-0 bottom-0 w-0.5 bg-destructive z-30 pointer-events-none"
                     style={{ left: todayX + columnWidth / 2 }}
                   >
-                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full gantt-today-marker" />
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive" />
                   </div>
                 );
               }
