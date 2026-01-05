@@ -550,21 +550,18 @@ export function GanttChart({
     const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
     const isCollapsed = collapsedSections.has(sectionKey);
     const isWeeklyCall = section.type === 'weekly-call';
-    const hasNoMeetings = isWeeklyCall && (!section.task?.recurring_dates || section.task.recurring_dates.length === 0);
-    
+    const hasNoMeetings =
+      isWeeklyCall && (!section.task?.recurring_dates || section.task.recurring_dates.length === 0);
+
     // Skip sections that won't be rendered
     if (hasNoMeetings) return;
-    
+
     totalHeight += PHASE_HEADER_HEIGHT;
     if (!isCollapsed) {
       if (section.type === 'weekly-call') {
         totalHeight += ROW_HEIGHT; // Single row for weekly call
       } else {
         totalHeight += section.tasks.length * ROW_HEIGHT;
-        // Add space for "Add task" button only for phases and only in edit mode
-        if (!readOnly) {
-          totalHeight += ROW_HEIGHT;
-        }
       }
     }
   });
@@ -720,10 +717,10 @@ export function GanttChart({
       </div>
 
       {/* Gantt Chart - Light Theme */}
-      <div className="relative overflow-auto rounded-xl bg-muted/30 border border-border shadow-sm" ref={containerRef}>
-        <div className="relative flex" style={{ height: totalHeight }}>
+      <div className="relative overflow-auto rounded-xl bg-muted border border-border shadow-sm" ref={containerRef}>
+        <div className="relative flex bg-muted" style={{ height: totalHeight }}>
           {/* Fixed task names column - Left Sidebar */}
-          <div className="sticky left-0 z-20 bg-muted/30 border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
+          <div className="sticky left-0 z-20 bg-muted border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
             {/* Header */}
             <div 
               className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase"
@@ -881,7 +878,7 @@ export function GanttChart({
           {/* Timeline area */}
           <div 
             className={cn(
-              "flex-1 min-w-0",
+              "flex-1 min-w-0 bg-muted",
               slideDirection === 'left' && "animate-slide-left",
               slideDirection === 'right' && "animate-slide-right"
             )}
