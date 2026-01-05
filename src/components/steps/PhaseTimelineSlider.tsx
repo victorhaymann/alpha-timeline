@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import { PHASE_CATEGORY_COLORS, PhaseCategory } from '@/types/database';
 import { cn } from '@/lib/utils';
 import { format, addDays, differenceInDays, eachDayOfInterval, isWeekend } from 'date-fns';
+import { Flag } from 'lucide-react';
 
 // Phases in order (left to right on the bar)
 // Only show weightable phases - Delivery is just the end date of Post-Production
@@ -295,6 +296,19 @@ export function PhaseTimelineSlider({
               </div>
             </div>
           ))}
+
+          {/* Delivery date flag marker at the end */}
+          <div
+            className="absolute top-0 bottom-0 right-0 flex items-center justify-center z-10"
+            title={endDate ? `Delivery: ${format(endDate, 'MMM d, yyyy')}` : 'Delivery Date'}
+          >
+            <div className="relative h-full flex items-center">
+              <div className="absolute right-0 top-0 h-full w-0.5 bg-emerald-600" />
+              <div className="absolute -right-3 top-1/2 -translate-y-1/2 bg-emerald-600 text-white rounded-full p-1 shadow-lg">
+                <Flag className="w-3 h-3" fill="currentColor" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Phase labels below */}
