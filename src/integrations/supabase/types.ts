@@ -49,8 +49,51 @@ export type Database = {
           },
         ]
       }
+      canonical_steps: {
+        Row: {
+          category_group: string | null
+          created_at: string
+          default_review_rounds: number | null
+          default_weight_percent: number | null
+          description: string | null
+          id: string
+          is_optional: boolean | null
+          name: string
+          phase_category: string
+          sort_order: number
+          task_type: Database["public"]["Enums"]["task_type"]
+        }
+        Insert: {
+          category_group?: string | null
+          created_at?: string
+          default_review_rounds?: number | null
+          default_weight_percent?: number | null
+          description?: string | null
+          id?: string
+          is_optional?: boolean | null
+          name: string
+          phase_category: string
+          sort_order?: number
+          task_type?: Database["public"]["Enums"]["task_type"]
+        }
+        Update: {
+          category_group?: string | null
+          created_at?: string
+          default_review_rounds?: number | null
+          default_weight_percent?: number | null
+          description?: string | null
+          id?: string
+          is_optional?: boolean | null
+          name?: string
+          phase_category?: string
+          sort_order?: number
+          task_type?: Database["public"]["Enums"]["task_type"]
+        }
+        Relationships: []
+      }
       change_requests: {
         Row: {
+          author_role: string | null
           created_at: string
           description: string
           id: string
@@ -63,6 +106,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          author_role?: string | null
           created_at?: string
           description: string
           id?: string
@@ -75,6 +119,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          author_role?: string | null
           created_at?: string
           description?: string
           id?: string
@@ -105,6 +150,7 @@ export type Database = {
       }
       comments: {
         Row: {
+          author_role: string | null
           content: string
           created_at: string
           id: string
@@ -113,6 +159,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          author_role?: string | null
           content: string
           created_at?: string
           id?: string
@@ -121,6 +168,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          author_role?: string | null
           content?: string
           created_at?: string
           id?: string
@@ -186,6 +234,7 @@ export type Database = {
           id: string
           project_id: string
           role: Database["public"]["Enums"]["user_role"]
+          status: string | null
           token: string
         }
         Insert: {
@@ -196,6 +245,7 @@ export type Database = {
           id?: string
           project_id: string
           role?: Database["public"]["Enums"]["user_role"]
+          status?: string | null
           token?: string
         }
         Update: {
@@ -206,6 +256,7 @@ export type Database = {
           id?: string
           project_id?: string
           role?: Database["public"]["Enums"]["user_role"]
+          status?: string | null
           token?: string
         }
         Relationships: [
@@ -220,6 +271,7 @@ export type Database = {
       }
       phases: {
         Row: {
+          collapsed_by_default: boolean | null
           color: string | null
           created_at: string
           description: string | null
@@ -231,6 +283,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          collapsed_by_default?: boolean | null
           color?: string | null
           created_at?: string
           description?: string | null
@@ -242,6 +295,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          collapsed_by_default?: boolean | null
           color?: string | null
           created_at?: string
           description?: string | null
@@ -289,10 +343,57 @@ export type Database = {
         }
         Relationships: []
       }
+      project_steps: {
+        Row: {
+          canonical_step_id: string
+          created_at: string
+          custom_review_rounds: number | null
+          custom_weight_percent: number | null
+          id: string
+          is_included: boolean | null
+          project_id: string
+        }
+        Insert: {
+          canonical_step_id: string
+          created_at?: string
+          custom_review_rounds?: number | null
+          custom_weight_percent?: number | null
+          id?: string
+          is_included?: boolean | null
+          project_id: string
+        }
+        Update: {
+          canonical_step_id?: string
+          created_at?: string
+          custom_review_rounds?: number | null
+          custom_weight_percent?: number | null
+          id?: string
+          is_included?: boolean | null
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_steps_canonical_step_id_fkey"
+            columns: ["canonical_step_id"]
+            isOneToOne: false
+            referencedRelation: "canonical_steps"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_steps_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           buffer_percentage: number | null
+          client_name: string | null
           created_at: string
+          default_review_rounds: number | null
           description: string | null
           end_date: string
           id: string
@@ -300,11 +401,17 @@ export type Database = {
           owner_id: string
           start_date: string
           status: Database["public"]["Enums"]["project_status"]
+          timezone_client: string | null
+          timezone_pm: string | null
           updated_at: string
+          working_days_mask: number | null
+          zoom_link_default: string | null
         }
         Insert: {
           buffer_percentage?: number | null
+          client_name?: string | null
           created_at?: string
+          default_review_rounds?: number | null
           description?: string | null
           end_date: string
           id?: string
@@ -312,11 +419,17 @@ export type Database = {
           owner_id: string
           start_date: string
           status?: Database["public"]["Enums"]["project_status"]
+          timezone_client?: string | null
+          timezone_pm?: string | null
           updated_at?: string
+          working_days_mask?: number | null
+          zoom_link_default?: string | null
         }
         Update: {
           buffer_percentage?: number | null
+          client_name?: string | null
           created_at?: string
+          default_review_rounds?: number | null
           description?: string | null
           end_date?: string
           id?: string
@@ -324,7 +437,11 @@ export type Database = {
           owner_id?: string
           start_date?: string
           status?: Database["public"]["Enums"]["project_status"]
+          timezone_client?: string | null
+          timezone_pm?: string | null
           updated_at?: string
+          working_days_mask?: number | null
+          zoom_link_default?: string | null
         }
         Relationships: []
       }
@@ -369,6 +486,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          client_visible: boolean | null
           created_at: string
           description: string | null
           end_date: string | null
@@ -376,15 +494,20 @@ export type Database = {
           is_feedback_meeting: boolean | null
           is_milestone: boolean | null
           name: string
+          narrative_text: string | null
           order_index: number
           percentage_allocation: number
           phase_id: string
+          project_id: string | null
           review_rounds: number | null
           start_date: string | null
           status: Database["public"]["Enums"]["task_status"]
+          task_type: Database["public"]["Enums"]["task_type"]
           updated_at: string
+          weight_percent: number | null
         }
         Insert: {
+          client_visible?: boolean | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -392,15 +515,20 @@ export type Database = {
           is_feedback_meeting?: boolean | null
           is_milestone?: boolean | null
           name: string
+          narrative_text?: string | null
           order_index?: number
           percentage_allocation?: number
           phase_id: string
+          project_id?: string | null
           review_rounds?: number | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]
+          task_type?: Database["public"]["Enums"]["task_type"]
           updated_at?: string
+          weight_percent?: number | null
         }
         Update: {
+          client_visible?: boolean | null
           created_at?: string
           description?: string | null
           end_date?: string | null
@@ -408,13 +536,17 @@ export type Database = {
           is_feedback_meeting?: boolean | null
           is_milestone?: boolean | null
           name?: string
+          narrative_text?: string | null
           order_index?: number
           percentage_allocation?: number
           phase_id?: string
+          project_id?: string | null
           review_rounds?: number | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["task_status"]
+          task_type?: Database["public"]["Enums"]["task_type"]
           updated_at?: string
+          weight_percent?: number | null
         }
         Relationships: [
           {
@@ -422,6 +554,13 @@ export type Database = {
             columns: ["phase_id"]
             isOneToOne: false
             referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -470,6 +609,7 @@ export type Database = {
         | "review"
         | "completed"
         | "blocked"
+      task_type: "task" | "milestone" | "meeting"
       user_role: "pm" | "client"
     }
     CompositeTypes: {
@@ -601,6 +741,7 @@ export const Constants = {
       change_request_status: ["pending", "approved", "rejected"],
       project_status: ["draft", "active", "completed", "archived"],
       task_status: ["pending", "in_progress", "review", "completed", "blocked"],
+      task_type: ["task", "milestone", "meeting"],
       user_role: ["pm", "client"],
     },
   },
