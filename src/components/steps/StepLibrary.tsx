@@ -18,7 +18,8 @@ import {
   Plus,
   Eye,
   EyeOff,
-  X
+  X,
+  Pencil
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +35,8 @@ interface StepLibraryProps {
   readOnly?: boolean;
   allowLibraryEdit?: boolean;
   onDeleteCanonicalStep?: (stepId: string) => void;
+  onEditCanonicalStep?: (step: CanonicalStep) => void;
+  onAddCanonicalStep?: (phase: PhaseCategory) => void;
 }
 
 export function StepLibrary({ 
@@ -47,7 +50,9 @@ export function StepLibrary({
   onUpdateCustomStep,
   readOnly = false,
   allowLibraryEdit = false,
-  onDeleteCanonicalStep
+  onDeleteCanonicalStep,
+  onEditCanonicalStep,
+  onAddCanonicalStep
 }: StepLibraryProps) {
   const [steps, setSteps] = useState<CanonicalStep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -230,7 +235,7 @@ export function StepLibrary({
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                           {!readOnly && onStepDaysChange ? (
                             <div className="flex items-center gap-1">
                               <Input
@@ -246,6 +251,18 @@ export function StepLibrary({
                             </div>
                           ) : (
                             <span>{stepDays?.get(step.id) ?? 1} days</span>
+                          )}
+                          {allowLibraryEdit && onEditCanonicalStep && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditCanonicalStep(step);
+                              }}
+                              className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground"
+                              title="Edit step"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
                           )}
                           {allowLibraryEdit && onDeleteCanonicalStep && (
                             <button
@@ -315,7 +332,7 @@ export function StepLibrary({
                     </div>
                   ))}
 
-                  {/* Add Custom Step Button */}
+                  {/* Add Custom Step Button (for project creation) */}
                   {!readOnly && onAddCustomStep && (
                     <Button
                       variant="ghost"
@@ -328,6 +345,22 @@ export function StepLibrary({
                     >
                       <Plus className="w-4 h-4" />
                       Add custom step to {category}
+                    </Button>
+                  )}
+
+                  {/* Add Canonical Step Button (for library editing) */}
+                  {allowLibraryEdit && onAddCanonicalStep && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddCanonicalStep(category);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add step to {category}
                     </Button>
                   )}
                 </div>
