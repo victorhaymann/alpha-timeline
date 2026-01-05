@@ -2,12 +2,19 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { 
   Flag, 
   Users, 
   GripVertical,
   Plus,
-  RotateCcw
+  RotateCcw,
+  CalendarIcon
 } from 'lucide-react';
 import { 
   format, 
@@ -15,10 +22,14 @@ import {
   addDays, 
   startOfDay,
   eachDayOfInterval,
-  isWeekend,
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
   isSameDay
 } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { DateRange } from 'react-day-picker';
 
 interface GanttChartProps {
   projectStartDate: Date;
@@ -32,7 +43,8 @@ interface GanttChartProps {
   onAddReviewRound: (taskId: string) => void;
 }
 
-const DAY_WIDTH = 32; // pixels per day
+type ViewMode = 'day' | 'week' | 'month';
+
 const ROW_HEIGHT = 40;
 const HEADER_HEIGHT = 60;
 const PHASE_HEADER_HEIGHT = 36;
@@ -49,6 +61,12 @@ export function GanttChart({
   onAddReviewRound,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: projectStartDate,
+    to: projectEndDate,
+  });
+  
   const [dragging, setDragging] = useState<{
     taskId: string;
     type: 'move' | 'resize-start' | 'resize-end';
@@ -58,14 +76,9 @@ export function GanttChart({
   } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ start: Date; end: Date } | null>(null);
 
-  const totalDays = differenceInDays(projectEndDate, projectStartDate) + 1;
-  const chartWidth = totalDays * DAY_WIDTH;
-
-  // Generate day columns
-  const days = useMemo(() => 
-    eachDayOfInterval({ start: projectStartDate, end: projectEndDate }),
-    [projectStartDate, projectEndDate]
-  );
+  // View date range (use custom range or project range)
+  const viewStart = dateRange?.from || projectStartDate;
+  const viewEnd = dateRange?.to || projectEndDate;
 
   // Check if day is a working day
   const isWorkingDay = useCallback((date: Date) => {
@@ -74,16 +87,122 @@ export function GanttChart({
     return (workingDaysMask & dayBit) !== 0;
   }, [workingDaysMask]);
 
-  // Calculate position from date
+  // Generate working days only within the view range
+  const workingDays = useMemo(() => {
+    const allDays = eachDayOfInterval({ start: viewStart, end: viewEnd });
+    return allDays.filter(day => isWorkingDay(day));
+  }, [viewStart, viewEnd, isWorkingDay]);
+
+  // Calculate column width based on view mode
+  const columnWidth = useMemo(() => {
+    switch (viewMode) {
+      case 'week': return 48;
+      case 'month': return 64;
+      default: return 36;
+    }
+  }, [viewMode]);
+
+  // Group working days by week or month for aggregated views
+  const groupedColumns = useMemo(() => {
+    if (viewMode === 'day') {
+      return workingDays.map(day => ({
+        key: format(day, 'yyyy-MM-dd'),
+        label: format(day, 'd'),
+        subLabel: format(day, 'EEE'),
+        days: [day],
+        startDate: day,
+        endDate: day,
+      }));
+    }
+
+    if (viewMode === 'week') {
+      const weeks = new Map<string, { days: Date[]; start: Date; end: Date }>();
+      workingDays.forEach(day => {
+        const weekStart = startOfWeek(day, { weekStartsOn: 1 });
+        const key = format(weekStart, 'yyyy-MM-dd');
+        if (!weeks.has(key)) {
+          weeks.set(key, { 
+            days: [], 
+            start: weekStart,
+            end: endOfWeek(weekStart, { weekStartsOn: 1 })
+          });
+        }
+        weeks.get(key)!.days.push(day);
+      });
+      return Array.from(weeks.entries()).map(([key, { days, start, end }]) => ({
+        key,
+        label: `W${format(start, 'w')}`,
+        subLabel: format(start, 'MMM d'),
+        days,
+        startDate: start,
+        endDate: end,
+      }));
+    }
+
+    // Month view
+    const months = new Map<string, { days: Date[]; start: Date; end: Date }>();
+    workingDays.forEach(day => {
+      const monthStart = startOfMonth(day);
+      const key = format(monthStart, 'yyyy-MM');
+      if (!months.has(key)) {
+        months.set(key, {
+          days: [],
+          start: monthStart,
+          end: endOfMonth(monthStart),
+        });
+      }
+      months.get(key)!.days.push(day);
+    });
+    return Array.from(months.entries()).map(([key, { days, start, end }]) => ({
+      key,
+      label: format(start, 'MMM'),
+      subLabel: format(start, 'yyyy'),
+      days,
+      startDate: start,
+      endDate: end,
+    }));
+  }, [workingDays, viewMode]);
+
+  const chartWidth = groupedColumns.length * columnWidth;
+
+  // Calculate position from date (accounting for working days only)
   const dateToX = useCallback((date: Date) => {
-    return differenceInDays(startOfDay(date), startOfDay(projectStartDate)) * DAY_WIDTH;
-  }, [projectStartDate]);
+    const targetDay = startOfDay(date);
+    
+    // Find which column this date falls into
+    for (let i = 0; i < groupedColumns.length; i++) {
+      const col = groupedColumns[i];
+      if (targetDay >= col.startDate && targetDay <= col.endDate) {
+        return i * columnWidth;
+      }
+    }
+    
+    // If before first column, return 0
+    if (targetDay < groupedColumns[0]?.startDate) return 0;
+    
+    // If after last column, return end
+    return (groupedColumns.length - 1) * columnWidth;
+  }, [groupedColumns, columnWidth]);
 
   // Calculate date from position
   const xToDate = useCallback((x: number) => {
-    const days = Math.round(x / DAY_WIDTH);
-    return addDays(projectStartDate, days);
-  }, [projectStartDate]);
+    const colIndex = Math.round(x / columnWidth);
+    const col = groupedColumns[Math.min(Math.max(0, colIndex), groupedColumns.length - 1)];
+    return col?.days[0] || projectStartDate;
+  }, [groupedColumns, columnWidth, projectStartDate]);
+
+  // Calculate task width (counting working days only)
+  const getTaskWidth = useCallback((start: Date, end: Date) => {
+    const startCol = groupedColumns.findIndex(col => 
+      start >= col.startDate && start <= col.endDate
+    );
+    const endCol = groupedColumns.findIndex(col => 
+      end >= col.startDate && end <= col.endDate
+    );
+    
+    if (startCol === -1 || endCol === -1) return columnWidth;
+    return Math.max(columnWidth, (endCol - startCol + 1) * columnWidth);
+  }, [groupedColumns, columnWidth]);
 
   // Group tasks by phase
   const tasksByPhase = useMemo(() => {
@@ -126,7 +245,7 @@ export function GanttChart({
     if (!dragging || !dragPreview) return;
 
     const deltaX = e.clientX - dragging.startX;
-    const deltaDays = Math.round(deltaX / DAY_WIDTH);
+    const deltaDays = Math.round(deltaX / columnWidth);
 
     if (dragging.type === 'move') {
       setDragPreview({
@@ -150,7 +269,7 @@ export function GanttChart({
         });
       }
     }
-  }, [dragging, dragPreview]);
+  }, [dragging, dragPreview, columnWidth]);
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
@@ -184,269 +303,325 @@ export function GanttChart({
   });
 
   return (
-    <div className="relative overflow-auto border rounded-lg bg-card" ref={containerRef}>
-      <div className="relative" style={{ width: chartWidth + 200, minHeight: totalHeight }}>
-        {/* Fixed task names column */}
-        <div className="sticky left-0 z-20 bg-card border-r" style={{ width: 200 }}>
-          {/* Header */}
-          <div 
-            className="flex items-center px-3 border-b bg-muted/50 font-medium"
-            style={{ height: HEADER_HEIGHT }}
-          >
-            Tasks
-          </div>
-
-          {/* Phase and task rows */}
-          {phases.map(phase => {
-            const phaseTasks = tasksByPhase.get(phase.id) || [];
-            const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
-
-            return (
-              <div key={phase.id}>
-                {/* Phase header */}
-                <div 
-                  className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm"
-                  style={{ height: PHASE_HEADER_HEIGHT }}
-                >
-                  <div 
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: phaseColor }}
-                  />
-                  <span className="truncate">{phase.name}</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">
-                    {phaseTasks.length}
-                  </Badge>
-                </div>
-
-                {/* Task rows */}
-                {phaseTasks.map((task) => (
-                  <div 
-                    key={task.id}
-                    className="flex items-center gap-2 px-3 border-b hover:bg-muted/30 group"
-                    style={{ height: ROW_HEIGHT }}
-                  >
-                    <GripVertical className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
-                    {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                    {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
-                    <span className="text-sm truncate flex-1">{task.name}</span>
-                    <button
-                      onClick={() => onAddReviewRound(task.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded"
-                      title="Add review round"
-                    >
-                      <RotateCcw className="w-3 h-3 text-muted-foreground" />
-                    </button>
-                  </div>
-                ))}
-
-                {/* Add task button */}
-                <div 
-                  className="flex items-center px-3 border-b"
-                  style={{ height: ROW_HEIGHT }}
-                >
-                  <button
-                    onClick={() => onAddTask(phase.id)}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add task
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+    <div className="flex flex-col gap-3">
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* View mode toggle */}
+        <div className="flex items-center rounded-lg border bg-muted/30 p-1">
+          {(['day', 'week', 'month'] as ViewMode[]).map((mode) => (
+            <Button
+              key={mode}
+              variant={viewMode === mode ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-3 text-xs capitalize"
+              onClick={() => setViewMode(mode)}
+            >
+              {mode}ly
+            </Button>
+          ))}
         </div>
 
-        {/* Timeline area */}
-        <div 
-          className="absolute top-0 left-[200px]"
-          style={{ width: chartWidth }}
-          onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
-          onMouseUp={dragging ? handleDragEnd : undefined}
-          onMouseLeave={dragging ? handleDragEnd : undefined}
-        >
-          {/* Day headers */}
-          <div 
-            className="flex border-b bg-muted/50 sticky top-0 z-10"
-            style={{ height: HEADER_HEIGHT }}
-          >
-            {days.map((day, i) => {
-              const isToday = isSameDay(day, new Date());
-              const isNonWorking = !isWorkingDay(day);
+        {/* Date range picker */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 gap-2">
+              <CalendarIcon className="h-3.5 w-3.5" />
+              <span className="text-xs">
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d, yyyy')}
+                    </>
+                  ) : (
+                    format(dateRange.from, 'MMM d, yyyy')
+                  )
+                ) : (
+                  'Select date range'
+                )}
+              </span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={2}
+              className="pointer-events-auto"
+            />
+            <div className="flex items-center justify-between p-3 border-t">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDateRange({ from: projectStartDate, to: projectEndDate })}
+              >
+                Reset to project dates
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Working days info */}
+        <span className="text-xs text-muted-foreground ml-auto">
+          {workingDays.length} working days
+        </span>
+      </div>
+
+      {/* Gantt Chart */}
+      <div className="relative overflow-auto border rounded-lg bg-card" ref={containerRef}>
+        <div className="relative" style={{ width: chartWidth + 200, minHeight: totalHeight }}>
+          {/* Fixed task names column */}
+          <div className="sticky left-0 z-20 bg-card border-r" style={{ width: 200 }}>
+            {/* Header */}
+            <div 
+              className="flex items-center px-3 border-b bg-muted/50 font-medium"
+              style={{ height: HEADER_HEIGHT }}
+            >
+              Tasks
+            </div>
+
+            {/* Phase and task rows */}
+            {phases.map(phase => {
+              const phaseTasks = tasksByPhase.get(phase.id) || [];
+              const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
 
               return (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex flex-col items-center justify-center border-r text-xs shrink-0",
-                    isNonWorking && "bg-muted/50 text-muted-foreground",
-                    isToday && "bg-primary/10"
-                  )}
-                  style={{ width: DAY_WIDTH }}
-                >
-                  <span className="font-medium">{format(day, 'd')}</span>
-                  <span className="text-muted-foreground">{format(day, 'EEE')}</span>
+                <div key={phase.id}>
+                  {/* Phase header */}
+                  <div 
+                    className="flex items-center gap-2 px-3 border-b bg-muted/30 font-medium text-sm"
+                    style={{ height: PHASE_HEADER_HEIGHT }}
+                  >
+                    <div 
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: phaseColor }}
+                    />
+                    <span className="truncate">{phase.name}</span>
+                    <Badge variant="secondary" className="ml-auto text-xs">
+                      {phaseTasks.length}
+                    </Badge>
+                  </div>
+
+                  {/* Task rows */}
+                  {phaseTasks.map((task) => (
+                    <div 
+                      key={task.id}
+                      className="flex items-center gap-2 px-3 border-b hover:bg-muted/30 group"
+                      style={{ height: ROW_HEIGHT }}
+                    >
+                      <GripVertical className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab shrink-0" />
+                      {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                      {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-primary shrink-0" />}
+                      <span className="text-sm truncate flex-1">{task.name}</span>
+                      <button
+                        onClick={() => onAddReviewRound(task.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded"
+                        title="Add review round"
+                      >
+                        <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add task button */}
+                  <div 
+                    className="flex items-center px-3 border-b"
+                    style={{ height: ROW_HEIGHT }}
+                  >
+                    <button
+                      onClick={() => onAddTask(phase.id)}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add task
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Phase rows with task bars */}
-          {phases.map(phase => {
-            const phaseTasks = tasksByPhase.get(phase.id) || [];
-            const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
+          {/* Timeline area */}
+          <div 
+            className="absolute top-0 left-[200px]"
+            style={{ width: chartWidth }}
+            onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
+            onMouseUp={dragging ? handleDragEnd : undefined}
+            onMouseLeave={dragging ? handleDragEnd : undefined}
+          >
+            {/* Column headers */}
+            <div 
+              className="flex border-b bg-muted/50 sticky top-0 z-10"
+              style={{ height: HEADER_HEIGHT }}
+            >
+              {groupedColumns.map((col) => {
+                const isToday = col.days.some(d => isSameDay(d, new Date()));
 
-            return (
-              <div key={phase.id}>
-                {/* Phase header row */}
-                <div 
-                  className="border-b"
-                  style={{ height: PHASE_HEADER_HEIGHT }}
-                >
-                  <div className="flex h-full">
-                    {days.map((day, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "border-r shrink-0",
-                          !isWorkingDay(day) && "bg-muted/30"
-                        )}
-                        style={{ width: DAY_WIDTH }}
-                      />
-                    ))}
+                return (
+                  <div
+                    key={col.key}
+                    className={cn(
+                      "flex flex-col items-center justify-center border-r text-xs shrink-0",
+                      isToday && "bg-primary/10"
+                    )}
+                    style={{ width: columnWidth }}
+                  >
+                    <span className="font-medium">{col.label}</span>
+                    <span className="text-muted-foreground text-[10px]">{col.subLabel}</span>
                   </div>
-                </div>
+                );
+              })}
+            </div>
 
-                {/* Task bars */}
-                {phaseTasks.map((task) => {
-                  const isCurrentlyDragging = dragging?.taskId === task.id;
-                  const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
-                  const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
+            {/* Phase rows with task bars */}
+            {phases.map(phase => {
+              const phaseTasks = tasksByPhase.get(phase.id) || [];
+              const phaseColor = PHASE_CATEGORY_COLORS[phase.name as PhaseCategory] || '#6B7280';
 
-                  if (!displayStart || !displayEnd) return (
-                    <div key={task.id} className="border-b" style={{ height: ROW_HEIGHT }}>
-                      <div className="flex h-full">
-                        {days.map((day, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              "border-r shrink-0",
-                              !isWorkingDay(day) && "bg-muted/30"
-                            )}
-                            style={{ width: DAY_WIDTH }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-
-                  const left = dateToX(displayStart);
-                  const width = Math.max(DAY_WIDTH, (differenceInDays(displayEnd, displayStart) + 1) * DAY_WIDTH);
-
-                  return (
-                    <div key={task.id} className="relative border-b" style={{ height: ROW_HEIGHT }}>
-                      {/* Grid background */}
-                      <div className="absolute inset-0 flex">
-                        {days.map((day, i) => (
-                          <div
-                            key={i}
-                            className={cn(
-                              "border-r shrink-0",
-                              !isWorkingDay(day) && "bg-muted/30"
-                            )}
-                            style={{ width: DAY_WIDTH }}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Task bar */}
-                      <div
-                        className={cn(
-                          "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move transition-shadow",
-                          "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
-                          isCurrentlyDragging && "opacity-80 ring-2 ring-primary",
-                          task.task_type === 'milestone' && "rounded-full",
-                          task.task_type === 'meeting' && "bg-primary/80"
-                        )}
-                        style={{
-                          left: left + 2,
-                          width: task.task_type === 'milestone' ? 24 : width - 4,
-                          backgroundColor: task.task_type === 'milestone' 
-                            ? '#F59E0B' 
-                            : task.task_type === 'meeting'
-                              ? undefined
-                              : phaseColor,
-                        }}
-                        onMouseDown={(e) => handleDragStart(e, task, 'move')}
-                      >
-                        {task.task_type !== 'milestone' && (
-                          <>
-                            {/* Resize handle - start */}
-                            <div
-                              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                handleDragStart(e, task, 'resize-start');
-                              }}
-                            />
-
-                            {/* Task name */}
-                            <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                              <span className="text-xs font-medium text-white truncate drop-shadow-sm">
-                                {width > 60 ? task.name : ''}
-                              </span>
-                            </div>
-
-                            {/* Resize handle - end */}
-                            <div
-                              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
-                              onMouseDown={(e) => {
-                                e.stopPropagation();
-                                handleDragStart(e, task, 'resize-end');
-                              }}
-                            />
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Add task row */}
-                <div className="border-b" style={{ height: ROW_HEIGHT }}>
-                  <div className="flex h-full">
-                    {days.map((day, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "border-r shrink-0",
-                          !isWorkingDay(day) && "bg-muted/30"
-                        )}
-                        style={{ width: DAY_WIDTH }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Today marker */}
-          {(() => {
-            const today = new Date();
-            if (today >= projectStartDate && today <= projectEndDate) {
-              const todayX = dateToX(today);
               return (
-                <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-destructive z-30 pointer-events-none"
-                  style={{ left: todayX + DAY_WIDTH / 2 }}
-                >
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-destructive" />
+                <div key={phase.id}>
+                  {/* Phase header row */}
+                  <div 
+                    className="border-b"
+                    style={{ height: PHASE_HEADER_HEIGHT }}
+                  >
+                    <div className="flex h-full">
+                      {groupedColumns.map((col) => (
+                        <div
+                          key={col.key}
+                          className="border-r shrink-0"
+                          style={{ width: columnWidth }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Task bars */}
+                  {phaseTasks.map((task) => {
+                    const isCurrentlyDragging = dragging?.taskId === task.id;
+                    const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
+                    const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
+
+                    if (!displayStart || !displayEnd) return (
+                      <div key={task.id} className="border-b" style={{ height: ROW_HEIGHT }}>
+                        <div className="flex h-full">
+                          {groupedColumns.map((col) => (
+                            <div
+                              key={col.key}
+                              className="border-r shrink-0"
+                              style={{ width: columnWidth }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+
+                    const left = dateToX(displayStart);
+                    const width = getTaskWidth(displayStart, displayEnd);
+
+                    return (
+                      <div key={task.id} className="relative border-b" style={{ height: ROW_HEIGHT }}>
+                        {/* Grid background */}
+                        <div className="absolute inset-0 flex">
+                          {groupedColumns.map((col) => (
+                            <div
+                              key={col.key}
+                              className="border-r shrink-0"
+                              style={{ width: columnWidth }}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Task bar */}
+                        <div
+                          className={cn(
+                            "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move transition-shadow",
+                            "hover:shadow-lg hover:ring-2 hover:ring-primary/30",
+                            isCurrentlyDragging && "opacity-80 ring-2 ring-primary",
+                            task.task_type === 'milestone' && "rounded-full",
+                            task.task_type === 'meeting' && "bg-primary/80"
+                          )}
+                          style={{
+                            left: left + 2,
+                            width: task.task_type === 'milestone' ? 24 : width - 4,
+                            backgroundColor: task.task_type === 'milestone' 
+                              ? '#F59E0B' 
+                              : task.task_type === 'meeting'
+                                ? undefined
+                                : phaseColor,
+                          }}
+                          onMouseDown={(e) => handleDragStart(e, task, 'move')}
+                        >
+                          {task.task_type !== 'milestone' && (
+                            <>
+                              {/* Resize handle - start */}
+                              <div
+                                className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  handleDragStart(e, task, 'resize-start');
+                                }}
+                              />
+
+                              {/* Task name */}
+                              <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
+                                <span className="text-xs font-medium text-white truncate drop-shadow-sm">
+                                  {width > 60 ? task.name : ''}
+                                </span>
+                              </div>
+
+                              {/* Resize handle - end */}
+                              <div
+                                className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation();
+                                  handleDragStart(e, task, 'resize-end');
+                                }}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Add task row */}
+                  <div className="border-b" style={{ height: ROW_HEIGHT }}>
+                    <div className="flex h-full">
+                      {groupedColumns.map((col) => (
+                        <div
+                          key={col.key}
+                          className="border-r shrink-0"
+                          style={{ width: columnWidth }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               );
-            }
-            return null;
-          })()}
+            })}
+
+            {/* Today marker */}
+            {(() => {
+              const today = new Date();
+              const todayColIndex = groupedColumns.findIndex(col => 
+                col.days.some(d => isSameDay(d, today))
+              );
+              if (todayColIndex !== -1) {
+                const todayX = todayColIndex * columnWidth;
+                return (
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-destructive z-30 pointer-events-none"
+                    style={{ left: todayX + columnWidth / 2 }}
+                  >
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-destructive" />
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
         </div>
       </div>
     </div>
