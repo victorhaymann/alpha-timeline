@@ -1067,6 +1067,8 @@ export function GanttChart({
                             tasks={tasks}
                             left={left}
                             columnWidth={columnWidth}
+                            allMeetingDates={section.task.recurring_dates || []}
+                            meetingIndex={idx}
                           />
                         );
                       })}

@@ -6,7 +6,7 @@ import {
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
 import { Users, Clock, CheckCircle2, PlayCircle } from 'lucide-react';
-import { format, differenceInDays, startOfDay } from 'date-fns';
+import { format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns';
 
 interface MeetingHoverCardProps {
   meetingDate: Date;
@@ -17,6 +17,8 @@ interface MeetingHoverCardProps {
   tasks: Task[];
   left: number;
   columnWidth: number;
+  allMeetingDates: string[]; // All recurring dates to calculate previous meeting
+  meetingIndex: number; // Index of this meeting in the array
 }
 
 export function MeetingHoverCard({
@@ -28,22 +30,56 @@ export function MeetingHoverCard({
   tasks,
   left,
   columnWidth,
+  allMeetingDates,
+  meetingIndex,
 }: MeetingHoverCardProps) {
-  // Tasks "To be reviewed" - currently in progress
+  // Tasks "To be reviewed" - tasks in progress at the time of this meeting
+  // (their date range overlaps with the meeting date)
   const inProgressTasks = useMemo(() => {
-    return tasks.filter(task => task.status === 'in_progress');
-  }, [tasks]);
-
-  // Tasks "To be validated" - completed within the last 5 days
-  const recentlyCompletedTasks = useMemo(() => {
-    const today = startOfDay(new Date());
+    const meetingDay = startOfDay(meetingDate);
     return tasks.filter(task => {
-      if (task.status !== 'completed' || !task.end_date) return false;
-      const endDate = startOfDay(new Date(task.end_date));
-      const daysSinceCompletion = differenceInDays(today, endDate);
-      return daysSinceCompletion >= 0 && daysSinceCompletion <= 5;
+      if (!task.start_date || !task.end_date) return false;
+      // Exclude meetings and milestones
+      if (task.task_type === 'meeting' || task.is_milestone) return false;
+      
+      const taskStart = startOfDay(new Date(task.start_date));
+      const taskEnd = startOfDay(new Date(task.end_date));
+      
+      // Task is "in progress" if meeting date falls within the task's date range
+      return (isBefore(taskStart, meetingDay) || isSameDay(taskStart, meetingDay)) &&
+             (isAfter(taskEnd, meetingDay) || isSameDay(taskEnd, meetingDay));
     });
-  }, [tasks]);
+  }, [tasks, meetingDate]);
+
+  // Tasks "To be validated" - tasks completed between the previous meeting and this one
+  const recentlyCompletedTasks = useMemo(() => {
+    const meetingDay = startOfDay(meetingDate);
+    
+    // Find previous meeting date
+    let previousMeetingDay: Date | null = null;
+    if (meetingIndex > 0 && allMeetingDates[meetingIndex - 1]) {
+      previousMeetingDay = startOfDay(new Date(allMeetingDates[meetingIndex - 1]));
+    }
+    
+    return tasks.filter(task => {
+      if (!task.end_date) return false;
+      // Exclude meetings and milestones
+      if (task.task_type === 'meeting' || task.is_milestone) return false;
+      
+      const taskEnd = startOfDay(new Date(task.end_date));
+      
+      // Task ended before or on this meeting date
+      const endedBeforeMeeting = isBefore(taskEnd, meetingDay) || isSameDay(taskEnd, meetingDay);
+      
+      // If there's a previous meeting, task must have ended after it
+      // If no previous meeting, include all tasks that ended before this meeting
+      const endedAfterPreviousMeeting = previousMeetingDay 
+        ? isAfter(taskEnd, previousMeetingDay)
+        : true;
+      
+      return endedBeforeMeeting && endedAfterPreviousMeeting;
+    });
+  }, [tasks, meetingDate, allMeetingDates, meetingIndex]);
 
   // Format meeting time with duration
   const formattedTime = useMemo(() => {
