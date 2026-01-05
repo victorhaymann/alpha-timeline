@@ -1,5 +1,4 @@
 import { useMemo, useState, useEffect } from 'react';
-import { cn } from '@/lib/utils';
 import { Task } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -35,9 +34,6 @@ interface MeetingHoverCardProps {
   projectId: string;
   onDelete?: () => void;
   readOnly?: boolean;
-  verticalOffset?: number;
-  isDragging?: boolean;
-  onDragStart?: (e: React.MouseEvent) => void;
 }
 
 interface TaskNote {
@@ -62,9 +58,6 @@ export function MeetingHoverCard({
   projectId,
   onDelete,
   readOnly = false,
-  verticalOffset = 0,
-  isDragging = false,
-  onDragStart,
 }: MeetingHoverCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -287,15 +280,8 @@ export function MeetingHoverCard({
       <HoverCard openDelay={100} closeDelay={50}>
         <HoverCardTrigger asChild>
           <div
-            className={cn(
-              "absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm transition-all shadow-sm z-10",
-              isDragging ? "scale-150 cursor-grabbing opacity-70" : "hover:scale-125 cursor-grab"
-            )}
-            style={{ 
-              left: left + columnWidth / 2 - 8,
-              transform: `translateY(calc(-50% + ${verticalOffset}px)) rotate(45deg)`,
-            }}
-            onMouseDown={onDragStart}
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm"
+            style={{ left: left + columnWidth / 2 - 8 }}
           />
         </HoverCardTrigger>
         <HoverCardContent 
