@@ -10,6 +10,7 @@
 export type UserRole = 'pm' | 'client';
 export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'blocked';
+export type TaskType = 'task' | 'milestone' | 'meeting';
 export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Profile {
@@ -31,11 +32,17 @@ export interface Project {
   id: string;
   name: string;
   description: string | null;
+  client_name: string | null;
   start_date: string;
   end_date: string;
   status: ProjectStatus;
   owner_id: string;
   buffer_percentage: number;
+  default_review_rounds: number;
+  timezone_pm: string;
+  timezone_client: string;
+  working_days_mask: number; // Binary mask: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16 (Mon-Fri = 31)
+  zoom_link_default: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +55,7 @@ export interface Phase {
   percentage_allocation: number;
   order_index: number;
   color: string;
+  collapsed_by_default: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -55,15 +63,20 @@ export interface Phase {
 export interface Task {
   id: string;
   phase_id: string;
+  project_id: string | null;
   name: string;
   description: string | null;
   start_date: string | null;
   end_date: string | null;
   status: TaskStatus;
+  task_type: TaskType;
   percentage_allocation: number;
+  weight_percent: number;
   is_milestone: boolean;
   is_feedback_meeting: boolean;
+  client_visible: boolean;
   review_rounds: number;
+  narrative_text: string | null;
   order_index: number;
   created_at: string;
   updated_at: string;
@@ -83,6 +96,7 @@ export interface Invite {
   email: string;
   role: UserRole;
   token: string;
+  status: string;
   accepted_at: string | null;
   expires_at: string;
   created_at: string;
@@ -93,6 +107,7 @@ export interface Comment {
   task_id: string;
   user_id: string;
   content: string;
+  author_role: string;
   created_at: string;
   updated_at: string;
 }
@@ -105,6 +120,7 @@ export interface ChangeRequest {
   title: string;
   description: string;
   status: ChangeRequestStatus;
+  author_role: string;
   response: string | null;
   responded_at: string | null;
   created_at: string;
@@ -132,6 +148,32 @@ export interface StepTemplate {
   created_at: string;
 }
 
+// Canonical step library (global, read-only)
+export interface CanonicalStep {
+  id: string;
+  phase_category: string;
+  name: string;
+  description: string | null;
+  task_type: TaskType;
+  default_weight_percent: number;
+  default_review_rounds: number;
+  is_optional: boolean;
+  sort_order: number;
+  category_group: string | null; // 'core' | 'immersive_addon'
+  created_at: string;
+}
+
+// Project-specific step configuration
+export interface ProjectStep {
+  id: string;
+  project_id: string;
+  canonical_step_id: string;
+  is_included: boolean;
+  custom_weight_percent: number | null;
+  custom_review_rounds: number | null;
+  created_at: string;
+}
+
 // Extended types with relations
 export interface PhaseWithTasks extends Phase {
   tasks: Task[];
@@ -145,3 +187,31 @@ export interface TaskWithDependencies extends Task {
   dependencies: Dependency[];
   dependents: Dependency[];
 }
+
+export interface CanonicalStepWithSelection extends CanonicalStep {
+  is_included: boolean;
+  custom_weight_percent: number | null;
+  custom_review_rounds: number | null;
+}
+
+// Phase categories for grouping
+export const PHASE_CATEGORIES = [
+  'Discovery',
+  'Pre-Production', 
+  'Production',
+  'Post-Production',
+  'Delivery',
+  'Immersive'
+] as const;
+
+export type PhaseCategory = typeof PHASE_CATEGORIES[number];
+
+// Phase category colors
+export const PHASE_CATEGORY_COLORS: Record<PhaseCategory, string> = {
+  'Discovery': '#8B5CF6',      // Purple
+  'Pre-Production': '#F59E0B', // Amber
+  'Production': '#22D3EE',     // Cyan
+  'Post-Production': '#10B981', // Green
+  'Delivery': '#F97316',       // Orange
+  'Immersive': '#EC4899'       // Pink
+};
