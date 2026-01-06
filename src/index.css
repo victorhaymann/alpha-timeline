@@ -487,4 +487,10 @@
   .gantt-grip-handle:active {
     @apply cursor-grabbing text-primary;
   }
+
+  /* Swap target highlight - only the item being swapped */
+  .gantt-swap-target {
+    @apply bg-primary/5 border-l-2 border-primary/30;
+    transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
+  }
 }

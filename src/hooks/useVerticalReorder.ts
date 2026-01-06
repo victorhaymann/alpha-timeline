@@ -26,6 +26,7 @@ interface UseVerticalReorderReturn {
   ) => void;
   getVerticalDragClasses: (taskId: string) => string;
   getVerticalDragStyles: (taskId: string, actualIndex: number) => React.CSSProperties;
+  getSwapTargetClasses: (taskId: string, actualIndex: number) => string;
   getDropIndicatorIndex: () => number | null;
 }
 
@@ -124,32 +125,36 @@ export function useVerticalReorder({
       };
     }
     
-    // Other items shift to make room
+    // SWAP-ONLY: Only the item at the current drop position swaps
     const draggedOriginalIndex = verticalDrag.originalIndex;
     const draggedCurrentIndex = verticalDrag.currentIndex;
     
-    if (draggedCurrentIndex > draggedOriginalIndex) {
-      // Dragging down - items between original and current shift up
-      if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex) {
-        return {
-          transform: `translateY(-${rowHeight}px)`,
-          transition: 'transform 150ms ease-out',
-        };
-      }
-    } else if (draggedCurrentIndex < draggedOriginalIndex) {
-      // Dragging up - items between current and original shift down
-      if (actualIndex >= draggedCurrentIndex && actualIndex < draggedOriginalIndex) {
-        return {
-          transform: `translateY(${rowHeight}px)`,
-          transition: 'transform 150ms ease-out',
-        };
-      }
+    // Only affect the single item being swapped with
+    if (actualIndex === draggedCurrentIndex && draggedCurrentIndex !== draggedOriginalIndex) {
+      // This item moves to where the dragged item started
+      const distance = (draggedOriginalIndex - draggedCurrentIndex) * rowHeight;
+      return {
+        transform: `translateY(${distance}px)`,
+        transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+      };
     }
     
     return {
-      transition: 'transform 150ms ease-out',
+      transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
     };
   }, [verticalDrag, rowHeight]);
+
+  const getSwapTargetClasses = useCallback((taskId: string, actualIndex: number): string => {
+    if (!verticalDrag) return '';
+    
+    // Highlight the item that will be swapped (not the dragged item itself)
+    if (actualIndex === verticalDrag.currentIndex && 
+        verticalDrag.currentIndex !== verticalDrag.originalIndex &&
+        verticalDrag.taskId !== taskId) {
+      return 'gantt-swap-target';
+    }
+    return '';
+  }, [verticalDrag]);
 
   const getDropIndicatorIndex = useCallback((): number | null => {
     if (!verticalDrag) return null;
@@ -162,6 +167,7 @@ export function useVerticalReorder({
     handleVerticalDragStart,
     getVerticalDragClasses,
     getVerticalDragStyles,
+    getSwapTargetClasses,
     getDropIndicatorIndex,
   };
 }
