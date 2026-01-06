@@ -88,6 +88,50 @@ function isValidDate(date: unknown): date is Date {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
+// Safely parse a date string or Date, returning null if invalid
+function safeParseDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return isValidDate(value) ? value : null;
+  }
+  try {
+    const parsed = new Date(value);
+    return isValidDate(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Safe format with fallback
+function safeFormat(date: Date | null | undefined, formatStr: string, fallback = '—'): string {
+  if (!date || !isValidDate(date)) return fallback;
+  try {
+    return format(date, formatStr);
+  } catch {
+    return fallback;
+  }
+}
+
+// Safe differenceInDays
+function safeDifferenceInDays(end: Date | null | undefined, start: Date | null | undefined): number | null {
+  if (!end || !start || !isValidDate(end) || !isValidDate(start)) return null;
+  try {
+    return differenceInDays(end, start);
+  } catch {
+    return null;
+  }
+}
+
+// Safe isSameDay
+function safeIsSameDay(date1: Date | null | undefined, date2: Date | null | undefined): boolean {
+  if (!date1 || !date2 || !isValidDate(date1) || !isValidDate(date2)) return false;
+  try {
+    return isSameDay(date1, date2);
+  } catch {
+    return false;
+  }
+}
+
 export function GanttChart({
   projectId,
   projectStartDate,
@@ -227,19 +271,27 @@ export function GanttChart({
   }, [groupedColumns]);
 
   // Group columns by month for the month header row
+  // Store actual Date objects to avoid parsing formatted strings later
   const monthGroups = useMemo(() => {
-    const groups: { month: string; startIndex: number; count: number }[] = [];
-    let currentMonth = '';
+    const groups: { monthDate: Date; monthLabel: string; startIndex: number; count: number }[] = [];
+    let currentMonthKey = '';
     let startIndex = 0;
     let count = 0;
+    let currentMonthDate: Date | null = null;
 
     groupedColumns.forEach((col, index) => {
-      const month = format(col.startDate, 'MMMM yyyy');
-      if (month !== currentMonth) {
-        if (currentMonth) {
-          groups.push({ month: currentMonth, startIndex, count });
+      const monthKey = safeFormat(col.startDate, 'yyyy-MM', 'unknown');
+      if (monthKey !== currentMonthKey) {
+        if (currentMonthKey && currentMonthDate) {
+          groups.push({ 
+            monthDate: currentMonthDate, 
+            monthLabel: safeFormat(currentMonthDate, 'MMMM', 'Unknown'),
+            startIndex, 
+            count 
+          });
         }
-        currentMonth = month;
+        currentMonthKey = monthKey;
+        currentMonthDate = col.startDate;
         startIndex = index;
         count = 1;
       } else {
@@ -247,8 +299,13 @@ export function GanttChart({
       }
     });
 
-    if (currentMonth) {
-      groups.push({ month: currentMonth, startIndex, count });
+    if (currentMonthKey && currentMonthDate) {
+      groups.push({ 
+        monthDate: currentMonthDate, 
+        monthLabel: safeFormat(currentMonthDate, 'MMMM', 'Unknown'),
+        startIndex, 
+        count 
+      });
     }
 
     return groups;
@@ -262,8 +319,8 @@ export function GanttChart({
     let count = 0;
     let weekCounter = 0;
 
-    // Find the first Monday from project start to establish W1
-    const firstMonday = startOfWeek(projectStartDate, { weekStartsOn: 1 });
+    // Use validated date
+    const firstMonday = startOfWeek(validStartDate, { weekStartsOn: 1 });
 
     groupedColumns.forEach((col, index) => {
       const weekNum = col.weekNumber;
@@ -286,7 +343,7 @@ export function GanttChart({
     }
 
     return groups;
-  }, [groupedColumns, projectStartDate]);
+  }, [groupedColumns, validStartDate]);
 
   // Observe container width for responsive columns
   useEffect(() => {
@@ -378,8 +435,8 @@ export function GanttChart({
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     // All views show full project range - difference is in column display (days vs weeks)
-    setDateRange({ from: projectStartDate, to: projectEndDate });
-  }, [projectStartDate, projectEndDate]);
+    setDateRange({ from: validStartDate, to: validEndDate });
+  }, [validStartDate, validEndDate]);
 
   // Navigate to previous/next period based on view mode
   const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
@@ -1059,13 +1116,15 @@ export function GanttChart({
                   {/* Review cycles - 2 rows each (base+rework on top, review below) */}
                   {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle, cycleIndex) => {
                     // Row 1: Base Task + Rework (on same line)
-                    const baseStartDate = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
-                    const baseEndDate = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
-                    const baseDuration = baseStartDate && baseEndDate ? differenceInDays(baseEndDate, baseStartDate) + 1 : null;
+                    const baseStartDate = safeParseDate(cycle.baseTask.start_date);
+                    const baseEndDate = safeParseDate(cycle.baseTask.end_date);
+                    const baseDaysDiff = safeDifferenceInDays(baseEndDate, baseStartDate);
+                    const baseDuration = baseDaysDiff !== null ? baseDaysDiff + 1 : null;
                     
-                    const reworkStartDate = cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null;
-                    const reworkEndDate = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
-                    const reworkDuration = reworkStartDate && reworkEndDate ? differenceInDays(reworkEndDate, reworkStartDate) + 1 : null;
+                    const reworkStartDate = safeParseDate(cycle.reworkTask?.start_date);
+                    const reworkEndDate = safeParseDate(cycle.reworkTask?.end_date);
+                    const reworkDaysDiff = safeDifferenceInDays(reworkEndDate, reworkStartDate);
+                    const reworkDuration = reworkDaysDiff !== null ? reworkDaysDiff + 1 : null;
 
                     const isBeingDragged = verticalDrag?.taskId === cycle.baseTask.id;
 
@@ -1139,11 +1198,14 @@ export function GanttChart({
                               ↳ {cycle.reviewTask.name}
                             </span>
                             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
-                              {cycle.reviewTask.start_date && (
-                                <span className="font-medium">
-                                  {format(new Date(cycle.reviewTask.start_date), 'MMM d')}
-                                </span>
-                              )}
+                              {cycle.reviewTask.start_date && (() => {
+                                const reviewDate = safeParseDate(cycle.reviewTask.start_date);
+                                return reviewDate ? (
+                                  <span className="font-medium">
+                                    {safeFormat(reviewDate, 'MMM d')}
+                                  </span>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                         )}
@@ -1153,11 +1215,10 @@ export function GanttChart({
 
                   {/* Ungrouped tasks (not part of any cycle) */}
                   {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task, taskIndex) => {
-                    const startDate = task.start_date ? new Date(task.start_date) : null;
-                    const endDate = task.end_date ? new Date(task.end_date) : null;
-                    const duration = startDate && endDate 
-                      ? differenceInDays(endDate, startDate) + 1 
-                      : null;
+                    const startDate = safeParseDate(task.start_date);
+                    const endDate = safeParseDate(task.end_date);
+                    const daysDiff = safeDifferenceInDays(endDate, startDate);
+                    const duration = daysDiff !== null ? daysDiff + 1 : null;
 
                     // Calculate overall index (cycles count + taskIndex)
                     const overallIndex = section.cycles.length + taskIndex;
@@ -1216,7 +1277,7 @@ export function GanttChart({
                           )}
                           {startDate && (
                             <span className="font-medium">
-                              {format(startDate, 'MMM d')}
+                              {safeFormat(startDate, 'MMM d')}
                             </span>
                           )}
                           {startDate && endDate && (
@@ -1224,7 +1285,7 @@ export function GanttChart({
                           )}
                           {endDate && (
                             <span className="font-medium">
-                              {format(endDate, 'MMM d')}
+                              {safeFormat(endDate, 'MMM d')}
                             </span>
                           )}
                         </div>
@@ -1258,11 +1319,11 @@ export function GanttChart({
               <div className="flex border-b border-border/60" style={{ height: MONTH_ROW_HEIGHT, width: chartWidth }}>
                 {monthGroups.map((group, idx) => (
                   <div
-                    key={`month-${group.month}-${idx}`}
+                    key={`month-${group.monthLabel}-${idx}`}
                     className="flex items-center justify-center text-xs font-bold uppercase tracking-wider text-foreground border-r border-border/60 shrink-0"
                     style={{ width: group.count * columnWidth }}
                   >
-                    {format(new Date(group.month), 'MMMM')}
+                    {group.monthLabel}
                   </div>
                 ))}
               </div>
@@ -1375,12 +1436,14 @@ export function GanttChart({
 
                           {/* Diamond markers for each recurring date with hover card */}
                           {section.task.recurring_dates?.map((dateStr, idx) => {
-                            const meetingDate = new Date(dateStr);
+                            const meetingDate = safeParseDate(dateStr);
+                            if (!meetingDate) return null; // Skip invalid dates
+                            
                             const left = dateToX(meetingDate);
                             
                             // Check if this date is visible in current view
                             const colIndex = groupedColumns.findIndex(col => 
-                              isSameDay(col.startDate, meetingDate)
+                              safeIsSameDay(col.startDate, meetingDate)
                             );
                             if (colIndex === -1) return null;
 
@@ -1422,22 +1485,22 @@ export function GanttChart({
                         // Get positions for all tasks in the cycle - USE DRAG PREVIEW when dragging
                         const baseStart = isBaseDragging && dragPreview 
                           ? dragPreview.start 
-                          : (cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null);
+                          : safeParseDate(cycle.baseTask.start_date);
                         const baseEnd = isBaseDragging && dragPreview 
                           ? dragPreview.end 
-                          : (cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null);
+                          : safeParseDate(cycle.baseTask.end_date);
                         const reviewStart = isReviewDragging && dragPreview 
                           ? dragPreview.start 
-                          : (cycle.reviewTask?.start_date ? new Date(cycle.reviewTask.start_date) : null);
+                          : safeParseDate(cycle.reviewTask?.start_date);
                         const reviewEnd = isReviewDragging && dragPreview 
                           ? dragPreview.end 
-                          : (cycle.reviewTask?.end_date ? new Date(cycle.reviewTask.end_date) : null);
+                          : safeParseDate(cycle.reviewTask?.end_date);
                         const reworkStart = isReworkDragging && dragPreview 
                           ? dragPreview.start 
-                          : (cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null);
+                          : safeParseDate(cycle.reworkTask?.start_date);
                         const reworkEnd = isReworkDragging && dragPreview 
                           ? dragPreview.end 
-                          : (cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null);
+                          : safeParseDate(cycle.reworkTask?.end_date);
 
                         const baseLeft = baseStart ? dateToX(baseStart) : 0;
                         const baseWidth = baseStart && baseEnd ? getTaskWidth(baseStart, baseEnd) : 0;
@@ -1530,7 +1593,7 @@ export function GanttChart({
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{cycle.baseTask.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {format(baseStart, 'MMM d')} → {format(baseEnd, 'MMM d')}
+                                      {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
@@ -1539,7 +1602,8 @@ export function GanttChart({
 
                               {/* Rework Task bar (on same row) */}
                               {cycle.reworkTask && reworkStart && reworkEnd && reworkWidth > 0 && (() => {
-                                const reworkDuration = differenceInDays(reworkEnd, reworkStart) + 1;
+                                const reworkDaysDiff = safeDifferenceInDays(reworkEnd, reworkStart);
+                                const reworkDuration = reworkDaysDiff !== null ? reworkDaysDiff + 1 : 0;
                                 const isReworkResizing = isReworkDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                                 const reworkDurationChanged = isReworkResizing && dragging?.originalDuration && reworkDuration !== dragging.originalDuration;
                                 
@@ -1603,7 +1667,7 @@ export function GanttChart({
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{cycle.reworkTask.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {format(reworkStart, 'MMM d')} → {format(reworkEnd, 'MMM d')}
+                                      {safeFormat(reworkStart, 'MMM d')} → {safeFormat(reworkEnd, 'MMM d')}
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
@@ -1683,7 +1747,8 @@ export function GanttChart({
 
                               {/* Review task bar with dashed border (draggable) */}
                               {cycle.reviewTask && reviewStart && reviewEnd && reviewWidth > 0 && (() => {
-                                const reviewDuration = differenceInDays(reviewEnd, reviewStart) + 1;
+                                const reviewDaysDiff = safeDifferenceInDays(reviewEnd, reviewStart);
+                                const reviewDuration = reviewDaysDiff !== null ? reviewDaysDiff + 1 : 0;
                                 const isReviewResizing = isReviewDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                                 const reviewDurationChanged = isReviewResizing && dragging?.originalDuration && reviewDuration !== dragging.originalDuration;
                                 
@@ -1748,7 +1813,7 @@ export function GanttChart({
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{cycle.reviewTask.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {format(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${format(reviewEnd, 'MMM d')}` : ''}
+                                      {safeFormat(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${safeFormat(reviewEnd, 'MMM d')}` : ''}
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
@@ -1763,10 +1828,11 @@ export function GanttChart({
                       {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task) => {
                         const isCurrentlyDragging = dragging?.taskId === task.id;
                         const isJustDropped = justDropped === task.id;
-                        const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
-                        const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
+                        const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : safeParseDate(task.start_date);
+                        const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : safeParseDate(task.end_date);
 
-                        const currentDuration = displayStart && displayEnd ? differenceInDays(displayEnd, displayStart) + 1 : null;
+                        const currentDaysDiff = safeDifferenceInDays(displayEnd, displayStart);
+                        const currentDuration = currentDaysDiff !== null ? currentDaysDiff + 1 : null;
                         const originalDuration = dragging?.originalDuration;
                         const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                         const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
@@ -1850,7 +1916,7 @@ export function GanttChart({
                                   <div className="text-sm font-semibold">{task.name}</div>
                                   {displayStart && (
                                     <div className="text-xs text-muted-foreground mt-1">
-                                      {format(displayStart, 'MMM d, yyyy')}
+                                      {safeFormat(displayStart, 'MMM d, yyyy')}
                                     </div>
                                   )}
                                 </TooltipContent>
@@ -1924,7 +1990,7 @@ export function GanttChart({
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{task.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {format(displayStart, 'MMM d')} → {format(displayEnd, 'MMM d')}
+                                      {safeFormat(displayStart, 'MMM d')} → {safeFormat(displayEnd, 'MMM d')}
                                     </p>
                                   </TooltipContent>
                                 )}
@@ -1941,7 +2007,7 @@ export function GanttChart({
                 {(() => {
                   const today = new Date();
                   const todayColIndex = groupedColumns.findIndex(col => 
-                    isSameDay(col.startDate, today)
+                    safeIsSameDay(col.startDate, today)
                   );
                   if (todayColIndex === -1) return null;
                   
