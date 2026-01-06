@@ -25,8 +25,8 @@ interface UseVerticalReorderReturn {
     currentIndex: number
   ) => void;
   getVerticalDragClasses: (taskId: string) => string;
-  getVerticalDragStyles: (taskId: string, actualIndex: number) => React.CSSProperties;
-  getSwapTargetClasses: (taskId: string, actualIndex: number) => string;
+  getVerticalDragStyles: (taskId: string, actualIndex: number, phaseId: string) => React.CSSProperties;
+  getSwapTargetClasses: (taskId: string, actualIndex: number, phaseId: string) => string;
   getDropIndicatorIndex: () => number | null;
 }
 
@@ -111,8 +111,11 @@ export function useVerticalReorder({
     return '';
   }, [verticalDrag]);
 
-  const getVerticalDragStyles = useCallback((taskId: string, actualIndex: number): React.CSSProperties => {
+  const getVerticalDragStyles = useCallback((taskId: string, actualIndex: number, phaseId: string): React.CSSProperties => {
     if (!verticalDrag) return {};
+    
+    // Only affect items in the same phase as the dragged item
+    if (verticalDrag.phaseId !== phaseId) return {};
     
     if (verticalDrag.taskId === taskId) {
       // The dragged item follows the cursor
@@ -144,8 +147,11 @@ export function useVerticalReorder({
     };
   }, [verticalDrag, rowHeight]);
 
-  const getSwapTargetClasses = useCallback((taskId: string, actualIndex: number): string => {
+  const getSwapTargetClasses = useCallback((taskId: string, actualIndex: number, phaseId: string): string => {
     if (!verticalDrag) return '';
+    
+    // Only affect items in the same phase as the dragged item
+    if (verticalDrag.phaseId !== phaseId) return '';
     
     // Highlight the item that will be swapped (not the dragged item itself)
     if (actualIndex === verticalDrag.currentIndex && 
