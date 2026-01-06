@@ -303,7 +303,7 @@ export function TimelineEditor({
           project_id: project.id,
           name: `${task.name} Rework`,
           task_type: 'task',
-          client_visible: false,
+          client_visible: true,
           start_date: reviewEndDate,
           end_date: reviewEndDate,
           order_index: maxOrder + 2,
