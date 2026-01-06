@@ -189,6 +189,7 @@ export default function SharedProjectView() {
   
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [share, setShare] = useState<ProjectShare | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -202,7 +203,7 @@ export default function SharedProjectView() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
-  const checkAccess = useCallback(async () => {
+  const checkAccess = useCallback(async (currentUser: typeof user) => {
     if (!token) {
       setAccessDenied(true);
       setLoading(false);
@@ -210,7 +211,7 @@ export default function SharedProjectView() {
     }
 
     try {
-      // Fetch the share by token
+      // Step 1: Fetch the share by token first (this works without auth)
       const { data: shareData, error: shareError } = await supabase
         .from('project_shares')
         .select('*')
@@ -227,10 +228,11 @@ export default function SharedProjectView() {
       const shareInfo = shareData as ProjectShare;
       setShare(shareInfo);
 
-      // If it's invite-only, check if user is logged in and invited
+      // Step 2: For invite-only shares, we need auth
       if (shareInfo.share_type === 'invite') {
-        if (!user) {
-          setAccessDenied(true);
+        if (!currentUser) {
+          // User needs to log in - show auth redirect
+          setNeedsAuth(true);
           setLoading(false);
           return;
         }
@@ -239,7 +241,7 @@ export default function SharedProjectView() {
         const { data: profile } = await supabase
           .from('profiles')
           .select('email')
-          .eq('id', user.id)
+          .eq('id', currentUser.id)
           .single();
 
         if (!profile) {
@@ -325,16 +327,17 @@ export default function SharedProjectView() {
       setAccessDenied(true);
       setLoading(false);
     }
-  }, [token, user]);
+  }, [token]);
 
-  // Run checkAccess when auth is done loading (for invite-only shares)
-  // or immediately for public shares
+  // For public shares: run immediately
+  // For invite-only shares: wait for auth to settle, then run with current user
   useEffect(() => {
-    // Always try to check access once auth state is determined
-    if (!authLoading) {
-      checkAccess();
+    // Don't wait for auth if we haven't fetched share info yet
+    // The checkAccess function handles the auth requirement internally
+    if (!authLoading || share?.share_type === 'public') {
+      checkAccess(user);
     }
-  }, [authLoading, checkAccess]);
+  }, [authLoading, user, checkAccess, share?.share_type]);
 
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
@@ -373,16 +376,17 @@ export default function SharedProjectView() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  if (loading || authLoading) {
+  // Show skeleton only when loading data (not when waiting for auth)
+  if (loading) {
     return <SharedProjectSkeleton />;
   }
 
-  if (accessDenied) {
-    // If invite-only and not logged in, redirect to auth
-    if (share?.share_type === 'invite' && !user) {
-      return <Navigate to="/auth" replace />;
-    }
+  // If invite-only share requires login, redirect to auth
+  if (needsAuth) {
+    return <Navigate to="/auth" replace />;
+  }
 
+  if (accessDenied) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="max-w-md w-full mx-4">

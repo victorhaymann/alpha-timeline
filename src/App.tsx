@@ -41,7 +41,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppRoutes() {
+// Root route wrapper - handles auth loading for home page only
+function RootRoute() {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -52,10 +53,14 @@ function AppRoutes() {
     );
   }
 
+  return user ? <Navigate to="/projects" replace /> : <Auth />;
+}
+
+function AppRoutes() {
   return (
     <Routes>
-      {/* Public routes */}
-      <Route path="/" element={user ? <Navigate to="/projects" replace /> : <Auth />} />
+      {/* Public routes - render immediately without waiting for auth */}
+      <Route path="/" element={<RootRoute />} />
       <Route path="/share/:token" element={<SharedProjectView />} />
       
       {/* Protected routes with layout */}
