@@ -1537,37 +1537,59 @@ export function GanttChart({
                                 </Tooltip>
                               )}
 
-                              {/* SVG Connecting line: Base Task end → down to Review bar start */}
-                              {cycle.reviewTask && baseEnd && reviewStart && (
+                              {/* SVG Connecting lines with arrowheads */}
+                              {(cycle.reviewTask && baseEnd && reviewStart) || (cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart) ? (
                                 <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
-                                  <line
-                                    x1={baseLeft + baseWidth - 2}
-                                    y1={ROW_HEIGHT / 2}
-                                    x2={reviewLeft + 2}
-                                    y2={ROW_HEIGHT + ROW_HEIGHT / 2}
-                                    stroke={sectionColor}
-                                    strokeWidth="2"
-                                    strokeDasharray="4 2"
-                                    className="opacity-60"
-                                  />
-                                </svg>
-                              )}
+                                  {/* Arrowhead marker definition */}
+                                  <defs>
+                                    <marker
+                                      id={`arrowhead-${cycle.baseTask.id}`}
+                                      markerWidth="8"
+                                      markerHeight="6"
+                                      refX="7"
+                                      refY="3"
+                                      orient="auto"
+                                      markerUnits="strokeWidth"
+                                    >
+                                      <path
+                                        d="M0,0 L0,6 L8,3 z"
+                                        fill={sectionColor}
+                                        className="opacity-70"
+                                      />
+                                    </marker>
+                                  </defs>
 
-                              {/* SVG Connecting line: Review bar end → up to Rework start */}
-                              {cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart && (
-                                <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
-                                  <line
-                                    x1={reviewLeft + reviewWidth - 2}
-                                    y1={ROW_HEIGHT + ROW_HEIGHT / 2}
-                                    x2={reworkLeft + 2}
-                                    y2={ROW_HEIGHT / 2}
-                                    stroke={sectionColor}
-                                    strokeWidth="2"
-                                    strokeDasharray="4 2"
-                                    className="opacity-60"
-                                  />
+                                  {/* Line: Base Task end → down to Review bar start */}
+                                  {cycle.reviewTask && baseEnd && reviewStart && (
+                                    <line
+                                      x1={baseLeft + baseWidth - 2}
+                                      y1={ROW_HEIGHT / 2}
+                                      x2={reviewLeft + 2}
+                                      y2={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                      stroke={sectionColor}
+                                      strokeWidth="2"
+                                      strokeDasharray="4 2"
+                                      className="opacity-60"
+                                      markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
+                                    />
+                                  )}
+
+                                  {/* Line: Review bar end → up to Rework start */}
+                                  {cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart && (
+                                    <line
+                                      x1={reviewLeft + reviewWidth - 2}
+                                      y1={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                      x2={reworkLeft + 2}
+                                      y2={ROW_HEIGHT / 2}
+                                      stroke={sectionColor}
+                                      strokeWidth="2"
+                                      strokeDasharray="4 2"
+                                      className="opacity-60"
+                                      markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
+                                    />
+                                  )}
                                 </svg>
-                              )}
+                              ) : null}
                             </div>
 
                             {/* Row 2: Review meeting bar (dashed border, draggable) */}
