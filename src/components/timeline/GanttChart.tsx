@@ -1791,7 +1791,7 @@ export function GanttChart({
                                       )}
                                       <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
                                         <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide" style={{ color: sectionColor }}>
-                                          {reviewWidth > 60 ? 'Review' : ''}
+                                          {reviewWidth > 80 ? 'Client Review' : ''}
                                         </span>
                                       </div>
                                       {/* Duration indicator during resize */}
