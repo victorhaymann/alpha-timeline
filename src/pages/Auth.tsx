@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Sparkles } from 'lucide-react';
 import { z } from 'zod';
-import theNewFaceLogo from '@/assets/the-new-face-logo.png';
+import tnfLogo from '@/assets/tnf-logo-purple.png';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -114,7 +114,7 @@ export default function Auth() {
         <CardHeader className="text-center pb-2">
           <div className="mx-auto mb-4">
             <img 
-              src={theNewFaceLogo} 
+              src={tnfLogo} 
               alt="The New Face" 
               className="h-24 w-auto object-contain mx-auto"
             />
