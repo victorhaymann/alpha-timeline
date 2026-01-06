@@ -97,13 +97,10 @@ export function GanttChart({
   const timelineRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   
-  // Default view: show ~21 working days from project start (approximately 4 weeks)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const defaultEndDate = addDays(projectStartDate, 28); // ~4 weeks to get ~20-22 working days
-    return {
-      from: projectStartDate,
-      to: defaultEndDate > projectEndDate ? projectEndDate : defaultEndDate,
-    };
+  // Default view: show entire project range for full scrolling
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: projectStartDate,
+    to: projectEndDate,
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
