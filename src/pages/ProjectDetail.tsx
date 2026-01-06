@@ -12,6 +12,16 @@ import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -30,10 +40,12 @@ import {
   Users,
   Mail,
   Phone,
+  Pencil,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import confetti from 'canvas-confetti';
+import { useToast } from '@/hooks/use-toast';
 
 interface ProjectStepWithCanonical extends ProjectStep {
   canonical_step: CanonicalStep;
@@ -66,6 +78,12 @@ export default function ProjectDetail() {
   
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  
+  // PM Edit dialog state
+  const [pmDialogOpen, setPmDialogOpen] = useState(false);
+  const [pmForm, setPmForm] = useState({ name: '', email: '', whatsapp: '' });
+  const [pmSaving, setPmSaving] = useState(false);
+  const { toast } = useToast();
   
   // Regenerate state (lifted from TimelineEditor)
   const [regenerateHandler, setRegenerateHandler] = useState<{ onClick: () => void; isLoading: boolean } | null>(null);
@@ -200,6 +218,55 @@ export default function ProjectDetail() {
     setTaskDetailOpen(true);
   };
 
+  const openPmDialog = () => {
+    setPmForm({
+      name: project?.pm_name || '',
+      email: project?.pm_email || '',
+      whatsapp: project?.pm_whatsapp || '',
+    });
+    setPmDialogOpen(true);
+  };
+
+  const savePmDetails = async () => {
+    if (!id) return;
+    
+    setPmSaving(true);
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          pm_name: pmForm.name.trim() || null,
+          pm_email: pmForm.email.trim() || null,
+          pm_whatsapp: pmForm.whatsapp.trim() || null,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setProject(prev => prev ? {
+        ...prev,
+        pm_name: pmForm.name.trim() || null,
+        pm_email: pmForm.email.trim() || null,
+        pm_whatsapp: pmForm.whatsapp.trim() || null,
+      } : null);
+
+      toast({
+        title: 'Project Manager updated',
+        description: 'Contact details have been saved.',
+      });
+      setPmDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating PM details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update Project Manager details.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPmSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -330,36 +397,34 @@ export default function ProjectDetail() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className="cursor-pointer hover:shadow-md transition-shadow group"
+          onClick={openPmDialog}
+        >
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                 <User className="w-5 h-5 text-primary" />
               </div>
-              <div className="min-w-0 space-y-1">
-                <p className="text-sm text-muted-foreground">Project Manager</p>
+              <div className="min-w-0 space-y-1 flex-1">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">Project Manager</p>
+                  <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
                 {project.pm_name ? (
                   <>
                     <p className="text-sm font-semibold truncate">{project.pm_name}</p>
                     {project.pm_email && (
-                      <a 
-                        href={`mailto:${project.pm_email}`}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Mail className="w-3.5 h-3.5 text-[#0078D4]" />
                         <span className="truncate">{project.pm_email}</span>
-                      </a>
+                      </div>
                     )}
                     {project.pm_whatsapp && (
-                      <a 
-                        href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Phone className="w-3.5 h-3.5 text-[#25D366]" />
                         <span>{project.pm_whatsapp}</span>
-                      </a>
+                      </div>
                     )}
                   </>
                 ) : (
@@ -538,6 +603,63 @@ export default function ProjectDetail() {
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
       />
+
+      {/* PM Edit Dialog */}
+      <Dialog open={pmDialogOpen} onOpenChange={setPmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Project Manager</DialogTitle>
+            <DialogDescription>
+              Update the project manager contact details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="pm-name">Name</Label>
+              <Input
+                id="pm-name"
+                placeholder="John Smith"
+                value={pmForm.name}
+                onChange={(e) => setPmForm(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pm-email">Email</Label>
+              <Input
+                id="pm-email"
+                type="email"
+                placeholder="john@example.com"
+                value={pmForm.email}
+                onChange={(e) => setPmForm(prev => ({ ...prev, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pm-whatsapp">WhatsApp</Label>
+              <Input
+                id="pm-whatsapp"
+                placeholder="+1 234 567 8900"
+                value={pmForm.whatsapp}
+                onChange={(e) => setPmForm(prev => ({ ...prev, whatsapp: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPmDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={savePmDetails} disabled={pmSaving}>
+              {pmSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
