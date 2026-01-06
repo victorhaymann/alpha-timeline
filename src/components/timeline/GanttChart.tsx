@@ -70,7 +70,10 @@ type ViewMode = 'week' | 'month' | 'project';
 
 const TASK_COLUMN_WIDTH = 340;
 const ROW_HEIGHT = 40;
-const HEADER_HEIGHT = 60;
+const MONTH_ROW_HEIGHT = 24;
+const WEEK_ROW_HEIGHT = 24;
+const DAY_ROW_HEIGHT = 36;
+const HEADER_HEIGHT = MONTH_ROW_HEIGHT + WEEK_ROW_HEIGHT + DAY_ROW_HEIGHT; // 84
 const PHASE_HEADER_HEIGHT = 36;
 const MIN_COLUMN_WIDTH = 36;
 
@@ -201,6 +204,68 @@ export function GanttChart({
     });
     return map;
   }, [groupedColumns]);
+
+  // Group columns by month for the month header row
+  const monthGroups = useMemo(() => {
+    const groups: { month: string; startIndex: number; count: number }[] = [];
+    let currentMonth = '';
+    let startIndex = 0;
+    let count = 0;
+
+    groupedColumns.forEach((col, index) => {
+      const month = format(col.startDate, 'MMMM yyyy');
+      if (month !== currentMonth) {
+        if (currentMonth) {
+          groups.push({ month: currentMonth, startIndex, count });
+        }
+        currentMonth = month;
+        startIndex = index;
+        count = 1;
+      } else {
+        count++;
+      }
+    });
+
+    if (currentMonth) {
+      groups.push({ month: currentMonth, startIndex, count });
+    }
+
+    return groups;
+  }, [groupedColumns]);
+
+  // Group columns by week for the week header row (W1, W2, etc. starting from project start)
+  const weekGroups = useMemo(() => {
+    const groups: { weekLabel: string; startIndex: number; count: number; weekNumber: number }[] = [];
+    let currentWeekNum = -1;
+    let startIndex = 0;
+    let count = 0;
+    let weekCounter = 0;
+
+    // Find the first Monday from project start to establish W1
+    const firstMonday = startOfWeek(projectStartDate, { weekStartsOn: 1 });
+
+    groupedColumns.forEach((col, index) => {
+      const weekNum = col.weekNumber;
+      if (weekNum !== currentWeekNum) {
+        if (currentWeekNum !== -1) {
+          weekCounter++;
+          groups.push({ weekLabel: `W${weekCounter}`, startIndex, count, weekNumber: currentWeekNum });
+        }
+        currentWeekNum = weekNum;
+        startIndex = index;
+        count = 1;
+      } else {
+        count++;
+      }
+    });
+
+    if (currentWeekNum !== -1) {
+      weekCounter++;
+      groups.push({ weekLabel: `W${weekCounter}`, startIndex, count, weekNumber: currentWeekNum });
+    }
+
+    return groups;
+  }, [groupedColumns, projectStartDate]);
 
   // Observe container width for responsive columns
   useEffect(() => {
@@ -1003,13 +1068,46 @@ export function GanttChart({
 
           {/* Right Pane - Timeline (horizontal + vertical scroll) */}
           <div className="flex flex-col flex-1 min-w-0">
-            {/* Timeline Header - Fixed horizontally synced */}
+            {/* Timeline Header - Fixed horizontally synced with 3 rows: Month, Week, Day */}
             <div 
               ref={rightHeaderRef}
               className="overflow-x-hidden shrink-0 border-b border-border bg-muted/50"
               style={{ height: HEADER_HEIGHT }}
             >
-              <div className="flex" style={{ width: chartWidth }}>
+              {/* Month Row */}
+              <div className="flex border-b border-border/60" style={{ height: MONTH_ROW_HEIGHT, width: chartWidth }}>
+                {monthGroups.map((group, idx) => (
+                  <div
+                    key={`month-${group.month}-${idx}`}
+                    className="flex items-center justify-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-r border-border/60 shrink-0"
+                    style={{ width: group.count * columnWidth }}
+                  >
+                    {format(new Date(group.month), 'MMMM')}
+                  </div>
+                ))}
+              </div>
+
+              {/* Week Row */}
+              <div className="flex border-b border-border/60" style={{ height: WEEK_ROW_HEIGHT, width: chartWidth }}>
+                {weekGroups.map((group, idx) => {
+                  const isAlternateWeek = idx % 2 === 1;
+                  return (
+                    <div
+                      key={`week-${group.weekLabel}-${idx}`}
+                      className={cn(
+                        "flex items-center justify-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-r border-border/60 shrink-0",
+                        isAlternateWeek && "bg-black/[0.04]"
+                      )}
+                      style={{ width: group.count * columnWidth }}
+                    >
+                      {group.weekLabel}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Day Row */}
+              <div className="flex" style={{ height: DAY_ROW_HEIGHT, width: chartWidth }}>
                 {groupedColumns.map((col) => {
                   const isToday = col.days.some(d => isSameDay(d, new Date()));
                   const isAlternateWeek = weekAlternatingMap[col.weekNumber];
