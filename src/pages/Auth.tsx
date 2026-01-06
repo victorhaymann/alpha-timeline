@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,8 @@ const authSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
   const { user, signIn, signUp, loading } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,9 +32,11 @@ export default function Auth() {
 
   useEffect(() => {
     if (user && !loading) {
-      navigate('/projects');
+      // Redirect to the original destination or default to /projects
+      const destination = redirectTo ? decodeURIComponent(redirectTo) : '/projects';
+      navigate(destination);
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, redirectTo]);
 
   const validateForm = () => {
     try {

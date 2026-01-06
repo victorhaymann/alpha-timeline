@@ -218,6 +218,8 @@ export default function SharedProjectView() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading } = useAuth();
   
+  // Boot stages: 'init' -> 'resolving-share' -> 'loading-data' -> 'done'
+  const [bootStage, setBootStage] = useState<'init' | 'resolving-share' | 'loading-data' | 'done'>('init');
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -243,49 +245,35 @@ export default function SharedProjectView() {
   // Diagnostics UI state
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   
-  // Prevent concurrent checkAccess runs
+  // Boot watchdog - if still loading after 10 seconds, show diagnostics
+  const [bootWatchdogTriggered, setBootWatchdogTriggered] = useState(false);
+  
+  // Prevent concurrent runs
   const inFlightRef = useRef(false);
   const requestIdRef = useRef(0);
+  const bootStartRef = useRef(Date.now());
 
   const addDebugStep = useCallback((step: string) => {
-    const timestamp = new Date().toISOString().substring(11, 23);
-    const logLine = `[${timestamp}] ${step}`;
+    const elapsed = Date.now() - bootStartRef.current;
+    const logLine = `[+${elapsed}ms] ${step}`;
     console.log('[SharedProjectView]', logLine);
     setDebugSteps(prev => [...prev, logLine]);
   }, []);
 
-  const checkAccess = useCallback(async (currentUser: typeof user) => {
-    // Prevent re-entrancy
-    if (inFlightRef.current) {
-      return;
-    }
-    
-    const thisRequestId = ++requestIdRef.current;
-    inFlightRef.current = true;
-    
-    // Reset state at start
-    setLoading(true);
-    setAccessDenied(false);
-    setNeedsAuth(false);
-    setNeedsPassword(false);
-    setPasswordError(false);
-    setLoadError(null);
-    setDebugSteps([]);
-    
-    addDebugStep(`Starting checkAccess (user=${user ? 'authenticated' : 'anonymous'})`);
-    
+  // Step 1: Immediately resolve share by token (no auth dependency)
+  const resolveShare = useCallback(async () => {
     if (!token) {
-      addDebugStep('No token found');
+      addDebugStep('No token in URL');
       setAccessDenied(true);
       setLoading(false);
-      inFlightRef.current = false;
-      return;
+      setBootStage('done');
+      return null;
     }
-
+    
+    setBootStage('resolving-share');
+    addDebugStep('Resolving share by token...');
+    
     try {
-      // Step 1: Fetch the share by token first (this works without auth)
-      addDebugStep('Fetching share by token...');
-      
       const shareResult = await withTimeout(
         supabase
           .from('project_shares')
@@ -294,50 +282,65 @@ export default function SharedProjectView() {
           .eq('is_active', true)
           .single(),
         REQUEST_TIMEOUT_MS,
-        'Fetch share'
+        'Resolve share'
       );
-      
-      // Check if this request is still current
-      if (thisRequestId !== requestIdRef.current) {
-        inFlightRef.current = false;
-        return;
-      }
 
       if (shareResult.error || !shareResult.data) {
-        addDebugStep(`Share fetch failed: ${shareResult.error?.message || 'No data'}`);
+        addDebugStep(`Share not found: ${shareResult.error?.message || 'No data'}`);
         setAccessDenied(true);
         setLoading(false);
-        inFlightRef.current = false;
-        return;
+        setBootStage('done');
+        return null;
       }
 
       const shareInfo = shareResult.data as ProjectShare;
-      addDebugStep(`Share loaded: type=${shareInfo.share_type}, project_id=${shareInfo.project_id}, hasPassword=${!!shareInfo.password_hash}`);
+      addDebugStep(`Share resolved: type=${shareInfo.share_type}, hasPassword=${!!shareInfo.password_hash}`);
       setShare(shareInfo);
 
-      // Step 2: Check if password protected
+      // Check password immediately
       if (shareInfo.password_hash) {
-        // Check if already verified in this session
         const verifiedKey = `share_verified_${token}`;
         const isVerified = sessionStorage.getItem(verifiedKey) === 'true';
         
         if (!isVerified) {
-          addDebugStep('Password required, showing prompt');
+          addDebugStep('Password required - showing prompt');
           setNeedsPassword(true);
           setLoading(false);
-          inFlightRef.current = false;
-          return;
+          setBootStage('done');
+          return null;
         }
-        addDebugStep('Password already verified this session');
+        addDebugStep('Password verified from session');
       }
 
-      // Step 3: For invite-only shares, we need auth
+      return shareInfo;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      addDebugStep(`Share resolution failed: ${msg}`);
+      setLoadError({ step: 'Resolve share', message: msg });
+      setLoading(false);
+      setBootStage('done');
+      return null;
+    }
+  }, [token, addDebugStep]);
+
+  // Step 2: Load project data (may require auth for invite shares)
+  const loadProjectData = useCallback(async (shareInfo: ProjectShare, currentUser: typeof user) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    
+    const thisRequestId = ++requestIdRef.current;
+    setBootStage('loading-data');
+    addDebugStep(`Loading project data (user=${currentUser ? 'authenticated' : 'anonymous'})`);
+
+    try {
+      // For invite-only shares, we need auth
       if (shareInfo.share_type === 'invite') {
-        addDebugStep('Invite-only share, checking auth...');
+        addDebugStep('Invite share - checking auth...');
         if (!currentUser) {
           addDebugStep('No user authenticated, redirecting to auth');
           setNeedsAuth(true);
           setLoading(false);
+          setBootStage('done');
           inFlightRef.current = false;
           return;
         }
@@ -362,6 +365,7 @@ export default function SharedProjectView() {
           addDebugStep('Profile not found');
           setAccessDenied(true);
           setLoading(false);
+          setBootStage('done');
           inFlightRef.current = false;
           return;
         }
@@ -387,10 +391,13 @@ export default function SharedProjectView() {
           addDebugStep('User not in invite list');
           setAccessDenied(true);
           setLoading(false);
+          setBootStage('done');
           inFlightRef.current = false;
           return;
         }
         addDebugStep('User is invited, access granted');
+      } else {
+        addDebugStep('Public share - no auth required');
       }
 
       // Fetch project data
@@ -414,6 +421,7 @@ export default function SharedProjectView() {
         addDebugStep(`Project fetch failed: ${projectResult.error?.message || 'No data'}`);
         setAccessDenied(true);
         setLoading(false);
+        setBootStage('done');
         inFlightRef.current = false;
         return;
       }
@@ -518,6 +526,7 @@ export default function SharedProjectView() {
 
       addDebugStep('All data loaded successfully');
       setLoading(false);
+      setBootStage('done');
       inFlightRef.current = false;
     } catch (error) {
       if (thisRequestId !== requestIdRef.current) {
@@ -528,7 +537,6 @@ export default function SharedProjectView() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       addDebugStep(`Error: ${errorMessage}`);
       
-      // Check if it's a timeout
       if (errorMessage.startsWith('Timeout:')) {
         setLoadError({
           step: errorMessage.split(':')[1]?.trim() || 'Unknown step',
@@ -541,47 +549,98 @@ export default function SharedProjectView() {
         });
       }
       setLoading(false);
+      setBootStage('done');
       inFlightRef.current = false;
     }
-  }, [token, addDebugStep]);
+  }, [addDebugStep]);
 
-  // Run checkAccess when token changes or when user state settles
-  // Also add a timeout in case auth never settles
-  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
+  // Boot sequence: resolve share immediately, then load data
+  // For PUBLIC shares: don't wait for auth at all
+  // For INVITE shares: wait for auth (with timeout)
   useEffect(() => {
-    // Clear any previous timeout
-    if (authTimeoutRef.current) {
-      clearTimeout(authTimeoutRef.current);
-    }
+    let cancelled = false;
+    bootStartRef.current = Date.now();
     
-    if (authLoading) {
-      addDebugStep('Waiting for auth to initialize...');
-      // Force proceed after 5 seconds if auth is stuck
-      authTimeoutRef.current = setTimeout(() => {
-        addDebugStep('Auth timeout - proceeding without auth');
-        checkAccess(null);
-      }, 5000);
-      return;
-    }
+    const boot = async () => {
+      // Step 1: Resolve share immediately (no auth needed)
+      const shareInfo = await resolveShare();
+      if (cancelled || !shareInfo) return;
+      
+      // Step 2: For public shares, load data immediately
+      if (shareInfo.share_type === 'public') {
+        loadProjectData(shareInfo, null);
+        return;
+      }
+      
+      // Step 3: For invite shares, wait for auth (with 3s timeout)
+      if (authLoading) {
+        addDebugStep('Invite share - waiting for auth...');
+        const authTimeout = setTimeout(() => {
+          if (!cancelled) {
+            addDebugStep('Auth timeout - prompting login');
+            setNeedsAuth(true);
+            setLoading(false);
+            setBootStage('done');
+          }
+        }, 3000);
+        
+        // Clean up will handle this
+        return () => clearTimeout(authTimeout);
+      }
+      
+      // Auth is ready, proceed
+      loadProjectData(shareInfo, user);
+    };
     
-    checkAccess(user);
+    boot();
     
     return () => {
-      if (authTimeoutRef.current) {
-        clearTimeout(authTimeoutRef.current);
-      }
+      cancelled = true;
     };
-  }, [authLoading, user, checkAccess, addDebugStep]);
+  }, [token]); // Only run on mount / token change
+  
+  // For invite shares: react to auth state changes
+  useEffect(() => {
+    if (!share || share.share_type !== 'invite') return;
+    if (bootStage !== 'resolving-share' && bootStage !== 'init') return;
+    
+    // Auth settled after share was resolved
+    if (!authLoading && share) {
+      loadProjectData(share, user);
+    }
+  }, [authLoading, user, share, bootStage, loadProjectData]);
+  
+  // Boot watchdog - show diagnostics if stuck too long
+  useEffect(() => {
+    if (!loading) return;
+    
+    const watchdog = setTimeout(() => {
+      if (loading) {
+        setBootWatchdogTriggered(true);
+        addDebugStep('WATCHDOG: Still loading after 10 seconds');
+      }
+    }, 10000);
+    
+    return () => clearTimeout(watchdog);
+  }, [loading, addDebugStep]);
 
   const handleRetry = useCallback(() => {
-    // Force a fresh run
+    setLoading(true);
+    setAccessDenied(false);
+    setNeedsAuth(false);
+    setNeedsPassword(false);
+    setLoadError(null);
+    setDebugSteps([]);
+    setBootStage('init');
+    setBootWatchdogTriggered(false);
     inFlightRef.current = false;
-    checkAccess(user);
-  }, [checkAccess, user]);
+    bootStartRef.current = Date.now();
+    
+    // Re-trigger boot by forcing re-mount effect
+    window.location.reload();
+  }, []);
 
-  // Simple password hash check (comparing with stored bcrypt-style hash)
-  // For client-side, we use a simple comparison - the hash is created server-side
+  // Simple password verification
   const verifyPassword = useCallback(async () => {
     if (!share || !passwordInput.trim()) return;
     
@@ -589,23 +648,20 @@ export default function SharedProjectView() {
     setPasswordError(false);
     
     try {
-      // Simple string comparison - the password_hash stores the plain password for now
-      // In production, you'd use bcrypt on the server side
       if (share.password_hash === passwordInput) {
-        // Store verification in session
         sessionStorage.setItem(`share_verified_${token}`, 'true');
         setNeedsPassword(false);
         setPasswordInput('');
-        // Re-run access check to load project data
         inFlightRef.current = false;
-        checkAccess(user);
+        // Load project data after password verification
+        loadProjectData(share, user);
       } else {
         setPasswordError(true);
       }
     } finally {
       setVerifyingPassword(false);
     }
-  }, [share, passwordInput, token, checkAccess, user]);
+  }, [share, passwordInput, token, loadProjectData, user]);
 
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
@@ -644,14 +700,52 @@ export default function SharedProjectView() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Show skeleton only when loading data
+  // Show loading state with optional diagnostics
   if (loading) {
-    return <SharedProjectSkeleton />;
+    return (
+      <div className="min-h-screen bg-background">
+        <SharedProjectSkeleton />
+        {/* Diagnostics overlay when boot watchdog triggers */}
+        {bootWatchdogTriggered && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
+            <Card className="max-w-lg shadow-lg border-orange-500/50">
+              <CardContent className="pt-4 pb-3 space-y-3">
+                <div className="flex items-center gap-2 text-orange-600">
+                  <AlertTriangle className="w-4 h-4" />
+                  <span className="text-sm font-medium">Loading is taking longer than expected</span>
+                </div>
+                <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full gap-2 text-muted-foreground">
+                      {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {showDiagnostics ? 'Hide' : 'Show'} Diagnostics ({debugSteps.length} steps)
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="mt-2 p-3 rounded-lg bg-muted/50 text-xs font-mono space-y-1 max-h-48 overflow-auto">
+                      <div className="text-muted-foreground">Boot stage: {bootStage}</div>
+                      {debugSteps.map((step, i) => (
+                        <div key={i} className="text-muted-foreground">{step}</div>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+                <Button onClick={handleRetry} size="sm" variant="outline" className="w-full gap-2">
+                  <RefreshCw className="w-3 h-3" />
+                  Reload Page
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    );
   }
 
-  // If invite-only share requires login, redirect to auth
+  // If invite-only share requires login, redirect to auth with return URL
   if (needsAuth) {
-    return <Navigate to="/auth" replace />;
+    const returnUrl = encodeURIComponent(`/share/${token}`);
+    return <Navigate to={`/auth?redirect=${returnUrl}`} replace />;
   }
 
   // Password prompt screen
