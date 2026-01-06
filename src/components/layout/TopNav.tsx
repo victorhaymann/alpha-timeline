@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import theNewFaceLogo from '@/assets/the-new-face-logo.png';
 
 const navItems = [
   { path: '/projects', label: 'Projects', icon: FolderKanban },
@@ -35,13 +36,11 @@ export function TopNav() {
       <div className="flex h-16 items-center justify-between px-6 lg:px-8">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          <div className="relative w-9 h-9 rounded-lg bg-primary/20 flex items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary to-cyan-400 opacity-80" />
-            <span className="relative font-bold text-primary-foreground text-sm">VT</span>
-          </div>
-          <span className="font-semibold text-lg tracking-tight group-hover:text-primary transition-colors">
-            VFX Timeline
-          </span>
+          <img 
+            src={theNewFaceLogo} 
+            alt="The New Face" 
+            className="h-10 w-auto object-contain"
+          />
         </Link>
 
         {/* Navigation */}
