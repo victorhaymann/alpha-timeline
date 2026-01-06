@@ -43,14 +43,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-      }
-      setLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchUserProfile(session.user.id);
+        }
+      })
+      .catch((error) => {
+        console.error('Error getting session:', error);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
 
     return () => subscription.unsubscribe();
   }, []);
