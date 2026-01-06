@@ -280,7 +280,7 @@ export function MeetingHoverCard({
       <HoverCard openDelay={100} closeDelay={50}>
         <HoverCardTrigger asChild>
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm"
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm diamond-shimmer"
             style={{ left: left + columnWidth / 2 - 8 }}
           />
         </HoverCardTrigger>
