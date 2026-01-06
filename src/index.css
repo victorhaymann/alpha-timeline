@@ -315,4 +315,118 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* ==========================================
+     Drag and Drop Visual Feedback
+     ========================================== */
+
+  /* Body cursor states during drag */
+  .gantt-dragging-move {
+    cursor: grabbing !important;
+  }
+  .gantt-dragging-move * {
+    cursor: grabbing !important;
+  }
+  .gantt-dragging-resize {
+    cursor: ew-resize !important;
+  }
+  .gantt-dragging-resize * {
+    cursor: ew-resize !important;
+  }
+
+  /* Task bar during drag */
+  .gantt-task-dragging {
+    filter: brightness(1.1);
+    box-shadow: 0 12px 28px hsl(24 95% 53% / 0.5) !important;
+  }
+
+  /* Ghost shadow at original position */
+  .gantt-task-ghost {
+    opacity: 0.2;
+    pointer-events: none;
+    filter: grayscale(0.5);
+  }
+
+  /* Resize handles */
+  .gantt-resize-handle {
+    @apply absolute top-0 bottom-0 w-2 opacity-0 transition-all duration-200;
+    cursor: ew-resize;
+    z-index: 10;
+  }
+  .gantt-resize-handle::after {
+    content: '';
+    @apply absolute top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-white/60;
+    transition: all 0.2s ease;
+  }
+  .gantt-resize-handle-start {
+    left: -2px;
+  }
+  .gantt-resize-handle-start::after {
+    left: 3px;
+  }
+  .gantt-resize-handle-end {
+    right: -2px;
+  }
+  .gantt-resize-handle-end::after {
+    right: 3px;
+  }
+
+  /* Show resize handles on task hover */
+  .gantt-task-bar:hover .gantt-resize-handle,
+  .gantt-review-bar:hover .gantt-resize-handle {
+    opacity: 1;
+  }
+  .gantt-resize-handle:hover::after {
+    @apply h-5 bg-white/90;
+    box-shadow: 0 0 8px hsl(0 0% 100% / 0.5);
+  }
+  .gantt-resize-handle-active::after {
+    @apply h-6 bg-white;
+    box-shadow: 0 0 12px hsl(0 0% 100% / 0.7);
+    animation: resize-pulse 1s ease-in-out infinite;
+  }
+
+  /* Duration indicator tooltip */
+  .gantt-duration-indicator {
+    @apply absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold whitespace-nowrap;
+    background: hsl(var(--gantt-surface-elevated));
+    color: hsl(var(--gantt-text));
+    box-shadow: 0 4px 12px hsl(0 0% 0% / 0.4);
+    animation: tooltip-pop 0.2s ease-out forwards;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .gantt-duration-indicator-change {
+    @apply ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold;
+  }
+  .gantt-duration-indicator-change.positive {
+    background: hsl(142 71% 45% / 0.2);
+    color: hsl(142 71% 55%);
+  }
+  .gantt-duration-indicator-change.negative {
+    background: hsl(0 84% 60% / 0.2);
+    color: hsl(0 84% 65%);
+  }
+
+  /* Task bar base styles for smooth transitions */
+  .gantt-task-bar-base {
+    transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out;
+    will-change: transform, box-shadow;
+  }
+  .gantt-task-bar-base:hover {
+    filter: brightness(1.05);
+  }
+
+  /* Review bar with dashed border - draggable */
+  .gantt-review-bar {
+    @apply relative;
+    border: 2px dashed hsl(var(--gantt-text-muted));
+    background: hsl(var(--gantt-surface) / 0.6);
+    transition: transform 0.15s ease-out, box-shadow 0.15s ease-out, filter 0.15s ease-out, border-color 0.15s ease;
+    will-change: transform, box-shadow;
+  }
+  .gantt-review-bar:hover {
+    border-color: hsl(var(--gantt-text) / 0.8);
+    filter: brightness(1.1);
+  }
 }

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
+import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
@@ -111,16 +112,7 @@ export function GanttChart({
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
-  const [dragging, setDragging] = useState<{
-    taskId: string;
-    type: 'move' | 'resize-start' | 'resize-end';
-    startX: number;
-    originalStart: Date;
-    originalEnd: Date;
-    originalDuration: number;
-  } | null>(null);
-  const [dragPreview, setDragPreview] = useState<{ start: Date; end: Date } | null>(null);
-  const [justDropped, setJustDropped] = useState<string | null>(null);
+  
   
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -318,7 +310,21 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
-  // Update date range when view mode changes - all views now show full project range
+  // Drag and drop hook
+  const {
+    dragging,
+    dragPreview,
+    justDropped,
+    isDraggingAny,
+    handleDragStart,
+    getDragClasses,
+    getDurationChange,
+    getResizeHandleClasses,
+  } = useDragAndResize({
+    columnWidth,
+    onTaskUpdate,
+    readOnly,
+  });
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     // All views show full project range - difference is in column display (days vs weeks)
@@ -711,91 +717,6 @@ export function GanttChart({
     return sections;
   }, [phases, tasksByPhase, consolidatedWeeklyCall, groupTasksIntoReviewCycles]);
 
-  // Handle drag start
-  const handleDragStart = (
-    e: React.MouseEvent,
-    task: Task,
-    type: 'move' | 'resize-start' | 'resize-end'
-  ) => {
-    e.preventDefault();
-    if (!task.start_date || !task.end_date) return;
-
-    const startDate = new Date(task.start_date);
-    const endDate = new Date(task.end_date);
-    const originalDuration = differenceInDays(endDate, startDate) + 1;
-
-    setDragging({
-      taskId: task.id,
-      type,
-      startX: e.clientX,
-      originalStart: startDate,
-      originalEnd: endDate,
-      originalDuration,
-    });
-    setDragPreview({
-      start: startDate,
-      end: endDate,
-    });
-  };
-
-  // Handle drag move
-  const handleDragMove = useCallback((e: MouseEvent) => {
-    if (!dragging || !dragPreview) return;
-
-    const deltaX = e.clientX - dragging.startX;
-    const deltaDays = Math.round(deltaX / columnWidth);
-
-    if (dragging.type === 'move') {
-      setDragPreview({
-        start: addDays(dragging.originalStart, deltaDays),
-        end: addDays(dragging.originalEnd, deltaDays),
-      });
-    } else if (dragging.type === 'resize-end') {
-      const newEnd = addDays(dragging.originalEnd, deltaDays);
-      if (newEnd >= dragging.originalStart) {
-        setDragPreview({
-          start: dragging.originalStart,
-          end: newEnd,
-        });
-      }
-    } else if (dragging.type === 'resize-start') {
-      const newStart = addDays(dragging.originalStart, deltaDays);
-      if (newStart <= dragging.originalEnd) {
-        setDragPreview({
-          start: newStart,
-          end: dragging.originalEnd,
-        });
-      }
-    }
-  }, [dragging, dragPreview, columnWidth]);
-
-  // Handle drag end
-  const handleDragEnd = useCallback(() => {
-    if (dragging && dragPreview) {
-      // Trigger spring animation
-      setJustDropped(dragging.taskId);
-      setTimeout(() => setJustDropped(null), 400);
-      
-      onTaskUpdate(dragging.taskId, {
-        start_date: format(dragPreview.start, 'yyyy-MM-dd'),
-        end_date: format(dragPreview.end, 'yyyy-MM-dd'),
-      });
-    }
-    setDragging(null);
-    setDragPreview(null);
-  }, [dragging, dragPreview, onTaskUpdate]);
-
-  // Attach global mouse listeners when dragging
-  useState(() => {
-    if (dragging) {
-      window.addEventListener('mousemove', handleDragMove);
-      window.addEventListener('mouseup', handleDragEnd);
-      return () => {
-        window.removeEventListener('mousemove', handleDragMove);
-        window.removeEventListener('mouseup', handleDragEnd);
-      };
-    }
-  });
 
   // Calculate total chart height based on sections (accounting for collapsed state and review cycles)
   let totalHeight = HEADER_HEIGHT;
@@ -1291,12 +1212,10 @@ export function GanttChart({
               className={cn(
                 "flex-1 overflow-auto relative",
                 slideDirection === 'left' && "animate-slide-left",
-                slideDirection === 'right' && "animate-slide-right"
+                slideDirection === 'right' && "animate-slide-right",
+                isDraggingAny && "select-none"
               )}
               onScroll={handleRightBodyScroll}
-              onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
-              onMouseUp={dragging ? handleDragEnd : undefined}
-              onMouseLeave={dragging ? handleDragEnd : undefined}
             >
               <div className="relative" style={{ width: chartWidth }}>
                 {/* Section rows with task bars */}
@@ -1436,10 +1355,9 @@ export function GanttChart({
                                     <div
                                       className={cn(
                                         "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "gantt-task-bar-base",
                                         "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                        "transition-all duration-300 ease-out shadow-md",
-                                        isBaseDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                                        isBaseJustDropped && "animate-spring-settle"
+                                        getDragClasses(cycle.baseTask.id)
                                       )}
                                       style={{
                                         left: baseLeft + 2,
@@ -1452,14 +1370,14 @@ export function GanttChart({
                                       {!readOnly && (
                                         <>
                                           <div
-                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.baseTask, 'resize-start');
                                             }}
                                           />
                                           <div
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.baseTask, 'resize-end');
@@ -1490,10 +1408,9 @@ export function GanttChart({
                                     <div
                                       className={cn(
                                         "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "gantt-task-bar-base",
                                         "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                        "transition-all duration-300 ease-out shadow-md",
-                                        isReworkDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                                        isReworkJustDropped && "animate-spring-settle"
+                                        getDragClasses(cycle.reworkTask.id)
                                       )}
                                       style={{
                                         left: reworkLeft + 2,
@@ -1506,14 +1423,14 @@ export function GanttChart({
                                       {!readOnly && (
                                         <>
                                           <div
-                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isReworkDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.reworkTask!, 'resize-start');
                                             }}
                                           />
                                           <div
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isReworkDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.reworkTask!, 'resize-end');
@@ -1614,11 +1531,10 @@ export function GanttChart({
                                   <TooltipTrigger asChild>
                                     <div
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move border-2 border-dashed",
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "gantt-review-bar",
                                         "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                        "transition-all duration-300 ease-out",
-                                        isReviewDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                                        isReviewJustDropped && "animate-spring-settle"
+                                        getDragClasses(cycle.reviewTask.id)
                                       )}
                                       style={{
                                         left: reviewLeft + 2,
@@ -1632,14 +1548,14 @@ export function GanttChart({
                                       {!readOnly && (
                                         <>
                                           <div
-                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-l-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isReviewDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.reviewTask!, 'resize-start');
                                             }}
                                           />
                                           <div
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isReviewDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, cycle.reviewTask!, 'resize-end');
@@ -1736,12 +1652,11 @@ export function GanttChart({
                                   <div
                                     className={cn(
                                       "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                      "gantt-task-bar-base",
                                       "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                      "transition-all duration-300 ease-out shadow-md",
-                                      isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                                      isJustDropped && "animate-spring-settle",
+                                      getDragClasses(task.id),
                                       task.task_type === 'milestone' && "rounded-full",
-                                      isFeedback && "border-2 border-dashed"
+                                      isFeedback && "gantt-review-bar"
                                     )}
                                     style={{
                                       left: clippedLeft + 2,
@@ -1758,7 +1673,7 @@ export function GanttChart({
                                       <>
                                         {!readOnly && (
                                           <div
-                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, task, 'resize-start');
@@ -1774,7 +1689,7 @@ export function GanttChart({
 
                                         {!readOnly && (
                                           <div
-                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
                                             onMouseDown={(e) => {
                                               e.stopPropagation();
                                               handleDragStart(e, task, 'resize-end');
@@ -1784,29 +1699,20 @@ export function GanttChart({
                                       </>
                                     )}
 
-                                  {durationChanged && (
-                                    <div 
-                                      className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
-                                    >
-                                      <div className="flex items-center gap-2">
+                                    {/* Duration indicator during resize */}
+                                    {durationChanged && (
+                                      <div className="gantt-duration-indicator">
                                         <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
-                                        <span className="text-amber-500">→</span>
+                                        <span className="mx-1.5 text-amber-500">→</span>
+                                        <span className="font-bold">{currentDuration}d</span>
                                         <span className={cn(
-                                          "font-bold",
-                                          currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
+                                          "gantt-duration-indicator-change",
+                                          currentDuration! > originalDuration! ? "positive" : "negative"
                                         )}>
-                                          {currentDuration}d
-                                        </span>
-                                        <span className={cn(
-                                          "text-[10px]",
-                                          currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
-                                        )}>
-                                          ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
+                                          {currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!}
                                         </span>
                                       </div>
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
-                                    </div>
-                                  )}
+                                    )}
                                   </div>
                                 </TooltipTrigger>
                                 {viewMode === 'project' && (
