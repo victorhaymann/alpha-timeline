@@ -29,7 +29,9 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Copy,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -1066,30 +1068,36 @@ export default function SharedProjectView() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-muted-foreground">Project Manager</p>
                   {project.pm_name ? (
-                    <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <p className="text-sm font-semibold">{project.pm_name}</p>
-                      <div className="flex items-center gap-3">
-                        {project.pm_email && (
-                          <a 
-                            href={`mailto:${project.pm_email}`}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            title={project.pm_email}
-                          >
-                            <Mail className="w-4 h-4 text-[#0078D4]" />
-                          </a>
-                        )}
-                        {project.pm_whatsapp && (
-                          <a 
-                            href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            title={project.pm_whatsapp}
-                          >
-                            <Phone className="w-4 h-4 text-[#25D366]" />
-                          </a>
-                        )}
-                      </div>
+                      {project.pm_email && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(project.pm_email!);
+                            toast.success('Email copied to clipboard');
+                          }}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          title="Copy email"
+                        >
+                          <Mail className="w-4 h-4 text-[#0078D4]" />
+                          <span>{project.pm_email}</span>
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      )}
+                      {project.pm_whatsapp && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(project.pm_whatsapp!);
+                            toast.success('Phone copied to clipboard');
+                          }}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          title="Copy phone"
+                        >
+                          <Phone className="w-4 h-4 text-[#25D366]" />
+                          <span>{project.pm_whatsapp}</span>
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">Not assigned</p>
