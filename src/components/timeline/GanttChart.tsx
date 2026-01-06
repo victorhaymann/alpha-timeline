@@ -892,8 +892,8 @@ export function GanttChart({
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <Flag className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span><strong>Flag</strong> — Milestone</span>
+                    <Flag className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" strokeWidth={1.5} />
+                    <span><strong>Flag</strong> — Milestone (end of phase)</span>
                   </div>
                   
                   <div className="flex items-center gap-2">
@@ -1788,7 +1788,41 @@ export function GanttChart({
                               })}
                             </div>
 
-                            {!isOutsideView && clippedWidth > 0 && (
+                            {!isOutsideView && clippedWidth > 0 && task.task_type === 'milestone' ? (
+                              // Milestone: Flag icon aligned to right of column
+                              <Tooltip delayDuration={200}>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className={cn(
+                                      "absolute top-1/2 -translate-y-1/2 flex items-center justify-center cursor-move",
+                                      "hover:scale-110 transition-transform",
+                                      getDragClasses(task.id)
+                                    )}
+                                    style={{
+                                      left: clippedLeft + clippedWidth - 20,
+                                      width: 24,
+                                    }}
+                                    onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
+                                  >
+                                    <Flag 
+                                      className="w-5 h-5 drop-shadow-md" 
+                                      style={{ color: sectionColor }}
+                                      fill={sectionColor}
+                                      strokeWidth={1.5}
+                                    />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="bg-card text-card-foreground border shadow-lg">
+                                  <div className="text-sm font-semibold">{task.name}</div>
+                                  {displayStart && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {format(displayStart, 'MMM d, yyyy')}
+                                    </div>
+                                  )}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : !isOutsideView && clippedWidth > 0 && (
+                              // Regular task bar
                               <Tooltip delayDuration={200}>
                                 <TooltipTrigger asChild>
                                   <div
@@ -1797,12 +1831,11 @@ export function GanttChart({
                                       "gantt-task-bar-base",
                                       "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                       getDragClasses(task.id),
-                                      task.task_type === 'milestone' && "rounded-full",
                                       isFeedback && "gantt-review-bar"
                                     )}
                                     style={{
                                       left: clippedLeft + 2,
-                                      width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
+                                      width: clippedWidth - 4,
                                       background: isFeedback 
                                         ? `${sectionColor}99` 
                                         : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
@@ -1811,34 +1844,30 @@ export function GanttChart({
                                     }}
                                     onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                                   >
-                                    {task.task_type !== 'milestone' && (
-                                      <>
-                                        {!readOnly && (
-                                          <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, task, 'resize-start');
-                                            }}
-                                          />
-                                        )}
+                                    {!readOnly && (
+                                      <div
+                                        className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          handleDragStart(e, task, 'resize-start');
+                                        }}
+                                      />
+                                    )}
 
-                                        <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                          <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
-                                            {clippedWidth > 60 ? task.name : ''}
-                                          </span>
-                                        </div>
+                                    <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                        {clippedWidth > 60 ? task.name : ''}
+                                      </span>
+                                    </div>
 
-                                        {!readOnly && (
-                                          <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, task, 'resize-end');
-                                            }}
-                                          />
-                                        )}
-                                      </>
+                                    {!readOnly && (
+                                      <div
+                                        className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                        onMouseDown={(e) => {
+                                          e.stopPropagation();
+                                          handleDragStart(e, task, 'resize-end');
+                                        }}
+                                      />
                                     )}
 
                                     {/* Duration indicator during resize */}
