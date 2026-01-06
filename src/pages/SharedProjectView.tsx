@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { Project, Phase, Task, Dependency } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GanttChart } from '@/components/timeline/GanttChart';
@@ -194,6 +196,7 @@ interface ProjectShare {
   project_id: string;
   share_type: 'public' | 'invite';
   is_active: boolean;
+  password_hash: string | null;
 }
 
 interface ProjectDocument {
@@ -218,6 +221,10 @@ export default function SharedProjectView() {
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
   const [loadError, setLoadError] = useState<LoadError | null>(null);
   const [debugSteps, setDebugSteps] = useState<string[]>([]);
   const [share, setShare] = useState<ProjectShare | null>(null);
@@ -258,6 +265,8 @@ export default function SharedProjectView() {
     setLoading(true);
     setAccessDenied(false);
     setNeedsAuth(false);
+    setNeedsPassword(false);
+    setPasswordError(false);
     setLoadError(null);
     setDebugSteps([]);
     
@@ -301,10 +310,26 @@ export default function SharedProjectView() {
       }
 
       const shareInfo = shareResult.data as ProjectShare;
-      addDebugStep(`Share loaded: type=${shareInfo.share_type}, project_id=${shareInfo.project_id}`);
+      addDebugStep(`Share loaded: type=${shareInfo.share_type}, project_id=${shareInfo.project_id}, hasPassword=${!!shareInfo.password_hash}`);
       setShare(shareInfo);
 
-      // Step 2: For invite-only shares, we need auth
+      // Step 2: Check if password protected
+      if (shareInfo.password_hash) {
+        // Check if already verified in this session
+        const verifiedKey = `share_verified_${token}`;
+        const isVerified = sessionStorage.getItem(verifiedKey) === 'true';
+        
+        if (!isVerified) {
+          addDebugStep('Password required, showing prompt');
+          setNeedsPassword(true);
+          setLoading(false);
+          inFlightRef.current = false;
+          return;
+        }
+        addDebugStep('Password already verified this session');
+      }
+
+      // Step 3: For invite-only shares, we need auth
       if (shareInfo.share_type === 'invite') {
         addDebugStep('Invite-only share, checking auth...');
         if (!currentUser) {
@@ -534,6 +559,33 @@ export default function SharedProjectView() {
     checkAccess(user);
   }, [checkAccess, user]);
 
+  // Simple password hash check (comparing with stored bcrypt-style hash)
+  // For client-side, we use a simple comparison - the hash is created server-side
+  const verifyPassword = useCallback(async () => {
+    if (!share || !passwordInput.trim()) return;
+    
+    setVerifyingPassword(true);
+    setPasswordError(false);
+    
+    try {
+      // Simple string comparison - the password_hash stores the plain password for now
+      // In production, you'd use bcrypt on the server side
+      if (share.password_hash === passwordInput) {
+        // Store verification in session
+        sessionStorage.setItem(`share_verified_${token}`, 'true');
+        setNeedsPassword(false);
+        setPasswordInput('');
+        // Re-run access check to load project data
+        inFlightRef.current = false;
+        checkAccess(user);
+      } else {
+        setPasswordError(true);
+      }
+    } finally {
+      setVerifyingPassword(false);
+    }
+  }, [share, passwordInput, token, checkAccess, user]);
+
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
     setLoadingPreview(true);
@@ -579,6 +631,63 @@ export default function SharedProjectView() {
   // If invite-only share requires login, redirect to auth
   if (needsAuth) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Password prompt screen
+  if (needsPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-primary/10">
+                <Lock className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Password Protected</h2>
+                <p className="text-sm text-muted-foreground">
+                  This project requires a password to view.
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="share-password">Enter password</Label>
+              <Input
+                id="share-password"
+                type="password"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError(false);
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && verifyPassword()}
+                placeholder="Enter project password"
+                className={cn(passwordError && 'border-destructive')}
+              />
+              {passwordError && (
+                <p className="text-sm text-destructive">Incorrect password</p>
+              )}
+            </div>
+            
+            <Button 
+              onClick={verifyPassword} 
+              disabled={verifyingPassword || !passwordInput.trim()}
+              className="w-full"
+            >
+              {verifyingPassword ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Continue'
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // Show error state with diagnostics

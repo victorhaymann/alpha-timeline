@@ -487,6 +487,7 @@ export type Database = {
           created_by: string
           id: string
           is_active: boolean
+          password_hash: string | null
           project_id: string
           share_type: string
           token: string
@@ -496,6 +497,7 @@ export type Database = {
           created_by: string
           id?: string
           is_active?: boolean
+          password_hash?: string | null
           project_id: string
           share_type: string
           token?: string
@@ -505,6 +507,7 @@ export type Database = {
           created_by?: string
           id?: string
           is_active?: boolean
+          password_hash?: string | null
           project_id?: string
           share_type?: string
           token?: string
