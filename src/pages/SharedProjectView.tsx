@@ -214,6 +214,21 @@ interface LoadError {
 
 const REQUEST_TIMEOUT_MS = 15000; // 15 second timeout per request
 
+function safeSessionGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSessionSet(key: string, value: string) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Ignore storage errors (some browsers/private modes disable storage)
+  }
+}
 export default function SharedProjectView() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -308,8 +323,7 @@ export default function SharedProjectView() {
       // Check password immediately
       if (shareInfo.password_hash) {
         const verifiedKey = `share_verified_${token}`;
-        const isVerified = sessionStorage.getItem(verifiedKey) === 'true';
-        
+        const isVerified = safeSessionGet(verifiedKey) === 'true';
         if (!isVerified) {
           addDebugStep('Password required - showing prompt');
           setNeedsPassword(true);
@@ -367,7 +381,7 @@ export default function SharedProjectView() {
             .from('profiles')
             .select('email')
             .eq('id', currentUser.id)
-            .single(),
+            .maybeSingle(),
           REQUEST_TIMEOUT_MS,
           'Fetch profile'
         );
@@ -695,7 +709,7 @@ export default function SharedProjectView() {
     
     try {
       if (share.password_hash === passwordInput) {
-        sessionStorage.setItem(`share_verified_${token}`, 'true');
+        safeSessionSet(`share_verified_${token}`, 'true');
         addDebugStep('Password verified - loading project data');
         setNeedsPassword(false);
         setPasswordInput('');
