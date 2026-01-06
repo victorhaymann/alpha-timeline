@@ -96,6 +96,7 @@ export default function ClientProjectView() {
           .from('tasks')
           .select('*')
           .in('phase_id', phaseIds)
+          .eq('client_visible', true)
           .order('order_index');
 
         const tasksResult = (tasksData as Task[]) || [];
