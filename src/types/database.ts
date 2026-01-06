@@ -48,6 +48,9 @@ export interface Project {
   checkin_timezone: string | null;
   checkin_frequency: string | null;
   checkin_weekday: string | null;
+  pm_name: string | null;
+  pm_email: string | null;
+  pm_whatsapp: string | null;
   created_at: string;
   updated_at: string;
 }
