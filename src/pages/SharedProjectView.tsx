@@ -249,7 +249,9 @@ export default function SharedProjectView() {
 
   const addDebugStep = useCallback((step: string) => {
     const timestamp = new Date().toISOString().substring(11, 23);
-    setDebugSteps(prev => [...prev, `[${timestamp}] ${step}`]);
+    const logLine = `[${timestamp}] ${step}`;
+    console.log('[SharedProjectView]', logLine);
+    setDebugSteps(prev => [...prev, logLine]);
   }, []);
 
   const checkAccess = useCallback(async (currentUser: typeof user) => {
@@ -544,14 +546,33 @@ export default function SharedProjectView() {
   }, [token, addDebugStep]);
 
   // Run checkAccess when token changes or when user state settles
+  // Also add a timeout in case auth never settles
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
-    // Don't start loading until auth has settled - prevents Supabase client hanging
+    // Clear any previous timeout
+    if (authTimeoutRef.current) {
+      clearTimeout(authTimeoutRef.current);
+    }
+    
     if (authLoading) {
       addDebugStep('Waiting for auth to initialize...');
+      // Force proceed after 5 seconds if auth is stuck
+      authTimeoutRef.current = setTimeout(() => {
+        addDebugStep('Auth timeout - proceeding without auth');
+        checkAccess(null);
+      }, 5000);
       return;
     }
+    
     checkAccess(user);
-  }, [authLoading, user, checkAccess]);
+    
+    return () => {
+      if (authTimeoutRef.current) {
+        clearTimeout(authTimeoutRef.current);
+      }
+    };
+  }, [authLoading, user, checkAccess, addDebugStep]);
 
   const handleRetry = useCallback(() => {
     // Force a fresh run
