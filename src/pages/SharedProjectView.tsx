@@ -390,7 +390,7 @@ export default function SharedProjectView() {
             .select('id')
             .eq('share_id', shareInfo.id)
             .eq('email', profileResult.data.email)
-            .single(),
+            .maybeSingle(),
           REQUEST_TIMEOUT_MS,
           'Fetch invite'
         );
@@ -425,7 +425,7 @@ export default function SharedProjectView() {
           .from('projects')
           .select('*')
           .eq('id', shareInfo.project_id)
-          .single(),
+          .maybeSingle(),
         REQUEST_TIMEOUT_MS,
         'Fetch project'
       );
