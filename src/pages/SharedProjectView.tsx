@@ -280,13 +280,21 @@ export default function SharedProjectView() {
           .select('*')
           .eq('token', token)
           .eq('is_active', true)
-          .single(),
+          .maybeSingle(),
         REQUEST_TIMEOUT_MS,
         'Resolve share'
       );
 
-      if (shareResult.error || !shareResult.data) {
-        addDebugStep(`Share not found: ${shareResult.error?.message || 'No data'}`);
+      if (shareResult.error) {
+        addDebugStep(`Share query error: ${shareResult.error.message}`);
+        setAccessDenied(true);
+        setLoading(false);
+        setBootStage('done');
+        return null;
+      }
+
+      if (!shareResult.data) {
+        addDebugStep('Share not found or inactive');
         setAccessDenied(true);
         setLoading(false);
         setBootStage('done');
