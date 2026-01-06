@@ -203,9 +203,15 @@ export default function SharedProjectView() {
   const [loadingPreview, setLoadingPreview] = useState(false);
 
   const checkAccess = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setAccessDenied(true);
+      setLoading(false);
+      return;
+    }
 
     try {
+      console.log('Checking access for token:', token);
+      
       // Fetch the share by token
       const { data: shareData, error: shareError } = await supabase
         .from('project_shares')
@@ -214,7 +220,10 @@ export default function SharedProjectView() {
         .eq('is_active', true)
         .single();
 
+      console.log('Share data:', shareData, 'Error:', shareError);
+
       if (shareError || !shareData) {
+        console.log('No share found or error, denying access');
         setAccessDenied(true);
         setLoading(false);
         return;
@@ -226,8 +235,7 @@ export default function SharedProjectView() {
       // If it's invite-only, check if user is logged in and invited
       if (shareInfo.share_type === 'invite') {
         if (!user) {
-          // Wait for auth to finish loading
-          if (authLoading) return;
+          console.log('Invite-only share but user not logged in');
           setAccessDenied(true);
           setLoading(false);
           return;
@@ -260,6 +268,9 @@ export default function SharedProjectView() {
         }
       }
 
+      // For public shares, proceed without user check
+      console.log('Share type is public or user is invited, fetching project data');
+
       // Fetch project data
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
@@ -267,7 +278,10 @@ export default function SharedProjectView() {
         .eq('id', shareInfo.project_id)
         .single();
 
+      console.log('Project data:', projectData, 'Error:', projectError);
+
       if (projectError || !projectData) {
+        console.log('No project found or error');
         setAccessDenied(true);
         setLoading(false);
         return;
@@ -276,24 +290,26 @@ export default function SharedProjectView() {
       setProject(projectData as Project);
 
       // Fetch phases
-      const { data: phasesData } = await supabase
+      const { data: phasesData, error: phasesError } = await supabase
         .from('phases')
         .select('*')
         .eq('project_id', shareInfo.project_id)
         .order('order_index');
 
+      console.log('Phases data:', phasesData, 'Error:', phasesError);
       setPhases((phasesData as Phase[]) || []);
 
       // Fetch tasks
       if (phasesData && phasesData.length > 0) {
         const phaseIds = phasesData.map(p => p.id);
-        const { data: tasksData } = await supabase
+        const { data: tasksData, error: tasksError } = await supabase
           .from('tasks')
           .select('*')
           .in('phase_id', phaseIds)
           .eq('client_visible', true)
           .order('order_index');
 
+        console.log('Tasks data:', tasksData?.length, 'Error:', tasksError);
         const tasksList = (tasksData as Task[]) || [];
         setTasks(tasksList);
 
@@ -318,19 +334,24 @@ export default function SharedProjectView() {
       setQuotations((quotationsRes.data as ProjectDocument[]) || []);
       setInvoices((invoicesRes.data as ProjectDocument[]) || []);
 
+      console.log('All data loaded successfully');
+      setLoading(false);
+
     } catch (error) {
       console.error('Error checking access:', error);
       setAccessDenied(true);
-    } finally {
       setLoading(false);
     }
-  }, [token, user, authLoading]);
+  }, [token, user]);
 
+  // Run checkAccess when auth is done loading (for invite-only shares)
+  // or immediately for public shares
   useEffect(() => {
+    // Always try to check access once auth state is determined
     if (!authLoading) {
       checkAccess();
     }
-  }, [checkAccess, authLoading]);
+  }, [authLoading, checkAccess]);
 
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
