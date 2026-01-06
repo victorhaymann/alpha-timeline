@@ -306,4 +306,13 @@
       background-position: 200% 0;
     }
   }
+
+  /* Hide scrollbar for Gantt left pane sync */
+  .gantt-left-body-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .gantt-left-body-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }

@@ -95,6 +95,10 @@ export function GanttChart({
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const leftBodyRef = useRef<HTMLDivElement>(null);
+  const rightBodyRef = useRef<HTMLDivElement>(null);
+  const rightHeaderRef = useRef<HTMLDivElement>(null);
+  const isSyncingScroll = useRef(false);
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   
   // Default view: show entire project range for full scrolling
@@ -213,6 +217,28 @@ export function GanttChart({
       resizeObserver.observe(containerRef.current);
     }
     return () => resizeObserver.disconnect();
+  }, []);
+
+  // Scroll synchronization handlers
+  const handleLeftBodyScroll = useCallback(() => {
+    if (isSyncingScroll.current || !leftBodyRef.current || !rightBodyRef.current) return;
+    isSyncingScroll.current = true;
+    rightBodyRef.current.scrollTop = leftBodyRef.current.scrollTop;
+    requestAnimationFrame(() => { isSyncingScroll.current = false; });
+  }, []);
+
+  const handleRightBodyScroll = useCallback(() => {
+    if (isSyncingScroll.current) return;
+    isSyncingScroll.current = true;
+    
+    if (leftBodyRef.current && rightBodyRef.current) {
+      leftBodyRef.current.scrollTop = rightBodyRef.current.scrollTop;
+    }
+    if (rightHeaderRef.current && rightBodyRef.current) {
+      rightHeaderRef.current.scrollLeft = rightBodyRef.current.scrollLeft;
+    }
+    
+    requestAnimationFrame(() => { isSyncingScroll.current = false; });
   }, []);
 
   // Calculate responsive column width - fills available space
@@ -798,20 +824,25 @@ export function GanttChart({
         </div>
       </div>
 
-      {/* Gantt Chart - Light Theme */}
-      <div className="relative overflow-auto rounded-xl bg-muted border border-border shadow-sm" ref={containerRef}>
-        <div className="relative flex bg-muted" style={{ height: totalHeight }}>
-          {/* Fixed task names column - Left Sidebar */}
-          <div className="sticky left-0 z-20 bg-muted border-r border-border shrink-0" style={{ width: TASK_COLUMN_WIDTH }}>
-            {/* Header */}
+      {/* Gantt Chart - Split Pane Layout for frozen tasks column */}
+      <div className="rounded-xl bg-muted border border-border shadow-sm overflow-hidden" ref={containerRef}>
+        <div className="flex" style={{ height: totalHeight }}>
+          {/* Left Pane - Fixed Tasks Column (no horizontal scroll) */}
+          <div className="flex flex-col shrink-0 bg-muted border-r border-border z-20" style={{ width: TASK_COLUMN_WIDTH }}>
+            {/* Tasks Header - Fixed */}
             <div 
-              className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase"
+              className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase shrink-0"
               style={{ height: HEADER_HEIGHT }}
             >
               <span className="text-foreground">Tasks</span>
             </div>
 
-            {/* Section rows (phases + client check-ins) */}
+            {/* Tasks Body - Vertical scroll only, synced with right pane */}
+            <div 
+              ref={leftBodyRef}
+              className="flex-1 overflow-y-auto overflow-x-hidden gantt-left-body-scroll"
+              onScroll={handleLeftBodyScroll}
+            >
             {orderedSections.map((section, sectionIndex) => {
               const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
@@ -967,148 +998,74 @@ export function GanttChart({
                 </div>
               );
             })}
+            </div>
           </div>
 
-          {/* Timeline area */}
-          <div 
-            className={cn(
-              "relative flex-1 min-w-0 bg-muted",
-              slideDirection === 'left' && "animate-slide-left",
-              slideDirection === 'right' && "animate-slide-right"
-            )}
-            ref={timelineRef}
-            onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
-            onMouseUp={dragging ? handleDragEnd : undefined}
-            onMouseLeave={dragging ? handleDragEnd : undefined}
-          >
-            {/* Column headers */}
+          {/* Right Pane - Timeline (horizontal + vertical scroll) */}
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Timeline Header - Fixed horizontally synced */}
             <div 
-              className="flex border-b border-border bg-muted/50 sticky top-0 z-10"
+              ref={rightHeaderRef}
+              className="overflow-x-hidden shrink-0 border-b border-border bg-muted/50"
               style={{ height: HEADER_HEIGHT }}
             >
-              {groupedColumns.map((col) => {
-                const isToday = col.days.some(d => isSameDay(d, new Date()));
-                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+              <div className="flex" style={{ width: chartWidth }}>
+                {groupedColumns.map((col) => {
+                  const isToday = col.days.some(d => isSameDay(d, new Date()));
+                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
 
-                return (
-                  <div
-                    key={col.key}
-                    className={cn(
-                      "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/60",
-                      isToday && "bg-destructive/10",
-                      !isToday && isAlternateWeek && "bg-black/[0.04]"
-                    )}
-                    style={{ width: columnWidth }}
-                  >
-                    <span className="font-bold text-foreground tracking-wide">{col.label}</span>
-                    <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">{col.subLabel}</span>
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={col.key}
+                      className={cn(
+                        "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/60",
+                        isToday && "bg-destructive/10",
+                        !isToday && isAlternateWeek && "bg-black/[0.04]"
+                      )}
+                      style={{ width: columnWidth }}
+                    >
+                      <span className="font-bold text-foreground tracking-wide">{col.label}</span>
+                      <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">{col.subLabel}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            {/* Section rows with task bars */}
-            {orderedSections.map((section, sectionIndex) => {
-              const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
-              const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
-              const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
-              const isCollapsed = collapsedSections.has(sectionKey);
-              const isWeeklyCall = section.type === 'weekly-call';
-              
-              // Hide Client Check-ins section when it has no meetings
-              const hasNoMeetings = isWeeklyCall && (!section.task.recurring_dates || section.task.recurring_dates.length === 0);
-              if (hasNoMeetings) return null;
+            {/* Timeline Body - Both scrolls, synced with left pane */}
+            <div 
+              ref={rightBodyRef}
+              className={cn(
+                "flex-1 overflow-auto relative",
+                slideDirection === 'left' && "animate-slide-left",
+                slideDirection === 'right' && "animate-slide-right"
+              )}
+              onScroll={handleRightBodyScroll}
+              onMouseMove={dragging ? (e) => handleDragMove(e.nativeEvent) : undefined}
+              onMouseUp={dragging ? handleDragEnd : undefined}
+              onMouseLeave={dragging ? handleDragEnd : undefined}
+            >
+              <div className="relative" style={{ width: chartWidth }}>
+                {/* Section rows with task bars */}
+                {orderedSections.map((section, sectionIndex) => {
+                  const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
+                  const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
+                  const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
+                  const isCollapsed = collapsedSections.has(sectionKey);
+                  const isWeeklyCall = section.type === 'weekly-call';
+                  
+                  // Hide Client Check-ins section when it has no meetings
+                  const hasNoMeetings = isWeeklyCall && (!section.task.recurring_dates || section.task.recurring_dates.length === 0);
+                  if (hasNoMeetings) return null;
 
-              return (
-                <div key={sectionKey}>
-                  {/* Section header row */}
-                  <div 
-                    className="cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
-                    style={{ height: PHASE_HEADER_HEIGHT }}
-                    onClick={() => toggleSectionCollapse(sectionKey)}
-                  >
-                    <div className="flex h-full">
-                      {groupedColumns.map((col) => {
-                        const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                        return (
-                          <div
-                            key={col.key}
-                            className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                            style={{ width: columnWidth }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Weekly call row with diamond markers */}
-                  {isWeeklyCall && !isCollapsed && (
-                    <div className="relative" style={{ height: ROW_HEIGHT }}>
-                      {/* Grid background */}
-                      <div className="absolute inset-0 flex">
-                        {groupedColumns.map((col) => {
-                          const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                          return (
-                            <div
-                              key={col.key}
-                              className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                              style={{ width: columnWidth }}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {/* Diamond markers for each recurring date with hover card */}
-                      {section.task.recurring_dates?.map((dateStr, idx) => {
-                        const meetingDate = new Date(dateStr);
-                        const left = dateToX(meetingDate);
-                        
-                        // Check if this date is visible in current view
-                        const colIndex = groupedColumns.findIndex(col => 
-                          isSameDay(col.startDate, meetingDate)
-                        );
-                        if (colIndex === -1) return null;
-
-                        // Find the actual task ID for this meeting date
-                        const taskId = checkinTasksByDate.get(dateStr);
-                        
-                        return (
-                          <MeetingHoverCard
-                            key={dateStr}
-                            meetingDate={meetingDate}
-                            meetingName={section.task.name}
-                            checkinTime={checkinTime ?? null}
-                            checkinDuration={checkinDuration ?? null}
-                            checkinTimezone={checkinTimezone ?? null}
-                            tasks={tasks}
-                            left={left}
-                            columnWidth={columnWidth}
-                            allMeetingDates={section.task.recurring_dates || []}
-                            meetingIndex={idx}
-                            projectId={projectId}
-                            readOnly={readOnly}
-                            onDelete={taskId && onDeleteMeeting ? () => onDeleteMeeting(taskId) : undefined}
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Task bars - only show if not collapsed (for phases only) */}
-                  {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
-                    const isCurrentlyDragging = dragging?.taskId === task.id;
-                    const isJustDropped = justDropped === task.id;
-                    const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
-                    const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
-
-                    // Calculate durations for preview
-                    const currentDuration = displayStart && displayEnd ? differenceInDays(displayEnd, displayStart) + 1 : null;
-                    const originalDuration = dragging?.originalDuration;
-                    const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
-                    const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
-
-                    if (!displayStart || !displayEnd) return (
-                      <div key={task.id} style={{ height: ROW_HEIGHT }}>
+                  return (
+                    <div key={sectionKey}>
+                      {/* Section header row */}
+                      <div 
+                        className="cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
+                        style={{ height: PHASE_HEADER_HEIGHT }}
+                        onClick={() => toggleSectionCollapse(sectionKey)}
+                      >
                         <div className="flex h-full">
                           {groupedColumns.map((col) => {
                             const isAlternateWeek = weekAlternatingMap[col.weekNumber];
@@ -1122,170 +1079,255 @@ export function GanttChart({
                           })}
                         </div>
                       </div>
-                    );
 
-                    // Check if task overlaps with visible range
-                    const firstColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[0].startDate) : null;
-                    const lastColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[groupedColumns.length - 1].startDate) : null;
-                    const taskStartDay = startOfDay(displayStart);
-                    const taskEndDay = startOfDay(displayEnd);
-                    
-                    // Skip rendering if task is completely outside visible range
-                    const isOutsideView = firstColDate && lastColDate && 
-                      (taskEndDay < firstColDate || taskStartDay > lastColDate);
+                      {/* Weekly call row with diamond markers */}
+                      {isWeeklyCall && !isCollapsed && (
+                        <div className="relative" style={{ height: ROW_HEIGHT }}>
+                          {/* Grid background */}
+                          <div className="absolute inset-0 flex">
+                            {groupedColumns.map((col) => {
+                              const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                              return (
+                                <div
+                                  key={col.key}
+                                  className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                  style={{ width: columnWidth }}
+                                />
+                              );
+                            })}
+                          </div>
 
-                    // Calculate clipped position and width for tasks that partially overlap
-                    let clippedLeft = dateToX(displayStart);
-                    let clippedWidth = getTaskWidth(displayStart, displayEnd);
-                    
-                    // If task starts before view, clip to start at 0
-                    if (firstColDate && taskStartDay < firstColDate) {
-                      clippedLeft = 0;
-                      // Recalculate width from first visible column to task end
-                      clippedWidth = getTaskWidth(firstColDate, displayEnd);
-                    }
+                          {/* Diamond markers for each recurring date with hover card */}
+                          {section.task.recurring_dates?.map((dateStr, idx) => {
+                            const meetingDate = new Date(dateStr);
+                            const left = dateToX(meetingDate);
+                            
+                            // Check if this date is visible in current view
+                            const colIndex = groupedColumns.findIndex(col => 
+                              isSameDay(col.startDate, meetingDate)
+                            );
+                            if (colIndex === -1) return null;
 
-                    return (
-                      <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
-                        {/* Grid background */}
-                        <div className="absolute inset-0 flex">
-                          {groupedColumns.map((col) => {
-                            const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                            // Find the actual task ID for this meeting date
+                            const taskId = checkinTasksByDate.get(dateStr);
+                            
                             return (
-                              <div
-                                key={col.key}
-                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                                style={{ width: columnWidth }}
+                              <MeetingHoverCard
+                                key={dateStr}
+                                meetingDate={meetingDate}
+                                meetingName={section.task.name}
+                                checkinTime={checkinTime ?? null}
+                                checkinDuration={checkinDuration ?? null}
+                                checkinTimezone={checkinTimezone ?? null}
+                                tasks={tasks}
+                                left={left}
+                                columnWidth={columnWidth}
+                                allMeetingDates={section.task.recurring_dates || []}
+                                meetingIndex={idx}
+                                projectId={projectId}
+                                readOnly={readOnly}
+                                onDelete={taskId && onDeleteMeeting ? () => onDeleteMeeting(taskId) : undefined}
                               />
                             );
                           })}
                         </div>
+                      )}
 
-                        {/* Task bar - Phase colored */}
-                        {!isOutsideView && clippedWidth > 0 && (
-                          <Tooltip delayDuration={200}>
-                            <TooltipTrigger asChild>
-                              <div
-                                className={cn(
-                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
-                                  "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                  "transition-all duration-300 ease-out shadow-md",
-                                  isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
-                                  isJustDropped && "animate-spring-settle",
-                                  task.task_type === 'milestone' && "rounded-full"
-                                )}
-                                style={{
-                                  left: clippedLeft + 2,
-                                  width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
-                                  background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                  boxShadow: `0 4px 12px ${sectionColor}66`,
-                                }}
-                                onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
-                              >
-                                {task.task_type !== 'milestone' && (
-                                  <>
-                                    {/* Resize handle - start */}
-                                    {!readOnly && (
-                                      <div
-                                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          handleDragStart(e, task, 'resize-start');
-                                        }}
-                                      />
+                      {/* Task bars - only show if not collapsed (for phases only) */}
+                      {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
+                        const isCurrentlyDragging = dragging?.taskId === task.id;
+                        const isJustDropped = justDropped === task.id;
+                        const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
+                        const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
+
+                        // Calculate durations for preview
+                        const currentDuration = displayStart && displayEnd ? differenceInDays(displayEnd, displayStart) + 1 : null;
+                        const originalDuration = dragging?.originalDuration;
+                        const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
+                        const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
+
+                        if (!displayStart || !displayEnd) return (
+                          <div key={task.id} style={{ height: ROW_HEIGHT }}>
+                            <div className="flex h-full">
+                              {groupedColumns.map((col) => {
+                                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                return (
+                                  <div
+                                    key={col.key}
+                                    className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                    style={{ width: columnWidth }}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+
+                        // Check if task overlaps with visible range
+                        const firstColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[0].startDate) : null;
+                        const lastColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[groupedColumns.length - 1].startDate) : null;
+                        const taskStartDay = startOfDay(displayStart);
+                        const taskEndDay = startOfDay(displayEnd);
+                        
+                        // Skip rendering if task is completely outside visible range
+                        const isOutsideView = firstColDate && lastColDate && 
+                          (taskEndDay < firstColDate || taskStartDay > lastColDate);
+
+                        // Calculate clipped position and width for tasks that partially overlap
+                        let clippedLeft = dateToX(displayStart);
+                        let clippedWidth = getTaskWidth(displayStart, displayEnd);
+                        
+                        // If task starts before view, clip to start at 0
+                        if (firstColDate && taskStartDay < firstColDate) {
+                          clippedLeft = 0;
+                          // Recalculate width from first visible column to task end
+                          clippedWidth = getTaskWidth(firstColDate, displayEnd);
+                        }
+
+                        return (
+                          <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
+                            {/* Grid background */}
+                            <div className="absolute inset-0 flex">
+                              {groupedColumns.map((col) => {
+                                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                return (
+                                  <div
+                                    key={col.key}
+                                    className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                    style={{ width: columnWidth }}
+                                  />
+                                );
+                              })}
+                            </div>
+
+                            {/* Task bar - Phase colored */}
+                            {!isOutsideView && clippedWidth > 0 && (
+                              <Tooltip delayDuration={200}>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className={cn(
+                                      "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                      "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                      "transition-all duration-300 ease-out shadow-md",
+                                      isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
+                                      isJustDropped && "animate-spring-settle",
+                                      task.task_type === 'milestone' && "rounded-full"
+                                    )}
+                                    style={{
+                                      left: clippedLeft + 2,
+                                      width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
+                                      background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                      boxShadow: `0 4px 12px ${sectionColor}66`,
+                                    }}
+                                    onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
+                                  >
+                                    {task.task_type !== 'milestone' && (
+                                      <>
+                                        {/* Resize handle - start */}
+                                        {!readOnly && (
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, task, 'resize-start');
+                                            }}
+                                          />
+                                        )}
+
+                                        {/* Task name */}
+                                        <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                          <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                            {clippedWidth > 60 ? task.name : ''}
+                                          </span>
+                                        </div>
+
+                                        {/* Resize handle - end */}
+                                        {!readOnly && (
+                                          <div
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, task, 'resize-end');
+                                            }}
+                                          />
+                                        )}
+                                      </>
                                     )}
 
-                                    {/* Task name */}
-                                    <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
-                                        {clippedWidth > 60 ? task.name : ''}
-                                      </span>
+                                  {/* Duration preview tooltip during resize */}
+                                  {durationChanged && (
+                                    <div 
+                                      className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
+                                        <span className="text-amber-500">→</span>
+                                        <span className={cn(
+                                          "font-bold",
+                                          currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
+                                        )}>
+                                          {currentDuration}d
+                                        </span>
+                                        <span className={cn(
+                                          "text-[10px]",
+                                          currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
+                                        )}>
+                                          ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
+                                        </span>
+                                      </div>
+                                      {/* Tooltip arrow */}
+                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
                                     </div>
-
-                                    {/* Resize handle - end */}
-                                    {!readOnly && (
-                                      <div
-                                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          handleDragStart(e, task, 'resize-end');
-                                        }}
-                                      />
-                                    )}
-                                  </>
-                                )}
-
-                              {/* Duration preview tooltip during resize */}
-                              {durationChanged && (
-                                <div 
-                                  className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
-                                    <span className="text-amber-500">→</span>
-                                    <span className={cn(
-                                      "font-bold",
-                                      currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
-                                    )}>
-                                      {currentDuration}d
-                                    </span>
-                                    <span className={cn(
-                                      "text-[10px]",
-                                      currentDuration! > originalDuration! ? "text-green-600" : "text-amber-600"
-                                    )}>
-                                      ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
-                                    </span>
+                                  )}
                                   </div>
-                                  {/* Tooltip arrow */}
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
-                                </div>
-                              )}
-                              </div>
-                            </TooltipTrigger>
-                            {viewMode === 'project' && (
-                              <TooltipContent side="top" className="font-semibold">
-                                <p>{task.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {format(displayStart, 'MMM d')} → {format(displayEnd, 'MMM d')}
-                                </p>
-                              </TooltipContent>
+                                </TooltipTrigger>
+                                {viewMode === 'project' && (
+                                  <TooltipContent side="top" className="font-semibold">
+                                    <p>{task.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(displayStart, 'MMM d')} → {format(displayEnd, 'MMM d')}
+                                    </p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
                             )}
-                          </Tooltip>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
 
-            {/* Today marker - Red vertical line with pulse */}
-            {(() => {
-              const today = new Date();
-              const todayColIndex = groupedColumns.findIndex(col => 
-                isSameDay(col.startDate, today)
-              );
-              if (todayColIndex === -1) return null;
-              
-              const todayX = todayColIndex * columnWidth + columnWidth / 2;
-              return (
-                <div
-                  className="absolute w-0.5 bg-destructive z-30 pointer-events-none animate-pulse-subtle"
-                  style={{ 
-                    left: todayX,
-                    top: 0,
-                    height: totalHeight,
-                    boxShadow: '0 0 8px 2px hsl(var(--destructive) / 0.4)',
-                  }}
-                >
-                  {/* Top indicator dot */}
-                  <div 
-                    className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive animate-pulse-subtle"
-                    style={{ boxShadow: '0 0 10px 3px hsl(var(--destructive) / 0.5)' }}
-                  />
-                </div>
-              );
-            })()}
+                {/* Today marker - Red vertical line with pulse */}
+                {(() => {
+                  const today = new Date();
+                  const todayColIndex = groupedColumns.findIndex(col => 
+                    isSameDay(col.startDate, today)
+                  );
+                  if (todayColIndex === -1) return null;
+                  
+                  const todayX = todayColIndex * columnWidth + columnWidth / 2;
+                  const bodyHeight = totalHeight - HEADER_HEIGHT;
+                  return (
+                    <div
+                      className="absolute w-0.5 bg-destructive z-30 pointer-events-none animate-pulse-subtle"
+                      style={{ 
+                        left: todayX,
+                        top: 0,
+                        height: bodyHeight,
+                        boxShadow: '0 0 8px 2px hsl(var(--destructive) / 0.4)',
+                      }}
+                    >
+                      {/* Top indicator dot */}
+                      <div 
+                        className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive animate-pulse-subtle"
+                        style={{ boxShadow: '0 0 10px 3px hsl(var(--destructive) / 0.5)' }}
+                      />
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
           </div>
         </div>
       </div>
