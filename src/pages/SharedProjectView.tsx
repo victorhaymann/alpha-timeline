@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GanttChart } from '@/components/timeline/GanttChart';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Calendar, 
   Loader2, 
@@ -26,6 +27,145 @@ import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+
+// Loading skeleton component
+function SharedProjectSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-6 space-y-6 animate-pulse">
+        {/* Header skeleton */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+        </div>
+
+        {/* Stats cards skeleton */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Skeleton className="w-9 h-9 rounded-lg" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-5 w-20" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Skeleton className="w-9 h-9 rounded-lg" />
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Progress bar skeleton */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex justify-between mb-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-2 w-full rounded-full" />
+          </CardContent>
+        </Card>
+
+        {/* Tabs skeleton */}
+        <div className="space-y-6">
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-40 rounded-md" />
+            <Skeleton className="h-9 w-28 rounded-md" />
+          </div>
+
+          {/* Gantt chart skeleton */}
+          <div className="space-y-4">
+            {/* Controls bar */}
+            <Card className="p-3">
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-6 w-32" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-8 rounded" />
+                  <Skeleton className="h-8 w-32 rounded" />
+                  <Skeleton className="h-8 w-8 rounded" />
+                  <Skeleton className="h-8 w-40 rounded" />
+                </div>
+                <Skeleton className="h-6 w-24" />
+              </div>
+            </Card>
+
+            {/* Timeline skeleton */}
+            <Card>
+              <div className="p-0">
+                {/* Header row */}
+                <div className="flex border-b border-border">
+                  <div className="w-40 md:w-80 shrink-0 p-4 border-r border-border">
+                    <Skeleton className="h-5 w-16" />
+                  </div>
+                  <div className="flex-1 p-4 flex gap-2">
+                    {[...Array(8)].map((_, i) => (
+                      <Skeleton key={i} className="h-5 w-10" />
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Task rows */}
+                {[...Array(6)].map((_, sectionIndex) => (
+                  <div key={sectionIndex}>
+                    {/* Section header */}
+                    <div className="flex border-b border-border bg-muted/30">
+                      <div className="w-40 md:w-80 shrink-0 p-3 border-r border-border">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-4 rounded-full" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                      </div>
+                      <div className="flex-1 p-3" />
+                    </div>
+                    
+                    {/* Task rows in section */}
+                    {[...Array(2)].map((_, rowIndex) => (
+                      <div key={rowIndex} className="flex border-b border-border last:border-b-0">
+                        <div className="w-40 md:w-80 shrink-0 p-3 border-r border-border">
+                          <div className="flex items-center gap-2">
+                            <Skeleton className="h-3.5 w-3.5" />
+                            <Skeleton className="h-3.5 w-32" />
+                          </div>
+                        </div>
+                        <div className="flex-1 p-3 flex items-center">
+                          <Skeleton 
+                            className="h-6 rounded" 
+                            style={{ 
+                              width: `${Math.random() * 30 + 15}%`,
+                              marginLeft: `${Math.random() * 40}%`
+                            }} 
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface ProjectShare {
   id: string;
@@ -229,11 +369,7 @@ export default function SharedProjectView() {
   };
 
   if (loading || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <SharedProjectSkeleton />;
   }
 
   if (accessDenied) {
