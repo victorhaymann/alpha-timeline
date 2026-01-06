@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Film, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { z } from 'zod';
+import theNewFaceLogo from '@/assets/the-new-face-logo.png';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -91,7 +92,7 @@ export default function Auth() {
     } else {
       toast({
         title: 'Account created!',
-        description: 'Welcome to VFX Timeline Pro.',
+        description: 'Welcome to The New Face.',
       });
     }
   };
@@ -111,13 +112,17 @@ export default function Auth() {
       
       <Card className="w-full max-w-md shadow-card animate-fade-in relative">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-foreground flex items-center justify-center mb-4">
-            <Film className="w-8 h-8 text-background" />
+          <div className="mx-auto mb-4">
+            <img 
+              src={theNewFaceLogo} 
+              alt="The New Face" 
+              className="h-24 w-auto object-contain mx-auto"
+            />
           </div>
-          <CardTitle className="text-2xl font-bold">VFX Timeline Pro</CardTitle>
+          <CardTitle className="text-2xl font-bold">The New Face</CardTitle>
           <CardDescription className="flex items-center justify-center gap-2">
             <Sparkles className="w-4 h-4" />
-            Intelligent project scheduling for VFX teams
+            Intelligent project scheduling
           </CardDescription>
         </CardHeader>
         <CardContent>
