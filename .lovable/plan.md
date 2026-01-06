@@ -1,323 +1,190 @@
-# Plan: Refactor Drag and Drop with Enhanced Animations (COMPLETED)
+# Plan: Improve Vertical Drag Reordering - Swap-Only Behavior
 
-## Overview
-Refactor the GanttChart drag and drop functionality into a clean, maintainable custom hook with polished animations and visual feedback for moving and resizing task bars.
+## Problem Analysis
 
----
+The current vertical drag implementation shifts ALL items between the original and target positions, which creates the sensation that the entire task list is moving. This feels disorienting and imprecise.
 
-## Current State Analysis
+### Current Behavior (Undesirable)
+When dragging a task from index 2 to index 5:
+- Task at index 3 shifts up
+- Task at index 4 shifts up  
+- Task at index 5 shifts up
+- **Result**: 3 items moving simultaneously - feels like whole list is moving
 
-### Existing Implementation (GanttChart.tsx)
-- **Drag state**: Managed with `dragging` state object (lines 114-121)
-- **Drag preview**: Tracked with `dragPreview` state (line 122)
-- **Drop animation**: Uses `justDropped` state with `animate-spring-settle` (line 123)
-- **Handlers**: `handleDragStart`, `handleDragMove`, `handleDragEnd` (lines 715-786)
-- **Event listeners**: Attached in `useState` side effect (lines 789-798) - this is incorrect pattern
-
-### Issues with Current Implementation
-1. Event listeners attached using `useState` instead of `useEffect`
-2. Drag logic is scattered throughout the component
-3. Limited visual feedback during drag
-4. No smooth cursor feedback
-5. Missing ghost/shadow preview while dragging
-6. No elastic/rubber-band effect when hitting boundaries
-7. Resize handles lack visual feedback
+### Desired Behavior (Swap-Only)
+When dragging a task from index 2 to index 5:
+- Only the task at index 5 shifts to swap positions
+- **Result**: 1 item moving - feels localized, precise, and intuitive
 
 ---
 
-## Refactoring Plan
+## Visual Diagram
 
-### Part 1: Create Custom Hook `useDragAndResize`
+```
+CURRENT (All items shift):
+Before:  [A] [B] [C] [D] [E]
+Drag B→D: [A] [ ] [C↑][D↑][B] [E]  ← C and D both move up
 
-Create a new file `src/hooks/useDragAndResize.ts` that encapsulates all drag logic:
-
-```typescript
-interface DragState {
-  taskId: string;
-  type: 'move' | 'resize-start' | 'resize-end';
-  startX: number;
-  originalStart: Date;
-  originalEnd: Date;
-  originalDuration: number;
-}
-
-interface DragPreview {
-  start: Date;
-  end: Date;
-}
-
-interface UseDragAndResizeReturn {
-  dragging: DragState | null;
-  dragPreview: DragPreview | null;
-  justDropped: string | null;
-  isDraggingAny: boolean;
-  handleDragStart: (e: React.MouseEvent, task: Task, type: DragState['type']) => void;
-  getDragStyles: (taskId: string) => React.CSSProperties;
-  getDragClasses: (taskId: string) => string;
-}
+PROPOSED (Swap only):
+Before:  [A] [B] [C] [D] [E]  
+Drag B→D: [A] [D↓][ ] [ ] [B] [E]  ← Only D moves to B's spot
 ```
 
-**Hook responsibilities:**
-- Manage drag state lifecycle
-- Calculate preview positions with snapping
-- Handle mouse events with proper cleanup
-- Provide animation states and classes
-- Support boundary constraints
+---
 
-### Part 2: Enhanced Animation Keyframes
+## Implementation Plan
 
-Add new keyframes to `tailwind.config.ts`:
+### Step 1: Modify `useVerticalReorder.ts` - Swap-Only Logic
 
+**File:** `src/hooks/useVerticalReorder.ts`
+
+Update `getVerticalDragStyles` function (lines 113-152) to only affect the single item being swapped:
+
+**Current logic:**
 ```typescript
-keyframes: {
-  // Lift effect when starting to drag
-  "drag-lift": {
-    "0%": { transform: "translateY(-50%) scale(1)", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" },
-    "100%": { transform: "translateY(-50%) scale(1.02)", boxShadow: "0 12px 32px rgba(0,0,0,0.25)" }
-  },
-  
-  // Drop settle with bounce
-  "drop-settle": {
-    "0%": { transform: "translateY(-50%) scale(1.02)" },
-    "30%": { transform: "translateY(-50%) scale(0.98)" },
-    "60%": { transform: "translateY(-50%) scale(1.01)" },
-    "100%": { transform: "translateY(-50%) scale(1)" }
-  },
-  
-  // Rubber band for resize boundaries
-  "rubber-band": {
-    "0%": { transform: "scaleX(1)" },
-    "30%": { transform: "scaleX(1.05)" },
-    "50%": { transform: "scaleX(0.97)" },
-    "70%": { transform: "scaleX(1.02)" },
-    "100%": { transform: "scaleX(1)" }
-  },
-  
-  // Duration tooltip pop
-  "tooltip-pop": {
-    "0%": { transform: "translateX(-50%) scale(0.8)", opacity: "0" },
-    "50%": { transform: "translateX(-50%) scale(1.05)", opacity: "1" },
-    "100%": { transform: "translateX(-50%) scale(1)", opacity: "1" }
-  },
-  
-  // Resize handle pulse
-  "resize-pulse": {
-    "0%, 100%": { transform: "scaleY(1)", opacity: "0.6" },
-    "50%": { transform: "scaleY(1.2)", opacity: "1" }
+// Shifts ALL items between positions
+if (draggedCurrentIndex > draggedOriginalIndex) {
+  if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex) {
+    return { transform: `translateY(-${rowHeight}px)` };
   }
 }
 ```
 
-### Part 3: Visual Feedback Components
+**New swap-only logic:**
+```typescript
+// Only the item at the current drop target swaps with original position
+if (actualIndex === draggedCurrentIndex && draggedCurrentIndex !== draggedOriginalIndex) {
+  // Calculate how far this item needs to move to take the dragged item's original spot
+  const distance = (draggedOriginalIndex - draggedCurrentIndex) * rowHeight;
+  return {
+    transform: `translateY(${distance}px)`,
+    transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+  };
+}
+```
 
-Add CSS classes to `src/index.css`:
+### Step 2: Add `getSwapTargetClasses` Function
+
+**File:** `src/hooks/useVerticalReorder.ts`
+
+Add a new function to identify and highlight the swap target:
+
+```typescript
+const getSwapTargetClasses = useCallback((taskId: string, actualIndex: number): string => {
+  if (!verticalDrag) return '';
+  
+  // Highlight the item that will be swapped
+  if (actualIndex === verticalDrag.currentIndex && 
+      verticalDrag.currentIndex !== verticalDrag.originalIndex &&
+      verticalDrag.taskId !== taskId) {
+    return 'gantt-swap-target';
+  }
+  return '';
+}, [verticalDrag]);
+```
+
+Update the return type and return statement to include this new function.
+
+### Step 3: Add CSS Classes for Visual Feedback
+
+**File:** `src/index.css`
+
+Add new classes for the swap interaction:
 
 ```css
-/* Drag cursor states */
-.gantt-dragging-move {
-  cursor: grabbing !important;
+/* Swap target highlight */
+.gantt-swap-target {
+  background-color: hsl(var(--primary) / 0.08);
+  border-left: 2px solid hsl(var(--primary) / 0.4);
+  transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.gantt-dragging-resize {
-  cursor: ew-resize !important;
-}
-
-/* Task bar drag states */
-.gantt-task-dragging {
-  z-index: 50;
-  filter: brightness(1.1);
+/* Enhanced dragging item */
+.gantt-vertical-dragging {
+  background: hsl(var(--card));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
   transform-origin: center;
+  z-index: 100;
+  border-radius: 6px;
 }
 
-/* Ghost shadow behind dragged element */
-.gantt-task-ghost {
+/* Drop position indicator line */
+.gantt-drop-line {
   position: absolute;
-  opacity: 0.3;
-  pointer-events: none;
-  filter: blur(1px);
-}
-
-/* Resize handle hover effect */
-.gantt-resize-handle {
-  transition: all 0.15s ease-out;
-}
-
-.gantt-resize-handle:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scaleY(1.1);
-}
-
-.gantt-resize-handle:active {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-/* Duration change indicator */
-.gantt-duration-indicator {
-  animation: tooltip-pop 0.2s ease-out forwards;
-}
-
-/* Snap line indicator */
-.gantt-snap-line {
-  position: absolute;
-  width: 2px;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: hsl(var(--primary));
   opacity: 0;
-  transition: opacity 0.15s ease-out;
+  transition: opacity 150ms ease-out;
+  pointer-events: none;
+  box-shadow: 0 0 8px hsl(var(--primary) / 0.5);
 }
 
-.gantt-snap-line.active {
-  opacity: 0.6;
+.gantt-drop-line.active {
+  opacity: 1;
 }
 ```
 
-### Part 4: Refactor GanttChart Component
+### Step 4: Apply New Classes in GanttChart
 
-**Step 4.1: Import the custom hook**
-```typescript
-import { useDragAndResize } from '@/hooks/useDragAndResize';
-```
+**File:** `src/components/timeline/GanttChart.tsx`
 
-**Step 4.2: Replace inline drag state with hook**
-Remove lines 114-123 (dragging, dragPreview, justDropped states) and replace with hook call.
+Update task row rendering to use the new `getSwapTargetClasses`:
 
-**Step 4.3: Replace drag handlers**
-Remove lines 715-798 (handleDragStart, handleDragMove, handleDragEnd, and useState effect).
-
-**Step 4.4: Update task bar rendering**
-Modify task bar divs to use hook-provided classes and styles:
-
-```tsx
-<div
-  className={cn(
-    "absolute top-1/2 -translate-y-1/2 h-7 rounded-md",
-    getDragClasses(task.id),
-    !readOnly && "cursor-grab hover:cursor-grab"
-  )}
-  style={{
-    ...baseStyles,
-    ...getDragStyles(task.id)
-  }}
-  onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
->
-  {/* Resize handles with new classes */}
-  {!readOnly && (
-    <>
-      <div className="gantt-resize-handle absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-l-md" />
-      <div className="gantt-resize-handle absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r-md" />
-    </>
-  )}
-</div>
-```
-
-**Step 4.5: Add body cursor class during drag**
-Apply cursor class to container during drag:
-
+For review cycles (around line 1025):
 ```tsx
 <div 
-  ref={rightBodyRef}
+  key={cycle.id}
   className={cn(
-    "flex-1 overflow-auto relative",
-    isDraggingAny && dragging?.type === 'move' && "gantt-dragging-move",
-    isDraggingAny && dragging?.type?.startsWith('resize') && "gantt-dragging-resize"
+    getVerticalDragClasses(cycle.baseTask.id),
+    getSwapTargetClasses(cycle.baseTask.id, cycleIndex)
   )}
+  style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex)}
 >
 ```
 
-### Part 5: Enhanced Duration Indicator
-
-Update the duration change tooltip with new animation:
-
+For ungrouped tasks (around line 1111):
 ```tsx
-{durationChanged && (
-  <div className="gantt-duration-indicator absolute -top-12 left-1/2 bg-card text-foreground px-4 py-2 rounded-xl shadow-2xl text-sm font-semibold whitespace-nowrap z-50 border border-border">
-    <div className="flex items-center gap-3">
-      <span className="text-muted-foreground line-through opacity-70 text-xs">{originalDuration}d</span>
-      <ChevronRight className="w-3 h-3 text-muted-foreground" />
-      <span className={cn(
-        "font-bold text-base",
-        currentDuration! > originalDuration! ? "text-success" : "text-amber-500"
-      )}>
-        {currentDuration}d
-      </span>
-      <Badge variant="outline" className={cn(
-        "text-[10px] px-1.5",
-        currentDuration! > originalDuration! ? "border-success text-success" : "border-amber-500 text-amber-500"
-      )}>
-        {currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!}
-      </Badge>
-    </div>
-    {/* Tooltip arrow */}
-    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-card" />
-  </div>
-)}
+<div 
+  key={task.id}
+  className={cn(
+    "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
+    getVerticalDragClasses(task.id),
+    getSwapTargetClasses(task.id, overallIndex),
+    isBeingDragged && "bg-card"
+  )}
+  style={{ 
+    height: ROW_HEIGHT,
+    ...getVerticalDragStyles(task.id, overallIndex)
+  }}
+>
 ```
 
-### Part 6: Ghost Shadow Effect
+### Step 5: Add Optional Drop Position Indicator
 
-Add a ghost element that stays at the original position while dragging:
+Add a thin colored line showing exactly where the task will land after drop:
 
-```tsx
-{isCurrentlyDragging && (
-  <div
-    className="gantt-task-ghost"
-    style={{
-      left: originalLeft + 2,
-      width: originalWidth - 4,
-      height: 28,
-      top: '50%',
-      transform: 'translateY(-50%)',
-      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}20 100%)`,
-      borderRadius: '0.375rem',
-    }}
-  />
-)}
-```
+**In hook:** Add `getDropLinePosition` that returns the Y offset for the indicator
+**In component:** Render a positioned div that appears at the drop location
 
 ---
 
-## Implementation Order
+## Animation Timing Summary
 
-1. **Create `src/hooks/useDragAndResize.ts`** - New custom hook file
-2. **Update `tailwind.config.ts`** - Add new animation keyframes
-3. **Update `src/index.css`** - Add new CSS classes for drag states
-4. **Refactor `src/components/timeline/GanttChart.tsx`**:
-   - Import and use the new hook
-   - Remove old drag state and handlers
-   - Update task bar rendering with new classes
-   - Add ghost shadow effect
-   - Enhance duration indicator
+| Element | Animation | Duration | Easing |
+|---------|-----------|----------|--------|
+| Dragged item | Follow cursor | Immediate | none |
+| Swap target | Slide to original spot | 200ms | cubic-bezier(0.2, 0, 0, 1) |
+| Swap target highlight | Fade in | 200ms | ease-out |
+| Drop line | Fade in/out | 150ms | ease-out |
 
 ---
 
-## Animation Summary
+## Files to Modify
 
-| Interaction | Animation | Duration |
-|-------------|-----------|----------|
-| Drag start | Lift + scale up + shadow increase | 150ms |
-| Dragging | Smooth follow with slight scale | Continuous |
-| Drag end (drop) | Bounce settle + shadow decrease | 400ms |
-| Resize start | Handle pulse + cursor change | 150ms |
-| Resizing | Smooth width change + duration pop | Continuous |
-| Resize at boundary | Rubber band effect | 300ms |
-| Duration change | Tooltip pop with badge | 200ms |
+### Critical Files for Implementation
 
----
-
-## Files to Create/Modify
-
-### New Files
-- `src/hooks/useDragAndResize.ts` - Custom hook for drag logic
-
-### Modified Files
-- `tailwind.config.ts` - New animation keyframes
-- `src/index.css` - New CSS classes
-- `src/components/timeline/GanttChart.tsx` - Refactored drag implementation
-
----
-
-## Critical Files for Implementation
-
-- `src/components/timeline/GanttChart.tsx` - Main component to refactor (lines 114-123, 715-798, 1433-1530, 1611-1664, 1733-1820)
-- `src/hooks/useDragAndResize.ts` - New custom hook to create
-- `tailwind.config.ts` - Animation keyframes configuration
-- `src/index.css` - CSS utility classes for visual feedback
+- `src/hooks/useVerticalReorder.ts` - Core swap logic, add getSwapTargetClasses function
+- `src/index.css` - Add .gantt-swap-target and .gantt-drop-line CSS classes  
+- `src/components/timeline/GanttChart.tsx` - Apply new classes to task rows
