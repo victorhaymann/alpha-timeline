@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
@@ -70,7 +71,9 @@ interface GanttChartProps {
 
 type ViewMode = 'week' | 'month' | 'project';
 
-const TASK_COLUMN_WIDTH = 340;
+// Responsive constants
+const TASK_COLUMN_WIDTH_DESKTOP = 340;
+const TASK_COLUMN_WIDTH_MOBILE = 160;
 const ROW_HEIGHT = 40;
 const MONTH_ROW_HEIGHT = 24;
 const WEEK_ROW_HEIGHT = 24;
@@ -78,6 +81,7 @@ const DAY_ROW_HEIGHT = 36;
 const HEADER_HEIGHT = MONTH_ROW_HEIGHT + WEEK_ROW_HEIGHT + DAY_ROW_HEIGHT; // 84
 const PHASE_HEADER_HEIGHT = 36;
 const MIN_COLUMN_WIDTH = 36;
+const MIN_COLUMN_WIDTH_MOBILE = 28;
 
 export function GanttChart({
   projectId,
@@ -104,7 +108,11 @@ export function GanttChart({
   const rightBodyRef = useRef<HTMLDivElement>(null);
   const rightHeaderRef = useRef<HTMLDivElement>(null);
   const isSyncingScroll = useRef(false);
+  const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('month');
+  
+  // Responsive task column width
+  const taskColumnWidth = isMobile ? TASK_COLUMN_WIDTH_MOBILE : TASK_COLUMN_WIDTH_DESKTOP;
   
   // Default view: show entire project range for full scrolling
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -112,8 +120,6 @@ export function GanttChart({
     to: projectEndDate,
   });
   const [containerWidth, setContainerWidth] = useState(800);
-  
-  
   
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -264,8 +270,10 @@ export function GanttChart({
   useEffect(() => {
     const updateWidth = () => {
       if (containerRef.current) {
-        const availableWidth = containerRef.current.clientWidth - TASK_COLUMN_WIDTH;
-        setContainerWidth(Math.max(availableWidth, 400));
+        const availableWidth = containerRef.current.clientWidth - taskColumnWidth;
+        // Lower minimum on mobile to prevent negative/zero widths
+        const minAvailable = isMobile ? 150 : 400;
+        setContainerWidth(Math.max(availableWidth, minAvailable));
       }
     };
 
@@ -275,7 +283,7 @@ export function GanttChart({
       resizeObserver.observe(containerRef.current);
     }
     return () => resizeObserver.disconnect();
-  }, []);
+  }, [taskColumnWidth, isMobile]);
 
   // Scroll synchronization handlers
   const handleLeftBodyScroll = useCallback(() => {
@@ -304,10 +312,12 @@ export function GanttChart({
     const columnCount = groupedColumns.length || 1;
     const calculatedWidth = containerWidth / columnCount;
     
-    // Set minimum widths based on view mode - project view has smallest minimum for many columns
-    const minWidths = { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
+    // Set minimum widths based on view mode - smaller on mobile
+    const minWidths = isMobile 
+      ? { week: MIN_COLUMN_WIDTH_MOBILE, month: 40, project: 12 }
+      : { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
     return Math.max(calculatedWidth, minWidths[viewMode]);
-  }, [containerWidth, groupedColumns.length, viewMode]);
+  }, [containerWidth, groupedColumns.length, viewMode, isMobile]);
 
   const chartWidth = groupedColumns.length * columnWidth;
 
@@ -763,23 +773,23 @@ export function GanttChart({
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2 md:gap-4">
       {/* Controls - Light Header */}
-      <div className="flex items-center gap-4 px-4 py-3 rounded-xl bg-card border border-border">
-        {/* Breadcrumb placeholder */}
-        <div className="flex items-center gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2 md:gap-4 px-2 md:px-4 py-2 md:py-3 rounded-xl bg-card border border-border">
+        {/* Breadcrumb placeholder - hidden on mobile */}
+        <div className="hidden md:flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">Projects</span>
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="font-medium text-foreground">Timeline</span>
         </div>
 
         {/* Center controls */}
-        <div className="flex items-center gap-2 mx-auto">
+        <div className="flex items-center gap-1 md:gap-2 mx-auto">
           {/* Navigation arrows */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 hover:bg-accent text-foreground"
+            className="h-8 w-8 md:h-9 md:w-9 p-0 hover:bg-accent text-foreground"
             onClick={() => navigatePeriod('prev')}
             title="Previous period (← Arrow)"
           >
@@ -787,21 +797,24 @@ export function GanttChart({
           </Button>
           
           {/* View mode toggle - Segmented control */}
-          <div className="flex items-center rounded-lg p-1 bg-muted border border-border">
+          <div className="flex items-center rounded-lg p-0.5 md:p-1 bg-muted border border-border">
             {(['week', 'month', 'project'] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-8 px-4 text-xs font-semibold tracking-wide capitalize transition-all duration-200",
+                  "h-7 md:h-8 px-2 md:px-4 text-[10px] md:text-xs font-semibold tracking-wide capitalize transition-all duration-200",
                   viewMode === mode 
                     ? "bg-background text-foreground shadow-sm" 
                     : "text-muted-foreground hover:text-foreground"
                 )}
                 onClick={() => handleViewModeChange(mode)}
               >
-                {mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'Project'}
+                {isMobile 
+                  ? (mode === 'week' ? 'W' : mode === 'month' ? 'M' : 'P')
+                  : (mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'Project')
+                }
               </Button>
             ))}
           </div>
@@ -809,7 +822,7 @@ export function GanttChart({
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 hover:bg-accent text-foreground"
+            className="h-8 w-8 md:h-9 md:w-9 p-0 hover:bg-accent text-foreground"
             onClick={() => navigatePeriod('next')}
             title="Next period (→ Arrow)"
           >
@@ -822,20 +835,20 @@ export function GanttChart({
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-9 gap-2 px-4 hover:bg-accent text-foreground border border-border rounded-lg"
+                className="h-8 md:h-9 gap-1 md:gap-2 px-2 md:px-4 hover:bg-accent text-foreground border border-border rounded-lg"
               >
                 <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium tracking-wide">
+                <span className="text-[10px] md:text-xs font-medium tracking-wide hidden sm:inline">
                   {dateRange?.from ? (
                     dateRange.to ? (
                       <>
-                        {format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d, yyyy')}
+                        {format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d')}
                       </>
                     ) : (
-                      format(dateRange.from, 'MMM d, yyyy')
+                      format(dateRange.from, 'MMM d')
                     )
                   ) : (
-                    'Select date range'
+                    'Dates'
                   )}
                 </span>
               </Button>
@@ -846,7 +859,7 @@ export function GanttChart({
                 defaultMonth={dateRange?.from}
                 selected={dateRange}
                 onSelect={setDateRange}
-                numberOfMonths={2}
+                numberOfMonths={isMobile ? 1 : 2}
                 className="pointer-events-auto"
               />
               <div className="flex items-center justify-between p-3 border-t border-border">
@@ -854,7 +867,7 @@ export function GanttChart({
                   variant="ghost"
                   size="sm"
                   onClick={() => setDateRange({ from: projectStartDate, to: projectEndDate })}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground text-xs"
                 >
                   Reset to project dates
                 </Button>
@@ -864,7 +877,7 @@ export function GanttChart({
         </div>
 
         {/* Right side info */}
-        <div className="flex items-center gap-4 ml-auto">
+        <div className="hidden md:flex items-center gap-4 ml-auto">
           {/* Working days badge */}
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
             {workingDays.length} working days left
@@ -913,13 +926,13 @@ export function GanttChart({
       </div>
 
       {/* Gantt Chart - Split Pane Layout for frozen tasks column */}
-      <div className="rounded-xl bg-muted border border-border shadow-sm overflow-hidden" ref={containerRef}>
-        <div className="flex" style={{ height: totalHeight }}>
+      <div className="rounded-xl bg-muted border border-border shadow-sm overflow-x-auto" ref={containerRef}>
+        <div className="flex" style={{ height: totalHeight, minWidth: isMobile ? taskColumnWidth + 200 : undefined }}>
           {/* Left Pane - Fixed Tasks Column (no horizontal scroll) */}
-          <div className="flex flex-col shrink-0 bg-muted border-r border-border z-20" style={{ width: TASK_COLUMN_WIDTH }}>
+          <div className="flex flex-col shrink-0 bg-muted border-r border-border z-20 sticky left-0" style={{ width: taskColumnWidth }}>
             {/* Tasks Header - Fixed */}
             <div 
-              className="flex items-center px-4 border-b border-border bg-muted/50 font-semibold text-sm tracking-wide uppercase shrink-0"
+              className="flex items-center px-2 md:px-4 border-b border-border bg-muted/50 font-semibold text-xs md:text-sm tracking-wide uppercase shrink-0"
               style={{ height: HEADER_HEIGHT }}
             >
               <span className="text-foreground">Tasks</span>
@@ -969,12 +982,12 @@ export function GanttChart({
                       <ChevronDown className="w-4 h-4 shrink-0" style={{ color: sectionColor }} />
                     )}
                     <div 
-                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                      className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full shrink-0 shadow-sm"
                       style={{ backgroundColor: sectionColor }}
                     />
-                    <span className="font-semibold text-sm tracking-wide text-foreground truncate">{sectionName}</span>
-                    <div className="ml-auto flex items-center gap-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
+                    <span className="font-semibold text-xs md:text-sm tracking-wide text-foreground truncate">{sectionName}</span>
+                    <div className="ml-auto flex items-center gap-2 md:gap-3">
+                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
                         {section.type === 'weekly-call' 
                           ? `${section.task.recurring_dates?.length || 0} mtgs`
                           : section.tasks.length}
@@ -1009,14 +1022,14 @@ export function GanttChart({
                   {/* Weekly call row - single row with meeting count */}
                   {isWeeklyCall && !isCollapsed && (
                     <div 
-                      className="flex items-center gap-3 px-4 group"
+                      className="flex items-center gap-2 md:gap-3 px-2 md:px-4 group"
                       style={{ height: ROW_HEIGHT }}
                     >
-                      <div className="w-4 shrink-0" />
-                      <Users className="w-4 h-4 text-amber-500 shrink-0" />
-                      <span className="text-sm font-medium text-foreground truncate flex-1 min-w-0">{section.task.name}</span>
+                      <div className="w-3 md:w-4 shrink-0" />
+                      <Users className="w-3.5 md:w-4 h-3.5 md:h-4 text-amber-500 shrink-0" />
+                      <span className="text-xs md:text-sm font-medium text-foreground truncate flex-1 min-w-0">{section.task.name}</span>
                       
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
+                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
                         {section.task.recurring_dates?.length || 0} meetings
                       </span>
                     </div>
@@ -1052,7 +1065,7 @@ export function GanttChart({
                         {/* Row 1: Base task + Rework */}
                         <div 
                           className={cn(
-                            "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
+                            "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 group hover:bg-muted/30 transition-colors",
                             isBeingDragged && "bg-card"
                           )}
                           style={{ height: ROW_HEIGHT }}
@@ -1062,15 +1075,15 @@ export function GanttChart({
                               className="flex items-center gap-0.5 shrink-0"
                               onMouseDown={(e) => handleVerticalDragStart(e, cycle.baseTask.id, section.phase.id, cycleIndex)}
                             >
-                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
+                              <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
                             </div>
                           )}
-                          <div className="w-3.5 shrink-0" />
-                          <span className="text-xs font-medium text-foreground truncate min-w-0">
+                          <div className="w-2.5 md:w-3.5 shrink-0" />
+                          <span className="text-[10px] md:text-xs font-medium text-foreground truncate min-w-0">
                             {cycle.baseName}
-                            {cycle.reworkTask && <span className="text-muted-foreground ml-1">+ Rework</span>}
+                            {cycle.reworkTask && <span className="text-muted-foreground ml-1 hidden sm:inline">+ Rework</span>}
                           </span>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
+                          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                             {baseDuration !== null && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
                                 {baseDuration}d
@@ -1097,14 +1110,14 @@ export function GanttChart({
                         {/* Row 2: Review meeting */}
                         {cycle.reviewTask && (
                           <div 
-                            className="flex items-center gap-2 px-3 pl-8 group hover:bg-muted/30 transition-colors border-l-2 border-dashed ml-4"
+                            className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 pl-6 md:pl-8 group hover:bg-muted/30 transition-colors border-l-2 border-dashed ml-3 md:ml-4"
                             style={{ height: ROW_HEIGHT, borderColor: sectionColor }}
                           >
-                            <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                            <span className="text-xs font-medium text-muted-foreground truncate flex-1 min-w-0">
+                            <Users className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />
+                            <span className="text-[10px] md:text-xs font-medium text-muted-foreground truncate flex-1 min-w-0">
                               ↳ {cycle.reviewTask.name}
                             </span>
-                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
+                            <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                               {cycle.reviewTask.start_date && (
                                 <span className="font-medium">
                                   {format(new Date(cycle.reviewTask.start_date), 'MMM d')}
@@ -1133,7 +1146,7 @@ export function GanttChart({
                       <div 
                         key={task.id}
                         className={cn(
-                          "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
+                          "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 group hover:bg-muted/30 transition-colors",
                           getVerticalDragClasses(task.id),
                           getSwapTargetClasses(task.id, overallIndex, section.phase.id),
                           isBeingDragged && "bg-card"
@@ -1151,7 +1164,7 @@ export function GanttChart({
                         {!readOnly && (
                           <div className="flex items-center gap-0.5 shrink-0">
                             <div onMouseDown={(e) => handleVerticalDragStart(e, task.id, section.phase.id, overallIndex)}>
-                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
+                              <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
                             </div>
                             {onDeleteTask && (
                               <button
@@ -1162,19 +1175,19 @@ export function GanttChart({
                                 className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
                                 title="Delete task"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                                <Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5 text-destructive" />
                               </button>
                             )}
                           </div>
                         )}
                         
-                        {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        {task.task_type === 'task' && <div className="w-3.5 shrink-0" />}
+                        {task.task_type === 'milestone' && <Flag className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />}
+                        {task.task_type === 'meeting' && <Users className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />}
+                        {task.task_type === 'task' && <div className="w-3 md:w-3.5 shrink-0" />}
                         
-                        <span className="text-xs font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
+                        <span className="text-[10px] md:text-xs font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
                         
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
+                        <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                           {duration !== null && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
                               {duration}d
