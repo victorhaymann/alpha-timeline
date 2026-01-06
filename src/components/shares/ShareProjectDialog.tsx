@@ -17,6 +17,7 @@ interface ProjectShare {
   share_type: 'public' | 'invite';
   is_active: boolean;
   created_at: string;
+  password_hash: string | null;
 }
 
 interface ShareInvite {
@@ -40,6 +41,8 @@ export function ShareProjectDialog({ projectId, projectName, open, onOpenChange 
   const [invites, setInvites] = useState<ShareInvite[]>([]);
   const [newEmail, setNewEmail] = useState('');
   const [addingInvite, setAddingInvite] = useState(false);
+  const [password, setPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const baseUrl = window.location.origin;
 
@@ -248,19 +251,97 @@ export function ShareProjectDialog({ projectId, projectName, open, onOpenChange 
               Anyone with this link can view the project without logging in.
             </p>
             {publicShare && (
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={`${baseUrl}/share/${publicShare.token}`}
-                  className="text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyLink(publicShare.token)}
-                >
-                  <Copy className="w-4 h-4" />
-                </Button>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${baseUrl}/share/${publicShare.token}`}
+                    className="text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => copyLink(publicShare.token)}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                
+                {/* Password protection */}
+                <div className="space-y-2 p-3 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium">Password Protection</Label>
+                    {publicShare.password_hash && (
+                      <Badge variant="secondary" className="text-xs">Active</Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="password"
+                      placeholder={publicShare.password_hash ? "Enter new password" : "Set a password (optional)"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={savingPassword}
+                      onClick={async () => {
+                        if (!password.trim()) {
+                          // Remove password
+                          setSavingPassword(true);
+                          try {
+                            const { error } = await supabase
+                              .from('project_shares')
+                              .update({ password_hash: null })
+                              .eq('id', publicShare.id);
+                            if (error) throw error;
+                            toast.success('Password removed');
+                            setPassword('');
+                            await fetchShares();
+                          } catch (error) {
+                            toast.error('Failed to remove password');
+                          } finally {
+                            setSavingPassword(false);
+                          }
+                        } else {
+                          // Set password
+                          setSavingPassword(true);
+                          try {
+                            const { error } = await supabase
+                              .from('project_shares')
+                              .update({ password_hash: password })
+                              .eq('id', publicShare.id);
+                            if (error) throw error;
+                            toast.success('Password set');
+                            setPassword('');
+                            await fetchShares();
+                          } catch (error) {
+                            toast.error('Failed to set password');
+                          } finally {
+                            setSavingPassword(false);
+                          }
+                        }
+                      }}
+                    >
+                      {savingPassword ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : password.trim() ? (
+                        'Set'
+                      ) : publicShare.password_hash ? (
+                        'Remove'
+                      ) : (
+                        'Set'
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {publicShare.password_hash 
+                      ? "Anyone with the link must enter this password to view."
+                      : "Optionally require a password to view this link."}
+                  </p>
+                </div>
               </div>
             )}
           </div>
