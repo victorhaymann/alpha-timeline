@@ -403,7 +403,7 @@ export default function ProjectDetail() {
             </TabsTrigger>
             <TabsTrigger value="documents" className="gap-1.5">
               <FileText className="w-3.5 h-3.5" />
-              Documents
+              Quotations & Invoices
             </TabsTrigger>
             <TabsTrigger value="resources" className="gap-1.5">
               <BookOpen className="w-3.5 h-3.5" />
@@ -498,36 +498,24 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <a 
-                  href="https://docs.lovable.dev" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                >
-                  <BookOpen className="w-8 h-8 text-primary mb-3" />
-                  <h4 className="font-semibold mb-1">Getting Started Guide</h4>
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <BookOpen className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Getting Started Guide</h4>
                   <p className="text-sm text-muted-foreground">Learn the basics of timeline management and project setup.</p>
-                </a>
-                <a 
-                  href="https://docs.lovable.dev" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                >
-                  <Layers className="w-8 h-8 text-primary mb-3" />
-                  <h4 className="font-semibold mb-1">Phase Management</h4>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <Layers className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Phase Management</h4>
                   <p className="text-sm text-muted-foreground">Understanding phase weights and task distribution.</p>
-                </a>
-                <a 
-                  href="https://docs.lovable.dev" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="block p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                >
-                  <Users className="w-8 h-8 text-primary mb-3" />
-                  <h4 className="font-semibold mb-1">Client Collaboration</h4>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <Users className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Client Collaboration</h4>
                   <p className="text-sm text-muted-foreground">Share projects and manage client feedback effectively.</p>
-                </a>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
               </div>
             </CardContent>
           </Card>

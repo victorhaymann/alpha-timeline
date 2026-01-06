@@ -3,11 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { Project, Phase, Task, Dependency } from '@/types/database';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import {
   ArrowLeft,
   Calendar,
@@ -15,6 +14,10 @@ import {
   Loader2,
   BarChart3,
   FileText,
+  Download,
+  BookOpen,
+  Layers,
+  Users,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -266,7 +269,14 @@ export default function ClientProjectView() {
       <Tabs defaultValue="timeline" className="space-y-6">
         <TabsList>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="quotations">Quotations</TabsTrigger>
+          <TabsTrigger value="documents" className="gap-1.5">
+            <FileText className="w-3.5 h-3.5" />
+            Quotations & Invoices
+          </TabsTrigger>
+          <TabsTrigger value="resources" className="gap-1.5">
+            <BookOpen className="w-3.5 h-3.5" />
+            Resources
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4">
@@ -288,8 +298,41 @@ export default function ClientProjectView() {
           />
         </TabsContent>
 
-        <TabsContent value="quotations">
+        <TabsContent value="documents">
           <ReadOnlyDocuments documents={quotations} />
+        </TabsContent>
+
+        <TabsContent value="resources" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Learning Resources</CardTitle>
+              <CardDescription>
+                Helpful guides and materials to support your project workflow.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <BookOpen className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Getting Started Guide</h4>
+                  <p className="text-sm text-muted-foreground">Learn the basics of timeline management and project setup.</p>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <Layers className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Phase Management</h4>
+                  <p className="text-sm text-muted-foreground">Understanding phase weights and task distribution.</p>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
+                <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                  <Users className="w-8 h-8 text-muted-foreground mb-3" />
+                  <h4 className="font-semibold mb-1 text-muted-foreground">Client Collaboration</h4>
+                  <p className="text-sm text-muted-foreground">Share projects and manage client feedback effectively.</p>
+                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
