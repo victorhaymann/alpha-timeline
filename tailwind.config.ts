@@ -124,13 +124,45 @@ export default {
           "0%": { opacity: "0", transform: "translateX(30px)" },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
-        "slide-in-right": {
+        "slide-in-right-alt": {
           "0%": { opacity: "0", transform: "translateX(-30px)" },
           "100%": { opacity: "1", transform: "translateX(0)" },
         },
         "shimmer": {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
+        },
+        // Drag and drop animations
+        "drag-lift": {
+          "0%": { transform: "translateY(-50%) scale(1)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
+          "100%": { transform: "translateY(-50%) scale(1.02)", boxShadow: "0 12px 28px hsl(24 95% 53% / 0.5)" },
+        },
+        "drop-settle": {
+          "0%": { transform: "translateY(-50%) scale(1.02)", boxShadow: "0 12px 28px hsl(24 95% 53% / 0.5)" },
+          "40%": { transform: "translateY(-50%) scale(0.98)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
+          "70%": { transform: "translateY(-50%) scale(1.01)", boxShadow: "0 6px 16px hsl(24 95% 53% / 0.45)" },
+          "100%": { transform: "translateY(-50%) scale(1)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
+        },
+        "rubber-band": {
+          "0%": { transform: "scaleX(1)" },
+          "30%": { transform: "scaleX(1.05)" },
+          "40%": { transform: "scaleX(0.98)" },
+          "50%": { transform: "scaleX(1.02)" },
+          "65%": { transform: "scaleX(0.99)" },
+          "75%": { transform: "scaleX(1.01)" },
+          "100%": { transform: "scaleX(1)" },
+        },
+        "tooltip-pop": {
+          "0%": { opacity: "0", transform: "translateX(-50%) translateY(4px) scale(0.95)" },
+          "100%": { opacity: "1", transform: "translateX(-50%) translateY(0) scale(1)" },
+        },
+        "resize-pulse": {
+          "0%, 100%": { opacity: "0.6", transform: "scale(1)" },
+          "50%": { opacity: "1", transform: "scale(1.3)" },
+        },
+        "ghost-fade": {
+          "0%": { opacity: "0.4" },
+          "100%": { opacity: "0.15" },
         },
       },
       animation: {
@@ -141,7 +173,14 @@ export default {
         "pulse-subtle": "pulse-subtle 2s ease-in-out infinite",
         "spring-settle": "spring-settle 0.4s ease-out",
         "slide-left": "slide-in-left 0.3s ease-out",
-        "slide-right": "slide-in-right 0.3s ease-out",
+        "slide-right": "slide-in-right-alt 0.3s ease-out",
+        // Drag and drop animations
+        "drag-lift": "drag-lift 0.15s ease-out forwards",
+        "drop-settle": "drop-settle 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+        "rubber-band": "rubber-band 0.4s ease-out",
+        "tooltip-pop": "tooltip-pop 0.2s ease-out forwards",
+        "resize-pulse": "resize-pulse 1s ease-in-out infinite",
+        "ghost-fade": "ghost-fade 0.3s ease-out forwards",
       },
     },
   },

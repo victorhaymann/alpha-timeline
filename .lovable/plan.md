@@ -1,4 +1,4 @@
-# Plan: Refactor Drag and Drop with Enhanced Animations
+# Plan: Refactor Drag and Drop with Enhanced Animations (COMPLETED)
 
 ## Overview
 Refactor the GanttChart drag and drop functionality into a clean, maintainable custom hook with polished animations and visual feedback for moving and resizing task bars.
