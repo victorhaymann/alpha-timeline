@@ -493,4 +493,10 @@
     @apply bg-primary/5 border-l-2 border-primary/30;
     transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
   }
+
+  /* Drop target phase highlight for cross-phase drag */
+  .gantt-drop-target-phase {
+    @apply bg-primary/10 ring-2 ring-primary/30 ring-inset;
+    transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
+  }
 }
