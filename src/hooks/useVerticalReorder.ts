@@ -128,18 +128,26 @@ export function useVerticalReorder({
       };
     }
     
-    // SWAP-ONLY: Only the item at the current drop position swaps
     const draggedOriginalIndex = verticalDrag.originalIndex;
     const draggedCurrentIndex = verticalDrag.currentIndex;
     
-    // Only affect the single item being swapped with
-    if (actualIndex === draggedCurrentIndex && draggedCurrentIndex !== draggedOriginalIndex) {
-      // This item moves to where the dragged item started
-      const distance = (draggedOriginalIndex - draggedCurrentIndex) * rowHeight;
-      return {
-        transform: `translateY(${distance}px)`,
-        transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
-      };
+    // Shift items between original and current positions
+    if (draggedCurrentIndex > draggedOriginalIndex) {
+      // Dragging down - items between original and current shift up
+      if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex) {
+        return {
+          transform: `translateY(-${rowHeight}px)`,
+          transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+        };
+      }
+    } else if (draggedCurrentIndex < draggedOriginalIndex) {
+      // Dragging up - items between current and original shift down
+      if (actualIndex >= draggedCurrentIndex && actualIndex < draggedOriginalIndex) {
+        return {
+          transform: `translateY(${rowHeight}px)`,
+          transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+        };
+      }
     }
     
     return {
@@ -153,11 +161,18 @@ export function useVerticalReorder({
     // Only affect items in the same phase as the dragged item
     if (verticalDrag.phaseId !== phaseId) return '';
     
-    // Highlight the item that will be swapped (not the dragged item itself)
-    if (actualIndex === verticalDrag.currentIndex && 
-        verticalDrag.currentIndex !== verticalDrag.originalIndex &&
-        verticalDrag.taskId !== taskId) {
-      return 'gantt-swap-target';
+    // Highlight items that are shifting
+    const draggedOriginalIndex = verticalDrag.originalIndex;
+    const draggedCurrentIndex = verticalDrag.currentIndex;
+    
+    if (draggedCurrentIndex > draggedOriginalIndex) {
+      if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex && verticalDrag.taskId !== taskId) {
+        return 'gantt-swap-target';
+      }
+    } else if (draggedCurrentIndex < draggedOriginalIndex) {
+      if (actualIndex >= draggedCurrentIndex && actualIndex < draggedOriginalIndex && verticalDrag.taskId !== taskId) {
+        return 'gantt-swap-target';
+      }
     }
     return '';
   }, [verticalDrag]);
