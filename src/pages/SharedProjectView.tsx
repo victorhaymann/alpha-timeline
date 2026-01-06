@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GanttChart } from '@/components/timeline/GanttChart';
+import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Calendar, 
@@ -1133,23 +1134,33 @@ export default function SharedProjectView() {
           </TabsList>
 
           <TabsContent value="timeline">
-            {tasks.length > 0 ? (
-              <GanttChart
-                projectId={project.id}
-                projectStartDate={new Date(project.start_date)}
-                projectEndDate={new Date(project.end_date)}
-                phases={phases}
-                tasks={tasks}
-                workingDaysMask={project.working_days_mask || 31}
-                checkinTime={project.checkin_time}
-                checkinDuration={project.checkin_duration}
-                checkinTimezone={project.checkin_timezone}
-                onTaskUpdate={() => {}}
-                onTaskReorder={() => {}}
-                onAddTask={() => {}}
-                onAddReviewRound={() => {}}
-                readOnly
-              />
+            {tasks.length > 0 && project.start_date && project.end_date ? (
+              <ErrorBoundary
+                fallback={
+                  <Card className="border-dashed">
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                      <p className="text-muted-foreground">Unable to load timeline. Please refresh the page.</p>
+                    </CardContent>
+                  </Card>
+                }
+              >
+                <GanttChart
+                  projectId={project.id}
+                  projectStartDate={new Date(project.start_date)}
+                  projectEndDate={new Date(project.end_date)}
+                  phases={phases}
+                  tasks={tasks}
+                  workingDaysMask={project.working_days_mask || 31}
+                  checkinTime={project.checkin_time}
+                  checkinDuration={project.checkin_duration}
+                  checkinTimezone={project.checkin_timezone}
+                  onTaskUpdate={() => {}}
+                  onTaskReorder={() => {}}
+                  onAddTask={() => {}}
+                  onAddReviewRound={() => {}}
+                  readOnly
+                />
+              </ErrorBoundary>
             ) : (
               <Card className="border-dashed">
                 <CardContent className="flex flex-col items-center justify-center py-16">
