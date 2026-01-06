@@ -1079,7 +1079,7 @@ export function GanttChart({
                 {monthGroups.map((group, idx) => (
                   <div
                     key={`month-${group.month}-${idx}`}
-                    className="flex items-center justify-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-r border-border/60 shrink-0"
+                    className="flex items-center justify-center text-xs font-bold uppercase tracking-wider text-foreground border-r border-border/60 shrink-0"
                     style={{ width: group.count * columnWidth }}
                   >
                     {format(new Date(group.month), 'MMMM')}
@@ -1095,7 +1095,7 @@ export function GanttChart({
                     <div
                       key={`week-${group.weekLabel}-${idx}`}
                       className={cn(
-                        "flex items-center justify-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-r border-border/60 shrink-0",
+                        "flex items-center justify-center text-xs font-bold uppercase tracking-wider text-foreground border-r border-border/60 shrink-0",
                         isAlternateWeek && "bg-black/[0.04]"
                       )}
                       style={{ width: group.count * columnWidth }}
