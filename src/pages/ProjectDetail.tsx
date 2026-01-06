@@ -12,6 +12,7 @@ import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
+import { ErrorCard } from '@/components/errors/ErrorCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -70,6 +71,7 @@ export default function ProjectDetail() {
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Task detail dialog state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -149,13 +151,13 @@ export default function ProjectDetail() {
       if (stepsData) {
         setProjectSteps(stepsData as unknown as ProjectStepWithCanonical[]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching project:', error);
-      navigate('/projects');
+      setLoadError(error?.message || 'Failed to load project');
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id]);
 
   const fetchDocuments = useCallback(async () => {
     if (!id) return;
@@ -276,7 +278,17 @@ export default function ProjectDetail() {
   }
 
   if (!project) {
-    return null;
+    return (
+      <ErrorCard
+        title="Project not found"
+        message={loadError || "The project could not be loaded. It may have been deleted or you don't have access."}
+        onRetry={() => {
+          setLoading(true);
+          setLoadError(null);
+          fetchProjectData();
+        }}
+      />
+    );
   }
 
   const totalDays = differenceInDays(new Date(project.end_date), new Date(project.start_date));
