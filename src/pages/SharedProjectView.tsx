@@ -329,15 +329,12 @@ export default function SharedProjectView() {
     }
   }, [token]);
 
-  // For public shares: run immediately
-  // For invite-only shares: wait for auth to settle, then run with current user
+  // Run checkAccess: 
+  // - Immediately to fetch share info (works without auth for public shares)
+  // - Again when auth settles (for invite-only shares that need user info)
   useEffect(() => {
-    // Don't wait for auth if we haven't fetched share info yet
-    // The checkAccess function handles the auth requirement internally
-    if (!authLoading || share?.share_type === 'public') {
-      checkAccess(user);
-    }
-  }, [authLoading, user, checkAccess, share?.share_type]);
+    checkAccess(user);
+  }, [user, checkAccess]);
 
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
