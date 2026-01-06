@@ -1392,18 +1392,22 @@ export function GanttChart({
                         const baseStart = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
                         const baseEnd = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
                         const reviewStart = cycle.reviewTask?.start_date ? new Date(cycle.reviewTask.start_date) : null;
+                        const reviewEnd = cycle.reviewTask?.end_date ? new Date(cycle.reviewTask.end_date) : null;
                         const reworkStart = cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null;
                         const reworkEnd = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
 
                         const baseLeft = baseStart ? dateToX(baseStart) : 0;
                         const baseWidth = baseStart && baseEnd ? getTaskWidth(baseStart, baseEnd) : 0;
                         const reviewLeft = reviewStart ? dateToX(reviewStart) : 0;
+                        const reviewWidth = reviewStart && reviewEnd ? getTaskWidth(reviewStart, reviewEnd) : columnWidth;
                         const reworkLeft = reworkStart ? dateToX(reworkStart) : 0;
                         const reworkWidth = reworkStart && reworkEnd ? getTaskWidth(reworkStart, reworkEnd) : 0;
 
                         // Check dragging states
                         const isBaseDragging = dragging?.taskId === cycle.baseTask.id;
                         const isBaseJustDropped = justDropped === cycle.baseTask.id;
+                        const isReviewDragging = cycle.reviewTask && dragging?.taskId === cycle.reviewTask.id;
+                        const isReviewJustDropped = cycle.reviewTask && justDropped === cycle.reviewTask.id;
                         const isReworkDragging = cycle.reworkTask && dragging?.taskId === cycle.reworkTask.id;
                         const isReworkJustDropped = cycle.reworkTask && justDropped === cycle.reworkTask.id;
 
@@ -1533,35 +1537,27 @@ export function GanttChart({
                                 </Tooltip>
                               )}
 
-                              {/* SVG Connecting line: Base Task end → down to Review row */}
+                              {/* SVG Connecting line: Base Task end → down to Review bar start */}
                               {cycle.reviewTask && baseEnd && reviewStart && (
                                 <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
                                   <line
                                     x1={baseLeft + baseWidth - 2}
                                     y1={ROW_HEIGHT / 2}
-                                    x2={reviewLeft + columnWidth / 2}
+                                    x2={reviewLeft + 2}
                                     y2={ROW_HEIGHT + ROW_HEIGHT / 2}
                                     stroke={sectionColor}
                                     strokeWidth="2"
                                     strokeDasharray="4 2"
                                     className="opacity-60"
                                   />
-                                  {/* Arrow dot at review */}
-                                  <circle
-                                    cx={reviewLeft + columnWidth / 2}
-                                    cy={ROW_HEIGHT + ROW_HEIGHT / 2}
-                                    r="4"
-                                    fill={sectionColor}
-                                    className="opacity-80"
-                                  />
                                 </svg>
                               )}
 
-                              {/* SVG Connecting line: Review → up to Rework start */}
-                              {cycle.reviewTask && cycle.reworkTask && reviewStart && reworkStart && (
+                              {/* SVG Connecting line: Review bar end → up to Rework start */}
+                              {cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart && (
                                 <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
                                   <line
-                                    x1={reviewLeft + columnWidth / 2}
+                                    x1={reviewLeft + reviewWidth - 2}
                                     y1={ROW_HEIGHT + ROW_HEIGHT / 2}
                                     x2={reworkLeft + 2}
                                     y2={ROW_HEIGHT / 2}
@@ -1574,7 +1570,7 @@ export function GanttChart({
                               )}
                             </div>
 
-                            {/* Row 2: Review meeting (dashed border diamond/marker) */}
+                            {/* Row 2: Review meeting bar (dashed border, draggable) */}
                             <div className="relative" style={{ height: ROW_HEIGHT }}>
                               {/* Grid background */}
                               <div className="absolute inset-0 flex">
@@ -1590,23 +1586,56 @@ export function GanttChart({
                                 })}
                               </div>
 
-                              {/* Review meeting marker with dashed border */}
-                              {cycle.reviewTask && reviewStart && (
+                              {/* Review task bar with dashed border (draggable) */}
+                              {cycle.reviewTask && reviewStart && reviewWidth > 0 && (
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
-                                      className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rotate-45 rounded-sm border-2 border-dashed cursor-pointer hover:scale-110 transition-transform diamond-shimmer"
+                                      className={cn(
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move border-2 border-dashed",
+                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                        "transition-all duration-300 ease-out",
+                                        isReviewDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
+                                        isReviewJustDropped && "animate-spring-settle"
+                                      )}
                                       style={{
-                                        left: reviewLeft + (columnWidth / 2) - 12,
-                                        backgroundColor: `${sectionColor}99`,
+                                        left: reviewLeft + 2,
+                                        width: reviewWidth - 4,
+                                        backgroundColor: `${sectionColor}40`,
                                         borderColor: sectionColor,
+                                        boxShadow: `0 2px 8px ${sectionColor}33`,
                                       }}
-                                    />
+                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
+                                    >
+                                      {!readOnly && (
+                                        <>
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-l-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.reviewTask!, 'resize-start');
+                                            }}
+                                          />
+                                          <div
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30 rounded-r-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.reviewTask!, 'resize-end');
+                                            }}
+                                          />
+                                        </>
+                                      )}
+                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                        <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide" style={{ color: sectionColor }}>
+                                          {reviewWidth > 60 ? 'Review' : ''}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{cycle.reviewTask.name}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {format(reviewStart, 'MMM d, yyyy')}
+                                      {format(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${format(reviewEnd, 'MMM d')}` : ''}
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
