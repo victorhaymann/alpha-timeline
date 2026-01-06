@@ -11,11 +11,16 @@ import {
   Calendar, 
   Loader2, 
   Building2,
-  BarChart3,
   FileText,
   Download,
   Eye,
   Lock,
+  User,
+  Mail,
+  Phone,
+  BookOpen,
+  Layers,
+  Users,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -286,8 +291,8 @@ export default function SharedProjectView() {
           </div>
         </div>
 
-        {/* Project Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
+        {/* Project Stats - Duration and Project Manager only */}
+        <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -295,36 +300,47 @@ export default function SharedProjectView() {
                   <Calendar className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Timeline</p>
-                  <p className="font-medium">
-                    {format(new Date(project.start_date), 'MMM d')} - {format(new Date(project.end_date), 'MMM d, yyyy')}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Duration</p>
+                  <p className="text-lg font-semibold">{totalDays} days</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-phase-production/10">
-                  <BarChart3 className="w-5 h-5 text-phase-production" />
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                  <User className="w-5 h-5 text-primary" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Progress</p>
-                  <p className="font-medium">{Math.round(progress)}% Complete</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-phase-delivery/10">
-                  <FileText className="w-5 h-5 text-phase-delivery" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Documents</p>
-                  <p className="font-medium">{quotations.length + invoices.length} files</p>
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm text-muted-foreground">Project Manager</p>
+                  {project.pm_name ? (
+                    <>
+                      <p className="text-sm font-semibold truncate">{project.pm_name}</p>
+                      {project.pm_email && (
+                        <a 
+                          href={`mailto:${project.pm_email}`}
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-[#0078D4]" />
+                          <span className="truncate">{project.pm_email}</span>
+                        </a>
+                      )}
+                      {project.pm_whatsapp && (
+                        <a 
+                          href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-[#25D366]" />
+                          <span>{project.pm_whatsapp}</span>
+                        </a>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">Not assigned</p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -356,54 +372,47 @@ export default function SharedProjectView() {
         <Tabs defaultValue="timeline" className="space-y-6">
           <TabsList>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="quotations">Quotations</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
+            <TabsTrigger value="documents" className="gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Quotations & Invoices
+            </TabsTrigger>
+            <TabsTrigger value="resources" className="gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" />
+              Resources
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeline">
-            <Card>
-              <CardHeader>
-                <CardTitle>Project Timeline</CardTitle>
-                <CardDescription>
-                  View the project schedule and milestones.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {tasks.length > 0 ? (
-                  <GanttChart
-                    projectId={project.id}
-                    projectStartDate={new Date(project.start_date)}
-                    projectEndDate={new Date(project.end_date)}
-                    phases={phases}
-                    tasks={tasks}
-                    workingDaysMask={project.working_days_mask || 31}
-                    checkinTime={project.checkin_time}
-                    checkinDuration={project.checkin_duration}
-                    checkinTimezone={project.checkin_timezone}
-                    onTaskUpdate={() => {}}
-                    onTaskReorder={() => {}}
-                    onAddTask={() => {}}
-                    onAddReviewRound={() => {}}
-                    readOnly
-                  />
-                ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No timeline data available.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            {tasks.length > 0 ? (
+              <GanttChart
+                projectId={project.id}
+                projectStartDate={new Date(project.start_date)}
+                projectEndDate={new Date(project.end_date)}
+                phases={phases}
+                tasks={tasks}
+                workingDaysMask={project.working_days_mask || 31}
+                checkinTime={project.checkin_time}
+                checkinDuration={project.checkin_duration}
+                checkinTimezone={project.checkin_timezone}
+                onTaskUpdate={() => {}}
+                onTaskReorder={() => {}}
+                onAddTask={() => {}}
+                onAddReviewRound={() => {}}
+                readOnly
+              />
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <p className="text-muted-foreground">No timeline data available.</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
-          <TabsContent value="quotations">
-            <Card>
-              <CardHeader>
-                <CardTitle>Quotations</CardTitle>
-                <CardDescription>
-                  Project quotations and proposals.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+          <TabsContent value="documents" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Quotations</h3>
                 {quotations.length > 0 ? (
                   <div className="space-y-2">
                     {quotations.map((doc) => (
@@ -442,23 +451,15 @@ export default function SharedProjectView() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No quotations available.
-                  </p>
+                  <Card className="border-dashed">
+                    <CardContent className="py-8 text-center text-muted-foreground">
+                      No quotations available.
+                    </CardContent>
+                  </Card>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="invoices">
-            <Card>
-              <CardHeader>
-                <CardTitle>Invoices</CardTitle>
-                <CardDescription>
-                  Project invoices and billing documents.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Invoices</h3>
                 {invoices.length > 0 ? (
                   <div className="space-y-2">
                     {invoices.map((doc) => (
@@ -497,10 +498,45 @@ export default function SharedProjectView() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground text-center py-8">
-                    No invoices available.
-                  </p>
+                  <Card className="border-dashed">
+                    <CardContent className="py-8 text-center text-muted-foreground">
+                      No invoices available.
+                    </CardContent>
+                  </Card>
                 )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="resources" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Learning Resources</CardTitle>
+                <CardDescription>
+                  Helpful guides and materials to support your project workflow.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                    <BookOpen className="w-8 h-8 text-muted-foreground mb-3" />
+                    <h4 className="font-semibold mb-1 text-muted-foreground">Getting Started Guide</h4>
+                    <p className="text-sm text-muted-foreground">Learn the basics of timeline management and project setup.</p>
+                    <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                  </div>
+                  <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                    <Layers className="w-8 h-8 text-muted-foreground mb-3" />
+                    <h4 className="font-semibold mb-1 text-muted-foreground">Phase Management</h4>
+                    <p className="text-sm text-muted-foreground">Understanding phase weights and task distribution.</p>
+                    <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                  </div>
+                  <div className="block p-4 rounded-lg border border-border bg-muted/30">
+                    <Users className="w-8 h-8 text-muted-foreground mb-3" />
+                    <h4 className="font-semibold mb-1 text-muted-foreground">Client Collaboration</h4>
+                    <p className="text-sm text-muted-foreground">Share projects and manage client feedback effectively.</p>
+                    <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
