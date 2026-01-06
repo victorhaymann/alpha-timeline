@@ -544,21 +544,23 @@ export default function SharedProjectView() {
 
         {/* PDF Preview Dialog */}
         <Dialog open={!!previewDoc} onOpenChange={() => { setPreviewDoc(null); setPreviewUrl(null); }}>
-          <DialogContent className="max-w-4xl h-[80vh]">
-            <DialogHeader>
+          <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
+            <DialogHeader className="px-6 py-4 border-b shrink-0">
               <DialogTitle>{previewDoc?.name}</DialogTitle>
             </DialogHeader>
-            {loadingPreview ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin" />
-              </div>
-            ) : previewUrl ? (
-              <iframe
-                src={previewUrl}
-                className="w-full h-full rounded-lg"
-                title={previewDoc?.name}
-              />
-            ) : null}
+            <div className="flex-1 min-h-0 p-4">
+              {loadingPreview ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                </div>
+              ) : previewUrl ? (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full rounded-lg border-0"
+                  title={previewDoc?.name}
+                />
+              ) : null}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
