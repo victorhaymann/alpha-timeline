@@ -1042,10 +1042,10 @@ export default function SharedProjectView() {
           </div>
         </div>
 
-        {/* Project Stats - Duration and Project Manager only */}
+        {/* Project Stats - Duration and Project Manager - Compact */}
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="py-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">
                   <Calendar className="w-5 h-5 text-primary" />
@@ -1058,37 +1058,39 @@ export default function SharedProjectView() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                   <User className="w-5 h-5 text-primary" />
                 </div>
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-muted-foreground">Project Manager</p>
                   {project.pm_name ? (
-                    <>
-                      <p className="text-sm font-semibold truncate">{project.pm_name}</p>
-                      {project.pm_email && (
-                        <a 
-                          href={`mailto:${project.pm_email}`}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Mail className="w-3.5 h-3.5 text-[#0078D4]" />
-                          <span className="truncate">{project.pm_email}</span>
-                        </a>
-                      )}
-                      {project.pm_whatsapp && (
-                        <a 
-                          href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Phone className="w-3.5 h-3.5 text-[#25D366]" />
-                          <span>{project.pm_whatsapp}</span>
-                        </a>
-                      )}
-                    </>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <p className="text-sm font-semibold">{project.pm_name}</p>
+                      <div className="flex items-center gap-3">
+                        {project.pm_email && (
+                          <a 
+                            href={`mailto:${project.pm_email}`}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            title={project.pm_email}
+                          >
+                            <Mail className="w-4 h-4 text-[#0078D4]" />
+                          </a>
+                        )}
+                        {project.pm_whatsapp && (
+                          <a 
+                            href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            title={project.pm_whatsapp}
+                          >
+                            <Phone className="w-4 h-4 text-[#25D366]" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground italic">Not assigned</p>
                   )}
@@ -1121,7 +1123,7 @@ export default function SharedProjectView() {
 
         {/* Tabs */}
         <Tabs defaultValue="timeline" className="space-y-6">
-          <TabsList>
+          <TabsList className="border border-border">
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
             <TabsTrigger value="documents" className="gap-1.5">
               <FileText className="w-3.5 h-3.5" />
