@@ -83,6 +83,11 @@ const PHASE_HEADER_HEIGHT = 36;
 const MIN_COLUMN_WIDTH = 36;
 const MIN_COLUMN_WIDTH_MOBILE = 28;
 
+// Validate date is a valid Date object
+function isValidDate(date: unknown): date is Date {
+  return date instanceof Date && !isNaN(date.getTime());
+}
+
 export function GanttChart({
   projectId,
   projectStartDate,
@@ -110,14 +115,18 @@ export function GanttChart({
   const isSyncingScroll = useRef(false);
   const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('month');
+
+  // Validate and fallback dates to prevent crashes
+  const validStartDate = isValidDate(projectStartDate) ? projectStartDate : new Date();
+  const validEndDate = isValidDate(projectEndDate) ? projectEndDate : addDays(validStartDate, 30);
   
   // Responsive task column width
   const taskColumnWidth = isMobile ? TASK_COLUMN_WIDTH_MOBILE : TASK_COLUMN_WIDTH_DESKTOP;
   
   // Default view: show entire project range for full scrolling
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: projectStartDate,
-    to: projectEndDate,
+    from: validStartDate,
+    to: validEndDate,
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
@@ -140,8 +149,8 @@ export function GanttChart({
   }, []);
 
   // View date range (use custom range or project range)
-  const viewStart = dateRange?.from || projectStartDate;
-  const viewEnd = dateRange?.to || projectEndDate;
+  const viewStart = dateRange?.from || validStartDate;
+  const viewEnd = dateRange?.to || validEndDate;
 
   // Check if day is a working day
   const isWorkingDay = useCallback((date: Date) => {
@@ -150,10 +159,23 @@ export function GanttChart({
     return (workingDaysMask & dayBit) !== 0;
   }, [workingDaysMask]);
 
-  // Generate working days only within the view range
+  // Generate working days only within the view range (with try-catch for safety)
   const workingDays = useMemo(() => {
-    const allDays = eachDayOfInterval({ start: viewStart, end: viewEnd });
-    return allDays.filter(day => isWorkingDay(day));
+    try {
+      if (!isValidDate(viewStart) || !isValidDate(viewEnd)) {
+        console.warn('GanttChart: Invalid viewStart or viewEnd dates');
+        return [];
+      }
+      if (viewStart > viewEnd) {
+        console.warn('GanttChart: viewStart is after viewEnd');
+        return [];
+      }
+      const allDays = eachDayOfInterval({ start: viewStart, end: viewEnd });
+      return allDays.filter(day => isWorkingDay(day));
+    } catch (error) {
+      console.error('GanttChart: Error generating date interval:', error);
+      return [];
+    }
   }, [viewStart, viewEnd, isWorkingDay]);
 
   // Generate columns based on view mode
