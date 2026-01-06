@@ -59,7 +59,7 @@ interface GanttChartProps {
   checkinDuration?: number | null;
   checkinTimezone?: string | null;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
-  onTaskReorder: (phaseId: string, taskId: string, newIndex: number) => void;
+  onTaskReorder: (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
   onAddReviewRound: (taskId: string) => void;
   onDeleteTask?: (taskId: string) => void;
@@ -332,9 +332,11 @@ export function GanttChart({
     verticalDrag,
     isVerticalDragging,
     handleVerticalDragStart,
+    handlePhaseHover,
     getVerticalDragClasses,
     getVerticalDragStyles,
     getSwapTargetClasses,
+    getDropTargetPhaseClasses,
   } = useVerticalReorder({
     rowHeight: ROW_HEIGHT,
     onReorder: onTaskReorder,
@@ -941,7 +943,20 @@ export function GanttChart({
               if (hasNoMeetings) return null;
 
               return (
-                <div key={sectionKey}>
+                <div 
+                  key={sectionKey}
+                  className={cn(
+                    section.type === 'phase' && getDropTargetPhaseClasses(section.phase.id),
+                    "rounded-lg transition-all"
+                  )}
+                  onMouseEnter={() => {
+                    if (isVerticalDragging && section.type === 'phase') {
+                      // Calculate the target index (insert at end of phase)
+                      const phaseTaskCount = section.cycles.length + section.ungroupedTasks.length;
+                      handlePhaseHover(section.phase.id, phaseTaskCount);
+                    }
+                  }}
+                >
                   {/* Section header */}
                   <div 
                     className="flex items-center gap-3 px-4 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
@@ -1028,6 +1043,11 @@ export function GanttChart({
                           getSwapTargetClasses(cycle.baseTask.id, cycleIndex, section.phase.id)
                         )}
                         style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex, section.phase.id)}
+                        onMouseEnter={() => {
+                          if (isVerticalDragging && verticalDrag?.taskId !== cycle.baseTask.id) {
+                            handlePhaseHover(section.phase.id, cycleIndex);
+                          }
+                        }}
                       >
                         {/* Row 1: Base task + Rework */}
                         <div 
@@ -1121,6 +1141,11 @@ export function GanttChart({
                         style={{ 
                           height: ROW_HEIGHT,
                           ...getVerticalDragStyles(task.id, overallIndex, section.phase.id)
+                        }}
+                        onMouseEnter={() => {
+                          if (isVerticalDragging && verticalDrag?.taskId !== task.id) {
+                            handlePhaseHover(section.phase.id, overallIndex);
+                          }
                         }}
                       >
                         {!readOnly && (

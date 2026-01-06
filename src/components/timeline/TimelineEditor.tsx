@@ -76,54 +76,124 @@ export function TimelineEditor({
     }
   };
 
-  // Handle task reorder within phase
-  const handleTaskReorder = async (phaseId: string, taskId: string, newIndex: number) => {
-    const phaseTasks = tasks
-      .filter(t => t.phase_id === phaseId)
-      .sort((a, b) => a.order_index - b.order_index);
-
-    const taskIndex = phaseTasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1 || taskIndex === newIndex) return;
-
-    // Clamp newIndex to valid range
-    const clampedNewIndex = Math.max(0, Math.min(newIndex, phaseTasks.length - 1));
-    if (taskIndex === clampedNewIndex) return;
-
-    // Reorder
-    const reorderedTasks = [...phaseTasks];
-    const [movedTask] = reorderedTasks.splice(taskIndex, 1);
-    reorderedTasks.splice(clampedNewIndex, 0, movedTask);
-
-    // Update order indices
-    const updates = reorderedTasks.map((task, i) => ({
-      id: task.id,
-      order_index: i,
-    }));
-
-    // Optimistic update - update local state immediately
-    const updatedTasks = tasks.map(t => {
-      const update = updates.find(u => u.id === t.id);
-      return update ? { ...t, order_index: update.order_index } : t;
-    });
-    onTasksChange(updatedTasks);
-
-    try {
-      // Batch update in database
-      for (const update of updates) {
+  // Handle task reorder (within phase or cross-phase)
+  const handleTaskReorder = async (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => {
+    const isCrossPhase = sourcePhaseId !== targetPhaseId;
+    
+    if (isCrossPhase) {
+      // Cross-phase reordering
+      const sourcePhaseTasks = tasks
+        .filter(t => t.phase_id === sourcePhaseId)
+        .sort((a, b) => a.order_index - b.order_index);
+      
+      const targetPhaseTasks = tasks
+        .filter(t => t.phase_id === targetPhaseId)
+        .sort((a, b) => a.order_index - b.order_index);
+      
+      const movedTask = sourcePhaseTasks.find(t => t.id === taskId);
+      if (!movedTask) return;
+      
+      // Remove from source phase
+      const updatedSourceTasks = sourcePhaseTasks
+        .filter(t => t.id !== taskId)
+        .map((t, i) => ({ ...t, order_index: i }));
+      
+      // Insert into target phase at newIndex
+      const clampedIndex = Math.max(0, Math.min(newIndex, targetPhaseTasks.length));
+      const updatedTargetTasks = [
+        ...targetPhaseTasks.slice(0, clampedIndex),
+        { ...movedTask, phase_id: targetPhaseId, order_index: clampedIndex },
+        ...targetPhaseTasks.slice(clampedIndex),
+      ].map((t, i) => ({ ...t, order_index: i }));
+      
+      // Optimistic update
+      const updatedTasks = tasks.map(t => {
+        if (t.id === taskId) {
+          return { ...t, phase_id: targetPhaseId, order_index: clampedIndex };
+        }
+        const sourceUpdate = updatedSourceTasks.find(u => u.id === t.id);
+        if (sourceUpdate) return sourceUpdate;
+        const targetUpdate = updatedTargetTasks.find(u => u.id === t.id);
+        if (targetUpdate) return targetUpdate;
+        return t;
+      });
+      onTasksChange(updatedTasks);
+      
+      try {
+        // Update the moved task's phase and order
         await supabase
           .from('tasks')
-          .update({ order_index: update.order_index })
-          .eq('id', update.id);
+          .update({ phase_id: targetPhaseId, order_index: clampedIndex })
+          .eq('id', taskId);
+        
+        // Update source phase order indices
+        for (const task of updatedSourceTasks) {
+          await supabase
+            .from('tasks')
+            .update({ order_index: task.order_index })
+            .eq('id', task.id);
+        }
+        
+        // Update target phase order indices (excluding the moved task)
+        for (const task of updatedTargetTasks.filter(t => t.id !== taskId)) {
+          await supabase
+            .from('tasks')
+            .update({ order_index: task.order_index })
+            .eq('id', task.id);
+        }
+      } catch (error: any) {
+        console.error('Error moving task to different phase:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to move task.',
+          variant: 'destructive',
+        });
+        onRefresh();
       }
-    } catch (error: any) {
-      console.error('Error reordering tasks:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to reorder tasks.',
-        variant: 'destructive',
+    } else {
+      // Same-phase reordering (existing logic)
+      const phaseTasks = tasks
+        .filter(t => t.phase_id === sourcePhaseId)
+        .sort((a, b) => a.order_index - b.order_index);
+
+      const taskIndex = phaseTasks.findIndex(t => t.id === taskId);
+      if (taskIndex === -1 || taskIndex === newIndex) return;
+
+      const clampedNewIndex = Math.max(0, Math.min(newIndex, phaseTasks.length - 1));
+      if (taskIndex === clampedNewIndex) return;
+
+      const reorderedTasks = [...phaseTasks];
+      const [movedTask] = reorderedTasks.splice(taskIndex, 1);
+      reorderedTasks.splice(clampedNewIndex, 0, movedTask);
+
+      const updates = reorderedTasks.map((task, i) => ({
+        id: task.id,
+        order_index: i,
+      }));
+
+      // Optimistic update
+      const updatedTasks = tasks.map(t => {
+        const update = updates.find(u => u.id === t.id);
+        return update ? { ...t, order_index: update.order_index } : t;
       });
-      // Revert on error
-      onRefresh();
+      onTasksChange(updatedTasks);
+
+      try {
+        for (const update of updates) {
+          await supabase
+            .from('tasks')
+            .update({ order_index: update.order_index })
+            .eq('id', update.id);
+        }
+      } catch (error: any) {
+        console.error('Error reordering tasks:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to reorder tasks.',
+          variant: 'destructive',
+        });
+        onRefresh();
+      }
     }
   };
 
