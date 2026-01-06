@@ -789,7 +789,7 @@ export function GanttChart({
                   <div className="font-semibold text-sm mb-2 tracking-wide">Chart Legend</div>
                   
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-foreground/80 rotate-45 rounded-sm shrink-0" />
+                    <div className="w-4 h-4 bg-foreground/80 rotate-45 rounded-sm shrink-0 diamond-shimmer" />
                     <span><strong>Diamond</strong> — Recurring meeting</span>
                   </div>
                   
