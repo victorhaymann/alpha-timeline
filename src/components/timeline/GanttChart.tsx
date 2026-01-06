@@ -1025,9 +1025,9 @@ export function GanttChart({
                         key={cycle.id}
                         className={cn(
                           getVerticalDragClasses(cycle.baseTask.id),
-                          getSwapTargetClasses(cycle.baseTask.id, cycleIndex)
+                          getSwapTargetClasses(cycle.baseTask.id, cycleIndex, section.phase.id)
                         )}
-                        style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex)}
+                        style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex, section.phase.id)}
                       >
                         {/* Row 1: Base task + Rework */}
                         <div 
@@ -1115,12 +1115,12 @@ export function GanttChart({
                         className={cn(
                           "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
                           getVerticalDragClasses(task.id),
-                          getSwapTargetClasses(task.id, overallIndex),
+                          getSwapTargetClasses(task.id, overallIndex, section.phase.id),
                           isBeingDragged && "bg-card"
                         )}
                         style={{ 
                           height: ROW_HEIGHT,
-                          ...getVerticalDragStyles(task.id, overallIndex)
+                          ...getVerticalDragStyles(task.id, overallIndex, section.phase.id)
                         }}
                       >
                         {!readOnly && (
