@@ -795,6 +795,7 @@ export function GanttChart({
   });
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col gap-2 md:gap-4">
       {/* Controls - Light Header */}
       <div className="flex flex-wrap items-center gap-2 md:gap-4 px-2 md:px-4 py-2 md:py-3 rounded-xl bg-card border border-border">
@@ -906,44 +907,42 @@ export function GanttChart({
           </span>
 
           {/* Legend tooltip */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-9 w-9 p-0 hover:bg-accent text-muted-foreground hover:text-foreground"
-                >
-                  <HelpCircle className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="end" className="w-64 p-3 bg-card border-border text-foreground">
-                <div className="space-y-2.5 text-xs">
-                  <div className="font-semibold text-sm mb-2 tracking-wide">Chart Legend</div>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-foreground/80 rotate-45 rounded-sm shrink-0 diamond-shimmer" />
-                    <span><strong>Diamond</strong> — Recurring meeting</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Flag className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" strokeWidth={1.5} />
-                    <span><strong>Flag</strong> — Milestone (end of phase)</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-3 gantt-task-bar rounded-sm shrink-0" />
-                    <span><strong>Bar</strong> — Task duration</span>
-                  </div>
-                  
-                  <div className="border-t border-border pt-2 mt-2 text-muted-foreground">
-                    <p><strong>Weekly view:</strong> 7 days per period</p>
-                    <p className="mt-1"><strong>Monthly view:</strong> Full month view</p>
-                  </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-9 w-9 p-0 hover:bg-accent text-muted-foreground hover:text-foreground"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end" className="w-64 p-3 bg-card border-border text-foreground">
+              <div className="space-y-2.5 text-xs">
+                <div className="font-semibold text-sm mb-2 tracking-wide">Chart Legend</div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-foreground/80 rotate-45 rounded-sm shrink-0 diamond-shimmer" />
+                  <span><strong>Diamond</strong> — Recurring meeting</span>
                 </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                
+                <div className="flex items-center gap-2">
+                  <Flag className="w-4 h-4 text-amber-500 shrink-0" fill="currentColor" strokeWidth={1.5} />
+                  <span><strong>Flag</strong> — Milestone (end of phase)</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-3 gantt-task-bar rounded-sm shrink-0" />
+                  <span><strong>Bar</strong> — Task duration</span>
+                </div>
+                
+                <div className="border-t border-border pt-2 mt-2 text-muted-foreground">
+                  <p><strong>Weekly view:</strong> 7 days per period</p>
+                  <p className="mt-1"><strong>Monthly view:</strong> Full month view</p>
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -1972,5 +1971,6 @@ export function GanttChart({
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
