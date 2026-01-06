@@ -334,6 +334,7 @@ export function GanttChart({
     handleVerticalDragStart,
     getVerticalDragClasses,
     getVerticalDragStyles,
+    getSwapTargetClasses,
   } = useVerticalReorder({
     rowHeight: ROW_HEIGHT,
     onReorder: onTaskReorder,
@@ -1022,7 +1023,10 @@ export function GanttChart({
                     return (
                       <div 
                         key={cycle.id}
-                        className={cn(getVerticalDragClasses(cycle.baseTask.id))}
+                        className={cn(
+                          getVerticalDragClasses(cycle.baseTask.id),
+                          getSwapTargetClasses(cycle.baseTask.id, cycleIndex)
+                        )}
                         style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex)}
                       >
                         {/* Row 1: Base task + Rework */}
@@ -1111,6 +1115,7 @@ export function GanttChart({
                         className={cn(
                           "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
                           getVerticalDragClasses(task.id),
+                          getSwapTargetClasses(task.id, overallIndex),
                           isBeingDragged && "bg-card"
                         )}
                         style={{ 
