@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
-import Index from "./pages/Index";
+
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
 import NewProject from "./pages/NewProject";
@@ -42,11 +42,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/" element={<Index />} />
-      <Route path="/auth" element={<Auth />} />
+      <Route path="/" element={user ? <Navigate to="/projects" replace /> : <Auth />} />
       <Route path="/share/:token" element={<SharedProjectView />} />
       
       {/* Protected routes with layout */}
