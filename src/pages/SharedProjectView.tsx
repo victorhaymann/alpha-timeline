@@ -261,7 +261,7 @@ export default function SharedProjectView() {
     setLoadError(null);
     setDebugSteps([]);
     
-    addDebugStep('Starting checkAccess');
+    addDebugStep(`Starting checkAccess (user=${user ? 'authenticated' : 'anonymous'})`);
     
     if (!token) {
       addDebugStep('No token found');
@@ -520,8 +520,13 @@ export default function SharedProjectView() {
 
   // Run checkAccess when token changes or when user state settles
   useEffect(() => {
+    // Don't start loading until auth has settled - prevents Supabase client hanging
+    if (authLoading) {
+      addDebugStep('Waiting for auth to initialize...');
+      return;
+    }
     checkAccess(user);
-  }, [user, checkAccess]);
+  }, [authLoading, user, checkAccess]);
 
   const handleRetry = useCallback(() => {
     // Force a fresh run
