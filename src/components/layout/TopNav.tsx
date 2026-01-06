@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import theNewFaceLogo from '@/assets/the-new-face-logo.png';
+import tnfLogo from '@/assets/tnf-logo-purple.png';
 
 const navItems = [
   { path: '/projects', label: 'Projects', icon: FolderKanban },
@@ -37,9 +37,9 @@ export function TopNav() {
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
           <img 
-            src={theNewFaceLogo} 
+            src={tnfLogo} 
             alt="The New Face" 
-            className="h-20 w-auto object-contain"
+            className="h-12 w-auto object-contain"
           />
         </Link>
 
