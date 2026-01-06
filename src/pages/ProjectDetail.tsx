@@ -346,7 +346,7 @@ export default function ProjectDetail() {
                         href={`mailto:${project.pm_email}`}
                         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <Mail className="w-3 h-3" />
+                        <Mail className="w-3.5 h-3.5 text-[#0078D4]" />
                         <span className="truncate">{project.pm_email}</span>
                       </a>
                     )}
@@ -357,7 +357,7 @@ export default function ProjectDetail() {
                         rel="noopener noreferrer"
                         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <Phone className="w-3 h-3" />
+                        <Phone className="w-3.5 h-3.5 text-[#25D366]" />
                         <span>{project.pm_whatsapp}</span>
                       </a>
                     )}
