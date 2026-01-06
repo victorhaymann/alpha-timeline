@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,12 +22,33 @@ import {
   BookOpen,
   Layers,
   Users,
+  AlertTriangle,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import tnfLogoSquare from '@/assets/tnf-logo-square.png';
+
+// Timeout helper - wraps a promise with a timeout
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(`Timeout: ${label} took longer than ${ms}ms`)), ms)
+    )
+  ]);
+}
+
+// Type for Supabase query results
+interface QueryResult<T> {
+  data: T | null;
+  error: { message: string } | null;
+}
 
 // Loading skeleton component
 function SharedProjectSkeleton() {
@@ -183,6 +204,13 @@ interface ProjectDocument {
   created_at: string;
 }
 
+interface LoadError {
+  step: string;
+  message: string;
+}
+
+const REQUEST_TIMEOUT_MS = 15000; // 15 second timeout per request
+
 export default function SharedProjectView() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -190,6 +218,8 @@ export default function SharedProjectView() {
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [debugSteps, setDebugSteps] = useState<string[]>([]);
   const [share, setShare] = useState<ProjectShare | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -202,139 +232,302 @@ export default function SharedProjectView() {
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  
+  // Diagnostics UI state
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  
+  // Prevent concurrent checkAccess runs
+  const inFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  const addDebugStep = useCallback((step: string) => {
+    const timestamp = new Date().toISOString().substring(11, 23);
+    setDebugSteps(prev => [...prev, `[${timestamp}] ${step}`]);
+  }, []);
 
   const checkAccess = useCallback(async (currentUser: typeof user) => {
+    // Prevent re-entrancy
+    if (inFlightRef.current) {
+      return;
+    }
+    
+    const thisRequestId = ++requestIdRef.current;
+    inFlightRef.current = true;
+    
+    // Reset state at start
+    setLoading(true);
+    setAccessDenied(false);
+    setNeedsAuth(false);
+    setLoadError(null);
+    setDebugSteps([]);
+    
+    addDebugStep('Starting checkAccess');
+    
     if (!token) {
+      addDebugStep('No token found');
       setAccessDenied(true);
       setLoading(false);
+      inFlightRef.current = false;
       return;
     }
 
     try {
       // Step 1: Fetch the share by token first (this works without auth)
-      const { data: shareData, error: shareError } = await supabase
-        .from('project_shares')
-        .select('*')
-        .eq('token', token)
-        .eq('is_active', true)
-        .single();
-
-      if (shareError || !shareData) {
-        setAccessDenied(true);
-        setLoading(false);
+      addDebugStep('Fetching share by token...');
+      
+      const shareResult = await withTimeout(
+        supabase
+          .from('project_shares')
+          .select('*')
+          .eq('token', token)
+          .eq('is_active', true)
+          .single(),
+        REQUEST_TIMEOUT_MS,
+        'Fetch share'
+      );
+      
+      // Check if this request is still current
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
         return;
       }
 
-      const shareInfo = shareData as ProjectShare;
+      if (shareResult.error || !shareResult.data) {
+        addDebugStep(`Share fetch failed: ${shareResult.error?.message || 'No data'}`);
+        setAccessDenied(true);
+        setLoading(false);
+        inFlightRef.current = false;
+        return;
+      }
+
+      const shareInfo = shareResult.data as ProjectShare;
+      addDebugStep(`Share loaded: type=${shareInfo.share_type}, project_id=${shareInfo.project_id}`);
       setShare(shareInfo);
 
       // Step 2: For invite-only shares, we need auth
       if (shareInfo.share_type === 'invite') {
+        addDebugStep('Invite-only share, checking auth...');
         if (!currentUser) {
-          // User needs to log in - show auth redirect
+          addDebugStep('No user authenticated, redirecting to auth');
           setNeedsAuth(true);
           setLoading(false);
+          inFlightRef.current = false;
           return;
         }
 
-        // Check if user's email is in the invite list
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', currentUser.id)
-          .single();
+        addDebugStep('Fetching user profile...');
+        const profileResult = await withTimeout(
+          supabase
+            .from('profiles')
+            .select('email')
+            .eq('id', currentUser.id)
+            .single(),
+          REQUEST_TIMEOUT_MS,
+          'Fetch profile'
+        );
 
-        if (!profile) {
+        if (thisRequestId !== requestIdRef.current) {
+          inFlightRef.current = false;
+          return;
+        }
+
+        if (!profileResult.data) {
+          addDebugStep('Profile not found');
           setAccessDenied(true);
           setLoading(false);
+          inFlightRef.current = false;
           return;
         }
 
-        const { data: inviteData } = await supabase
-          .from('share_invites')
-          .select('id')
-          .eq('share_id', shareInfo.id)
-          .eq('email', profile.email)
-          .single();
+        addDebugStep(`Checking invite for email: ${profileResult.data.email}`);
+        const inviteResult = await withTimeout(
+          supabase
+            .from('share_invites')
+            .select('id')
+            .eq('share_id', shareInfo.id)
+            .eq('email', profileResult.data.email)
+            .single(),
+          REQUEST_TIMEOUT_MS,
+          'Fetch invite'
+        );
 
-        if (!inviteData) {
+        if (thisRequestId !== requestIdRef.current) {
+          inFlightRef.current = false;
+          return;
+        }
+
+        if (!inviteResult.data) {
+          addDebugStep('User not in invite list');
           setAccessDenied(true);
           setLoading(false);
+          inFlightRef.current = false;
           return;
         }
+        addDebugStep('User is invited, access granted');
       }
 
       // Fetch project data
-      const { data: projectData, error: projectError } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', shareInfo.project_id)
-        .single();
+      addDebugStep('Fetching project...');
+      const projectResult = await withTimeout(
+        supabase
+          .from('projects')
+          .select('*')
+          .eq('id', shareInfo.project_id)
+          .single(),
+        REQUEST_TIMEOUT_MS,
+        'Fetch project'
+      );
 
-      if (projectError || !projectData) {
-        setAccessDenied(true);
-        setLoading(false);
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
         return;
       }
 
-      setProject(projectData as Project);
+      if (projectResult.error || !projectResult.data) {
+        addDebugStep(`Project fetch failed: ${projectResult.error?.message || 'No data'}`);
+        setAccessDenied(true);
+        setLoading(false);
+        inFlightRef.current = false;
+        return;
+      }
+
+      addDebugStep(`Project loaded: ${projectResult.data.name}`);
+      setProject(projectResult.data as Project);
 
       // Fetch phases
-      const { data: phasesData, error: phasesError } = await supabase
-        .from('phases')
-        .select('*')
-        .eq('project_id', shareInfo.project_id)
-        .order('order_index');
+      addDebugStep('Fetching phases...');
+      const phasesResult = await withTimeout(
+        supabase
+          .from('phases')
+          .select('*')
+          .eq('project_id', shareInfo.project_id)
+          .order('order_index'),
+        REQUEST_TIMEOUT_MS,
+        'Fetch phases'
+      );
 
-      setPhases((phasesData as Phase[]) || []);
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
+
+      const phasesData = (phasesResult.data as Phase[]) || [];
+      addDebugStep(`Phases loaded: ${phasesData.length}`);
+      setPhases(phasesData);
 
       // Fetch tasks
-      if (phasesData && phasesData.length > 0) {
+      if (phasesData.length > 0) {
         const phaseIds = phasesData.map(p => p.id);
-        const { data: tasksData, error: tasksError } = await supabase
-          .from('tasks')
-          .select('*')
-          .in('phase_id', phaseIds)
-          .eq('client_visible', true)
-          .order('order_index');
+        addDebugStep('Fetching tasks...');
+        const tasksResult = await withTimeout(
+          supabase
+            .from('tasks')
+            .select('*')
+            .in('phase_id', phaseIds)
+            .eq('client_visible', true)
+            .order('order_index'),
+          REQUEST_TIMEOUT_MS,
+          'Fetch tasks'
+        );
 
-        const tasksList = (tasksData as Task[]) || [];
+        if (thisRequestId !== requestIdRef.current) {
+          inFlightRef.current = false;
+          return;
+        }
+
+        const tasksList = (tasksResult.data as Task[]) || [];
+        addDebugStep(`Tasks loaded: ${tasksList.length}`);
         setTasks(tasksList);
 
         // Fetch dependencies
         if (tasksList.length > 0) {
           const taskIds = tasksList.map(t => t.id);
-          const { data: depsData } = await supabase
-            .from('dependencies')
-            .select('*')
-            .or(`predecessor_task_id.in.(${taskIds.join(',')}),successor_task_id.in.(${taskIds.join(',')})`);
+          addDebugStep('Fetching dependencies...');
+          const depsResult = await withTimeout(
+            supabase
+              .from('dependencies')
+              .select('*')
+              .or(`predecessor_task_id.in.(${taskIds.join(',')}),successor_task_id.in.(${taskIds.join(',')})`),
+            REQUEST_TIMEOUT_MS,
+            'Fetch dependencies'
+          );
 
-          setDependencies((depsData as Dependency[]) || []);
+          if (thisRequestId !== requestIdRef.current) {
+            inFlightRef.current = false;
+            return;
+          }
+
+          addDebugStep(`Dependencies loaded: ${depsResult.data?.length || 0}`);
+          setDependencies((depsResult.data as Dependency[]) || []);
         }
+      } else {
+        addDebugStep('No phases, skipping tasks');
+        setTasks([]);
       }
 
       // Fetch documents
+      addDebugStep('Fetching documents...');
       const [quotationsRes, invoicesRes] = await Promise.all([
-        supabase.from('quotations').select('*').eq('project_id', shareInfo.project_id).order('created_at', { ascending: false }),
-        supabase.from('invoices').select('*').eq('project_id', shareInfo.project_id).order('created_at', { ascending: false }),
+        withTimeout(
+          supabase.from('quotations').select('*').eq('project_id', shareInfo.project_id).order('created_at', { ascending: false }),
+          REQUEST_TIMEOUT_MS,
+          'Fetch quotations'
+        ),
+        withTimeout(
+          supabase.from('invoices').select('*').eq('project_id', shareInfo.project_id).order('created_at', { ascending: false }),
+          REQUEST_TIMEOUT_MS,
+          'Fetch invoices'
+        ),
       ]);
 
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
+
+      addDebugStep(`Quotations: ${quotationsRes.data?.length || 0}, Invoices: ${invoicesRes.data?.length || 0}`);
       setQuotations((quotationsRes.data as ProjectDocument[]) || []);
       setInvoices((invoicesRes.data as ProjectDocument[]) || []);
 
+      addDebugStep('All data loaded successfully');
       setLoading(false);
+      inFlightRef.current = false;
     } catch (error) {
-      setAccessDenied(true);
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addDebugStep(`Error: ${errorMessage}`);
+      
+      // Check if it's a timeout
+      if (errorMessage.startsWith('Timeout:')) {
+        setLoadError({
+          step: errorMessage.split(':')[1]?.trim() || 'Unknown step',
+          message: errorMessage,
+        });
+      } else {
+        setLoadError({
+          step: 'Unknown',
+          message: errorMessage,
+        });
+      }
       setLoading(false);
+      inFlightRef.current = false;
     }
-  }, [token]);
+  }, [token, addDebugStep]);
 
-  // Run checkAccess: 
-  // - Immediately to fetch share info (works without auth for public shares)
-  // - Again when auth settles (for invite-only shares that need user info)
+  // Run checkAccess when token changes or when user state settles
   useEffect(() => {
     checkAccess(user);
   }, [user, checkAccess]);
+
+  const handleRetry = useCallback(() => {
+    // Force a fresh run
+    inFlightRef.current = false;
+    checkAccess(user);
+  }, [checkAccess, user]);
 
   const handlePreview = async (doc: ProjectDocument) => {
     setPreviewDoc(doc);
@@ -373,7 +566,7 @@ export default function SharedProjectView() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // Show skeleton only when loading data (not when waiting for auth)
+  // Show skeleton only when loading data
   if (loading) {
     return <SharedProjectSkeleton />;
   }
@@ -381,6 +574,50 @@ export default function SharedProjectView() {
   // If invite-only share requires login, redirect to auth
   if (needsAuth) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Show error state with diagnostics
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-lg w-full">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-destructive/10">
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Failed to Load Project</h2>
+                <p className="text-sm text-muted-foreground">
+                  {loadError.message}
+                </p>
+              </div>
+            </div>
+            
+            <Button onClick={handleRetry} className="w-full gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </Button>
+            
+            <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full gap-2 text-muted-foreground">
+                  {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {showDiagnostics ? 'Hide' : 'Show'} Diagnostics
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-2 p-3 rounded-lg bg-muted/50 text-xs font-mono space-y-1 max-h-48 overflow-auto">
+                  {debugSteps.map((step, i) => (
+                    <div key={i} className="text-muted-foreground">{step}</div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (accessDenied) {
@@ -399,7 +636,51 @@ export default function SharedProjectView() {
     );
   }
 
-  if (!project) return null;
+  // No project loaded but also no error - show error state
+  if (!project) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="max-w-lg w-full">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-full bg-destructive/10">
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Project Not Found</h2>
+                <p className="text-sm text-muted-foreground">
+                  The project could not be loaded. Please try again.
+                </p>
+              </div>
+            </div>
+            
+            <Button onClick={handleRetry} className="w-full gap-2">
+              <RefreshCw className="w-4 h-4" />
+              Try Again
+            </Button>
+            
+            {debugSteps.length > 0 && (
+              <Collapsible open={showDiagnostics} onOpenChange={setShowDiagnostics}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="w-full gap-2 text-muted-foreground">
+                    {showDiagnostics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    {showDiagnostics ? 'Hide' : 'Show'} Diagnostics
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 p-3 rounded-lg bg-muted/50 text-xs font-mono space-y-1 max-h-48 overflow-auto">
+                    {debugSteps.map((step, i) => (
+                      <div key={i} className="text-muted-foreground">{step}</div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const totalDays = differenceInDays(new Date(project.end_date), new Date(project.start_date));
   const daysElapsed = differenceInDays(new Date(), new Date(project.start_date));
