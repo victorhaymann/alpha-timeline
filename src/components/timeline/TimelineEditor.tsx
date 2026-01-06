@@ -85,25 +85,36 @@ export function TimelineEditor({
     const taskIndex = phaseTasks.findIndex(t => t.id === taskId);
     if (taskIndex === -1 || taskIndex === newIndex) return;
 
+    // Clamp newIndex to valid range
+    const clampedNewIndex = Math.max(0, Math.min(newIndex, phaseTasks.length - 1));
+    if (taskIndex === clampedNewIndex) return;
+
     // Reorder
-    const [movedTask] = phaseTasks.splice(taskIndex, 1);
-    phaseTasks.splice(newIndex, 0, movedTask);
+    const reorderedTasks = [...phaseTasks];
+    const [movedTask] = reorderedTasks.splice(taskIndex, 1);
+    reorderedTasks.splice(clampedNewIndex, 0, movedTask);
 
     // Update order indices
-    const updates = phaseTasks.map((task, i) => ({
+    const updates = reorderedTasks.map((task, i) => ({
       id: task.id,
       order_index: i,
     }));
 
+    // Optimistic update - update local state immediately
+    const updatedTasks = tasks.map(t => {
+      const update = updates.find(u => u.id === t.id);
+      return update ? { ...t, order_index: update.order_index } : t;
+    });
+    onTasksChange(updatedTasks);
+
     try {
+      // Batch update in database
       for (const update of updates) {
         await supabase
           .from('tasks')
           .update({ order_index: update.order_index })
           .eq('id', update.id);
       }
-
-      onRefresh();
     } catch (error: any) {
       console.error('Error reordering tasks:', error);
       toast({
@@ -111,6 +122,8 @@ export function TimelineEditor({
         description: 'Failed to reorder tasks.',
         variant: 'destructive',
       });
+      // Revert on error
+      onRefresh();
     }
   };
 

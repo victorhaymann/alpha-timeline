@@ -429,4 +429,62 @@
     border-color: hsl(var(--gantt-text) / 0.8);
     filter: brightness(1.1);
   }
+
+  /* Vertical reorder dragging */
+  .gantt-dragging-vertical {
+    cursor: grabbing !important;
+    user-select: none !important;
+  }
+  .gantt-dragging-vertical * {
+    cursor: grabbing !important;
+  }
+
+  .gantt-vertical-dragging {
+    @apply bg-card/95 rounded-lg shadow-2xl;
+    border: 1px solid hsl(var(--primary) / 0.3);
+    animation: vertical-lift 0.15s ease-out forwards;
+  }
+
+  .gantt-vertical-drop-target {
+    @apply relative;
+  }
+  .gantt-vertical-drop-target::before {
+    content: '';
+    @apply absolute left-4 right-4 h-0.5 bg-primary rounded-full;
+    top: -1px;
+    animation: drop-indicator-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes vertical-lift {
+    from {
+      transform: scale(1);
+      box-shadow: 0 2px 8px hsl(0 0% 0% / 0.1);
+    }
+    to {
+      transform: scale(1.02);
+      box-shadow: 0 12px 32px hsl(0 0% 0% / 0.25);
+    }
+  }
+
+  @keyframes drop-indicator-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scaleX(0.98);
+    }
+  }
+
+  /* Grip handle styling */
+  .gantt-grip-handle {
+    @apply cursor-grab transition-all duration-200;
+  }
+  .gantt-grip-handle:hover {
+    @apply text-foreground scale-110;
+  }
+  .gantt-grip-handle:active {
+    @apply cursor-grabbing text-primary;
+  }
 }

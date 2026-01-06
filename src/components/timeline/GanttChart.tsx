@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
+import { useVerticalReorder } from '@/hooks/useVerticalReorder';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
@@ -325,6 +326,20 @@ export function GanttChart({
     onTaskUpdate,
     readOnly,
   });
+
+  // Vertical reorder hook
+  const {
+    verticalDrag,
+    isVerticalDragging,
+    handleVerticalDragStart,
+    getVerticalDragClasses,
+    getVerticalDragStyles,
+  } = useVerticalReorder({
+    rowHeight: ROW_HEIGHT,
+    onReorder: onTaskReorder,
+    readOnly,
+  });
+
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
     // All views show full project range - difference is in column display (days vs weeks)
@@ -992,7 +1007,7 @@ export function GanttChart({
                   )}
 
                   {/* Review cycles - 2 rows each (base+rework on top, review below) */}
-                  {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle) => {
+                  {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle, cycleIndex) => {
                     // Row 1: Base Task + Rework (on same line)
                     const baseStartDate = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
                     const baseEndDate = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
@@ -1002,16 +1017,28 @@ export function GanttChart({
                     const reworkEndDate = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
                     const reworkDuration = reworkStartDate && reworkEndDate ? differenceInDays(reworkEndDate, reworkStartDate) + 1 : null;
 
+                    const isBeingDragged = verticalDrag?.taskId === cycle.baseTask.id;
+
                     return (
-                      <div key={cycle.id}>
+                      <div 
+                        key={cycle.id}
+                        className={cn(getVerticalDragClasses(cycle.baseTask.id))}
+                        style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex)}
+                      >
                         {/* Row 1: Base task + Rework */}
                         <div 
-                          className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
+                          className={cn(
+                            "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
+                            isBeingDragged && "bg-card"
+                          )}
                           style={{ height: ROW_HEIGHT }}
                         >
                           {!readOnly && (
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
+                            <div 
+                              className="flex items-center gap-0.5 shrink-0"
+                              onMouseDown={(e) => handleVerticalDragStart(e, cycle.baseTask.id, section.phase.id, cycleIndex)}
+                            >
+                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
                             </div>
                           )}
                           <div className="w-3.5 shrink-0" />
@@ -1067,22 +1094,35 @@ export function GanttChart({
                   })}
 
                   {/* Ungrouped tasks (not part of any cycle) */}
-                  {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task) => {
+                  {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task, taskIndex) => {
                     const startDate = task.start_date ? new Date(task.start_date) : null;
                     const endDate = task.end_date ? new Date(task.end_date) : null;
                     const duration = startDate && endDate 
                       ? differenceInDays(endDate, startDate) + 1 
                       : null;
 
+                    // Calculate overall index (cycles count + taskIndex)
+                    const overallIndex = section.cycles.length + taskIndex;
+                    const isBeingDragged = verticalDrag?.taskId === task.id;
+
                     return (
                       <div 
                         key={task.id}
-                        className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
-                        style={{ height: ROW_HEIGHT }}
+                        className={cn(
+                          "flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors",
+                          getVerticalDragClasses(task.id),
+                          isBeingDragged && "bg-card"
+                        )}
+                        style={{ 
+                          height: ROW_HEIGHT,
+                          ...getVerticalDragStyles(task.id, overallIndex)
+                        }}
                       >
                         {!readOnly && (
                           <div className="flex items-center gap-0.5 shrink-0">
-                            <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
+                            <div onMouseDown={(e) => handleVerticalDragStart(e, task.id, section.phase.id, overallIndex)}>
+                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
+                            </div>
                             {onDeleteTask && (
                               <button
                                 onClick={(e) => {
