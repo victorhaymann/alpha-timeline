@@ -532,6 +532,79 @@ export function GanttChart({
     return n.includes('client check-in') || n.includes('client checkin') || n.includes('weekly call') || n.includes('bi-weekly call');
   }, []);
 
+  // Helper to check if a task is a feedback/review meeting (should have dashed border)
+  const isFeedbackTask = useCallback((task: Task) => {
+    const n = task.name.toLowerCase();
+    return task.is_feedback_meeting || 
+      (task.task_type === 'meeting' && n.includes('review')) ||
+      n.endsWith(' review');
+  }, []);
+
+  // Helper to check if a task is a rework task
+  const isReworkTask = useCallback((task: Task) => {
+    const n = task.name.toLowerCase();
+    return n.endsWith(' rework');
+  }, []);
+
+  // Extract base name from task name (removes " Review" or " Rework" suffix)
+  const getBaseTaskName = useCallback((taskName: string) => {
+    const n = taskName.toLowerCase();
+    if (n.endsWith(' review')) return taskName.slice(0, -7);
+    if (n.endsWith(' rework')) return taskName.slice(0, -7);
+    return taskName;
+  }, []);
+
+  // Group related tasks into review cycles (Base Task, Review, Rework)
+  interface ReviewCycle {
+    id: string;
+    baseName: string;
+    baseTask: Task;
+    reviewTask: Task | null;
+    reworkTask: Task | null;
+  }
+
+  const groupTasksIntoReviewCycles = useCallback((phaseTasks: Task[]): { cycles: ReviewCycle[], ungrouped: Task[] } => {
+    const cycles: ReviewCycle[] = [];
+    const usedTaskIds = new Set<string>();
+    
+    // Find all potential base tasks (tasks that are not reviews or reworks)
+    const baseTasks = phaseTasks.filter(t => !isFeedbackTask(t) && !isReworkTask(t));
+    
+    for (const baseTask of baseTasks) {
+      const baseName = baseTask.name;
+      
+      // Find matching review and rework tasks
+      const reviewTask = phaseTasks.find(t => 
+        t.name.toLowerCase() === `${baseName.toLowerCase()} review` && 
+        !usedTaskIds.has(t.id)
+      );
+      const reworkTask = phaseTasks.find(t => 
+        t.name.toLowerCase() === `${baseName.toLowerCase()} rework` && 
+        !usedTaskIds.has(t.id)
+      );
+      
+      // Only create a cycle if we have at least a review task
+      if (reviewTask) {
+        usedTaskIds.add(baseTask.id);
+        usedTaskIds.add(reviewTask.id);
+        if (reworkTask) usedTaskIds.add(reworkTask.id);
+        
+        cycles.push({
+          id: `cycle-${baseTask.id}`,
+          baseName,
+          baseTask,
+          reviewTask,
+          reworkTask: reworkTask || null,
+        });
+      }
+    }
+    
+    // Remaining tasks that are not part of any cycle
+    const ungrouped = phaseTasks.filter(t => !usedTaskIds.has(t.id));
+    
+    return { cycles, ungrouped };
+  }, [isFeedbackTask, isReworkTask]);
+
   // Collect all check-in tasks that exist in the project (usually many single-day meetings)
   const checkinTasks = useMemo(() => {
     return tasks
@@ -612,7 +685,13 @@ export function GanttChart({
   }, [phases, tasks, isClientCheckin]);
 
   // Create ordered sections: Consolidated Client Check-ins first (single row), then phases (excluding Discovery)
-  type Section = { type: 'phase'; phase: Phase; tasks: Task[] } | { type: 'weekly-call'; task: Task };
+  type Section = { 
+    type: 'phase'; 
+    phase: Phase; 
+    tasks: Task[];
+    cycles: ReviewCycle[];
+    ungroupedTasks: Task[];
+  } | { type: 'weekly-call'; task: Task };
 
   const orderedSections = useMemo((): Section[] => {
     const sections: Section[] = [];
@@ -625,11 +704,12 @@ export function GanttChart({
       .filter(phase => phase.name !== 'Discovery' && phase.name !== 'Client Check-ins')
       .forEach(phase => {
         const phaseTasks = tasksByPhase.get(phase.id) || [];
-        sections.push({ type: 'phase', phase, tasks: phaseTasks });
+        const { cycles, ungrouped } = groupTasksIntoReviewCycles(phaseTasks);
+        sections.push({ type: 'phase', phase, tasks: phaseTasks, cycles, ungroupedTasks: ungrouped });
       });
 
     return sections;
-  }, [phases, tasksByPhase, consolidatedWeeklyCall]);
+  }, [phases, tasksByPhase, consolidatedWeeklyCall, groupTasksIntoReviewCycles]);
 
   // Handle drag start
   const handleDragStart = (
@@ -717,7 +797,7 @@ export function GanttChart({
     }
   });
 
-  // Calculate total chart height based on sections (accounting for collapsed state)
+  // Calculate total chart height based on sections (accounting for collapsed state and review cycles)
   let totalHeight = HEADER_HEIGHT;
   orderedSections.forEach(section => {
     const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
@@ -734,7 +814,11 @@ export function GanttChart({
       if (section.type === 'weekly-call') {
         totalHeight += ROW_HEIGHT; // Single row for weekly call
       } else {
-        totalHeight += section.tasks.length * ROW_HEIGHT;
+        // Each cycle takes 2 rows (base+rework on top, review on bottom)
+        // Plus ungrouped tasks take 1 row each
+        const cycleRows = section.cycles.length * 2;
+        const ungroupedRows = section.ungroupedTasks.length;
+        totalHeight += (cycleRows + ungroupedRows) * ROW_HEIGHT;
       }
     }
   });
@@ -986,8 +1070,83 @@ export function GanttChart({
                     </div>
                   )}
 
-                  {/* Task rows - only show if not collapsed (for phases only) */}
-                  {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
+                  {/* Review cycles - 2 rows each (base+rework on top, review below) */}
+                  {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle) => {
+                    // Row 1: Base Task + Rework (on same line)
+                    const baseStartDate = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
+                    const baseEndDate = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
+                    const baseDuration = baseStartDate && baseEndDate ? differenceInDays(baseEndDate, baseStartDate) + 1 : null;
+                    
+                    const reworkStartDate = cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null;
+                    const reworkEndDate = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
+                    const reworkDuration = reworkStartDate && reworkEndDate ? differenceInDays(reworkEndDate, reworkStartDate) + 1 : null;
+
+                    return (
+                      <div key={cycle.id}>
+                        {/* Row 1: Base task + Rework */}
+                        <div 
+                          className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
+                          style={{ height: ROW_HEIGHT }}
+                        >
+                          {!readOnly && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
+                            </div>
+                          )}
+                          <div className="w-3.5 shrink-0" />
+                          <span className="text-xs font-medium text-foreground truncate min-w-0">
+                            {cycle.baseName}
+                            {cycle.reworkTask && <span className="text-muted-foreground ml-1">+ Rework</span>}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
+                            {baseDuration !== null && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
+                                {baseDuration}d
+                              </span>
+                            )}
+                            {cycle.reworkTask && reworkDuration !== null && (
+                              <>
+                                <span className="opacity-50">+</span>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
+                                  {reworkDuration}d
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onAddReviewRound(cycle.baseTask.id)}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0 transition-all"
+                            title="Add review round"
+                          >
+                            <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                          </button>
+                        </div>
+
+                        {/* Row 2: Review meeting */}
+                        {cycle.reviewTask && (
+                          <div 
+                            className="flex items-center gap-2 px-3 pl-8 group hover:bg-muted/30 transition-colors border-l-2 border-dashed ml-4"
+                            style={{ height: ROW_HEIGHT, borderColor: sectionColor }}
+                          >
+                            <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span className="text-xs font-medium text-muted-foreground truncate flex-1 min-w-0">
+                              ↳ {cycle.reviewTask.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
+                              {cycle.reviewTask.start_date && (
+                                <span className="font-medium">
+                                  {format(new Date(cycle.reviewTask.start_date), 'MMM d')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Ungrouped tasks (not part of any cycle) */}
+                  {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task) => {
                     const startDate = task.start_date ? new Date(task.start_date) : null;
                     const endDate = task.end_date ? new Date(task.end_date) : null;
                     const duration = startDate && endDate 
@@ -1000,7 +1159,6 @@ export function GanttChart({
                         className="flex items-center gap-2 px-3 group hover:bg-muted/30 transition-colors"
                         style={{ height: ROW_HEIGHT }}
                       >
-                        {/* Drag handle + Delete - only show when not readOnly */}
                         {!readOnly && (
                           <div className="flex items-center gap-0.5 shrink-0">
                             <GripVertical className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 cursor-grab transition-opacity" />
@@ -1019,15 +1177,12 @@ export function GanttChart({
                           </div>
                         )}
                         
-                        {/* Task type icon */}
                         {task.task_type === 'milestone' && <Flag className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         {task.task_type === 'meeting' && <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
                         {task.task_type === 'task' && <div className="w-3.5 shrink-0" />}
                         
-                        {/* Task name - more space */}
                         <span className="text-xs font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
                         
-                        {/* Task data: days, start → end - pushed to the right */}
                         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                           {duration !== null && (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
@@ -1231,18 +1386,250 @@ export function GanttChart({
                         </div>
                       )}
 
-                      {/* Task bars - only show if not collapsed (for phases only) */}
-                      {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
+                      {/* Review cycles - 2 rows each with connected flow visualization */}
+                      {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle) => {
+                        // Get positions for all tasks in the cycle
+                        const baseStart = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
+                        const baseEnd = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
+                        const reviewStart = cycle.reviewTask?.start_date ? new Date(cycle.reviewTask.start_date) : null;
+                        const reworkStart = cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null;
+                        const reworkEnd = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
+
+                        const baseLeft = baseStart ? dateToX(baseStart) : 0;
+                        const baseWidth = baseStart && baseEnd ? getTaskWidth(baseStart, baseEnd) : 0;
+                        const reviewLeft = reviewStart ? dateToX(reviewStart) : 0;
+                        const reworkLeft = reworkStart ? dateToX(reworkStart) : 0;
+                        const reworkWidth = reworkStart && reworkEnd ? getTaskWidth(reworkStart, reworkEnd) : 0;
+
+                        // Check dragging states
+                        const isBaseDragging = dragging?.taskId === cycle.baseTask.id;
+                        const isBaseJustDropped = justDropped === cycle.baseTask.id;
+                        const isReworkDragging = cycle.reworkTask && dragging?.taskId === cycle.reworkTask.id;
+                        const isReworkJustDropped = cycle.reworkTask && justDropped === cycle.reworkTask.id;
+
+                        return (
+                          <div key={cycle.id}>
+                            {/* Row 1: Base Task + Rework bars + connecting lines */}
+                            <div className="relative" style={{ height: ROW_HEIGHT }}>
+                              {/* Grid background */}
+                              <div className="absolute inset-0 flex">
+                                {groupedColumns.map((col) => {
+                                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                  return (
+                                    <div
+                                      key={col.key}
+                                      className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                      style={{ width: columnWidth }}
+                                    />
+                                  );
+                                })}
+                              </div>
+
+                              {/* Base Task bar */}
+                              {baseStart && baseEnd && baseWidth > 0 && (
+                                <Tooltip delayDuration={200}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                        "transition-all duration-300 ease-out shadow-md",
+                                        isBaseDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
+                                        isBaseJustDropped && "animate-spring-settle"
+                                      )}
+                                      style={{
+                                        left: baseLeft + 2,
+                                        width: baseWidth - 4,
+                                        background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                        boxShadow: `0 4px 12px ${sectionColor}66`,
+                                      }}
+                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
+                                    >
+                                      {!readOnly && (
+                                        <>
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.baseTask, 'resize-start');
+                                            }}
+                                          />
+                                          <div
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.baseTask, 'resize-end');
+                                            }}
+                                          />
+                                        </>
+                                      )}
+                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                          {baseWidth > 60 ? cycle.baseName : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="font-semibold">
+                                    <p>{cycle.baseTask.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(baseStart, 'MMM d')} → {format(baseEnd, 'MMM d')}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+
+                              {/* Rework Task bar (on same row) */}
+                              {cycle.reworkTask && reworkStart && reworkEnd && reworkWidth > 0 && (
+                                <Tooltip delayDuration={200}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                        "transition-all duration-300 ease-out shadow-md",
+                                        isReworkDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
+                                        isReworkJustDropped && "animate-spring-settle"
+                                      )}
+                                      style={{
+                                        left: reworkLeft + 2,
+                                        width: reworkWidth - 4,
+                                        background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                        boxShadow: `0 4px 12px ${sectionColor}66`,
+                                      }}
+                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reworkTask!, 'move')}
+                                    >
+                                      {!readOnly && (
+                                        <>
+                                          <div
+                                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.reworkTask!, 'resize-start');
+                                            }}
+                                          />
+                                          <div
+                                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              handleDragStart(e, cycle.reworkTask!, 'resize-end');
+                                            }}
+                                          />
+                                        </>
+                                      )}
+                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                          {reworkWidth > 50 ? 'Rework' : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="font-semibold">
+                                    <p>{cycle.reworkTask.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(reworkStart, 'MMM d')} → {format(reworkEnd, 'MMM d')}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+
+                              {/* SVG Connecting line: Base Task end → down to Review row */}
+                              {cycle.reviewTask && baseEnd && reviewStart && (
+                                <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
+                                  <line
+                                    x1={baseLeft + baseWidth - 2}
+                                    y1={ROW_HEIGHT / 2}
+                                    x2={reviewLeft + columnWidth / 2}
+                                    y2={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                    stroke={sectionColor}
+                                    strokeWidth="2"
+                                    strokeDasharray="4 2"
+                                    className="opacity-60"
+                                  />
+                                  {/* Arrow dot at review */}
+                                  <circle
+                                    cx={reviewLeft + columnWidth / 2}
+                                    cy={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                    r="4"
+                                    fill={sectionColor}
+                                    className="opacity-80"
+                                  />
+                                </svg>
+                              )}
+
+                              {/* SVG Connecting line: Review → up to Rework start */}
+                              {cycle.reviewTask && cycle.reworkTask && reviewStart && reworkStart && (
+                                <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT * 2 }}>
+                                  <line
+                                    x1={reviewLeft + columnWidth / 2}
+                                    y1={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                    x2={reworkLeft + 2}
+                                    y2={ROW_HEIGHT / 2}
+                                    stroke={sectionColor}
+                                    strokeWidth="2"
+                                    strokeDasharray="4 2"
+                                    className="opacity-60"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+
+                            {/* Row 2: Review meeting (dashed border diamond/marker) */}
+                            <div className="relative" style={{ height: ROW_HEIGHT }}>
+                              {/* Grid background */}
+                              <div className="absolute inset-0 flex">
+                                {groupedColumns.map((col) => {
+                                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                  return (
+                                    <div
+                                      key={col.key}
+                                      className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                      style={{ width: columnWidth }}
+                                    />
+                                  );
+                                })}
+                              </div>
+
+                              {/* Review meeting marker with dashed border */}
+                              {cycle.reviewTask && reviewStart && (
+                                <Tooltip delayDuration={200}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className="absolute top-1/2 -translate-y-1/2 w-6 h-6 rotate-45 rounded-sm border-2 border-dashed cursor-pointer hover:scale-110 transition-transform diamond-shimmer"
+                                      style={{
+                                        left: reviewLeft + (columnWidth / 2) - 12,
+                                        backgroundColor: `${sectionColor}99`,
+                                        borderColor: sectionColor,
+                                      }}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="font-semibold">
+                                    <p>{cycle.reviewTask.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(reviewStart, 'MMM d, yyyy')}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Ungrouped task bars */}
+                      {!isCollapsed && section.type === 'phase' && section.ungroupedTasks.map((task) => {
                         const isCurrentlyDragging = dragging?.taskId === task.id;
                         const isJustDropped = justDropped === task.id;
                         const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : (task.start_date ? new Date(task.start_date) : null);
                         const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : (task.end_date ? new Date(task.end_date) : null);
 
-                        // Calculate durations for preview
                         const currentDuration = displayStart && displayEnd ? differenceInDays(displayEnd, displayStart) + 1 : null;
                         const originalDuration = dragging?.originalDuration;
                         const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                         const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
+                        
+                        // Check if this is a feedback task (should have dashed border)
+                        const isFeedback = isFeedbackTask(task);
 
                         if (!displayStart || !displayEnd) return (
                           <div key={task.id} style={{ height: ROW_HEIGHT }}>
@@ -1261,30 +1648,24 @@ export function GanttChart({
                           </div>
                         );
 
-                        // Check if task overlaps with visible range
                         const firstColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[0].startDate) : null;
                         const lastColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[groupedColumns.length - 1].startDate) : null;
                         const taskStartDay = startOfDay(displayStart);
                         const taskEndDay = startOfDay(displayEnd);
                         
-                        // Skip rendering if task is completely outside visible range
                         const isOutsideView = firstColDate && lastColDate && 
                           (taskEndDay < firstColDate || taskStartDay > lastColDate);
 
-                        // Calculate clipped position and width for tasks that partially overlap
                         let clippedLeft = dateToX(displayStart);
                         let clippedWidth = getTaskWidth(displayStart, displayEnd);
                         
-                        // If task starts before view, clip to start at 0
                         if (firstColDate && taskStartDay < firstColDate) {
                           clippedLeft = 0;
-                          // Recalculate width from first visible column to task end
                           clippedWidth = getTaskWidth(firstColDate, displayEnd);
                         }
 
                         return (
                           <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
-                            {/* Grid background */}
                             <div className="absolute inset-0 flex">
                               {groupedColumns.map((col) => {
                                 const isAlternateWeek = weekAlternatingMap[col.weekNumber];
@@ -1298,7 +1679,6 @@ export function GanttChart({
                               })}
                             </div>
 
-                            {/* Task bar - Phase colored */}
                             {!isOutsideView && clippedWidth > 0 && (
                               <Tooltip delayDuration={200}>
                                 <TooltipTrigger asChild>
@@ -1309,19 +1689,22 @@ export function GanttChart({
                                       "transition-all duration-300 ease-out shadow-md",
                                       isCurrentlyDragging && "opacity-90 ring-2 ring-white shadow-2xl !transition-none",
                                       isJustDropped && "animate-spring-settle",
-                                      task.task_type === 'milestone' && "rounded-full"
+                                      task.task_type === 'milestone' && "rounded-full",
+                                      isFeedback && "border-2 border-dashed"
                                     )}
                                     style={{
                                       left: clippedLeft + 2,
                                       width: task.task_type === 'milestone' ? 24 : clippedWidth - 4,
-                                      background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                      background: isFeedback 
+                                        ? `${sectionColor}99` 
+                                        : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                      borderColor: isFeedback ? sectionColor : undefined,
                                       boxShadow: `0 4px 12px ${sectionColor}66`,
                                     }}
                                     onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                                   >
                                     {task.task_type !== 'milestone' && (
                                       <>
-                                        {/* Resize handle - start */}
                                         {!readOnly && (
                                           <div
                                             className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-l-md"
@@ -1332,14 +1715,12 @@ export function GanttChart({
                                           />
                                         )}
 
-                                        {/* Task name */}
                                         <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
                                           <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
                                             {clippedWidth > 60 ? task.name : ''}
                                           </span>
                                         </div>
 
-                                        {/* Resize handle - end */}
                                         {!readOnly && (
                                           <div
                                             className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 rounded-r-md"
@@ -1352,7 +1733,6 @@ export function GanttChart({
                                       </>
                                     )}
 
-                                  {/* Duration preview tooltip during resize */}
                                   {durationChanged && (
                                     <div 
                                       className="absolute -top-10 left-1/2 -translate-x-1/2 bg-card text-foreground px-3 py-2 rounded-lg shadow-xl text-xs font-semibold whitespace-nowrap z-50 animate-fade-in border border-border"
@@ -1373,7 +1753,6 @@ export function GanttChart({
                                           ({currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!})
                                         </span>
                                       </div>
-                                      {/* Tooltip arrow */}
                                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-card" />
                                     </div>
                                   )}
