@@ -462,10 +462,6 @@ export default function ProjectDetail() {
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="exports" className="gap-1.5">
-              <Download className="w-3.5 h-3.5" />
-              Exports
-            </TabsTrigger>
             <TabsTrigger value="documents" className="gap-1.5">
               <FileText className="w-3.5 h-3.5" />
               Quotations & Invoices
@@ -510,24 +506,6 @@ export default function ProjectDetail() {
               return null; // Don't render anything here
             }}
           />
-        </TabsContent>
-
-        <TabsContent value="exports" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Export Timeline</CardTitle>
-              <CardDescription>
-                Download your timeline in various formats for sharing and archiving.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ExportPanel 
-                project={project}
-                phases={phases}
-                tasks={tasks}
-              />
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">
