@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
+import tnfLogoSquare from '@/assets/tnf-logo-square.png';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
@@ -886,6 +887,13 @@ export function GanttChart({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* TNF Logo */}
+          <img 
+            src={tnfLogoSquare} 
+            alt="The New Face" 
+            className="h-10 w-auto object-contain"
+          />
         </div>
       </div>
 
