@@ -230,24 +230,11 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
-  // Update date range when view mode changes - always start from project start
+  // Update date range when view mode changes - all views now show full project range
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
-    
-    if (mode === 'week') {
-      // Weekly view: show first week of project (7 days from project start)
-      const weekStart = startOfWeek(projectStartDate, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-      setDateRange({ from: weekStart, to: weekEnd });
-    } else if (mode === 'month') {
-      // Monthly view: show first month of project
-      const monthStart = startOfMonth(projectStartDate);
-      const monthEnd = endOfMonth(monthStart);
-      setDateRange({ from: monthStart, to: monthEnd });
-    } else {
-      // Project view: show entire project from start to end
-      setDateRange({ from: projectStartDate, to: projectEndDate });
-    }
+    // All views show full project range - difference is in column display (days vs weeks)
+    setDateRange({ from: projectStartDate, to: projectEndDate });
   }, [projectStartDate, projectEndDate]);
 
   // Navigate to previous/next period based on view mode
