@@ -27,6 +27,7 @@ import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import tnfLogoSquare from '@/assets/tnf-logo-square.png';
 
 // Loading skeleton component
 function SharedProjectSkeleton() {
@@ -401,6 +402,15 @@ export default function SharedProjectView() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* TNF Logo - Fixed top right */}
+      <div className="fixed top-4 right-4 md:top-6 md:right-6 z-50">
+        <img 
+          src={tnfLogoSquare} 
+          alt="The New Face" 
+          className="h-10 md:h-14 w-auto object-contain"
+        />
+      </div>
+      
       <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-12 py-6 space-y-6">
         {/* Header */}
         <div className="space-y-2">
