@@ -15,7 +15,6 @@ import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
 import { 
   ArrowLeft, 
   Calendar, 
-  Users, 
   Settings, 
   Share2,
   BarChart3,
@@ -27,6 +26,10 @@ import {
   RefreshCw,
   FileText,
   BookOpen,
+  User,
+  Users,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -329,13 +332,39 @@ export default function ProjectDetail() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-phase-delivery/10">
-                <Users className="w-5 h-5 text-phase-delivery" />
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                <User className="w-5 h-5 text-primary" />
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Reviews</p>
-                <p className="text-lg font-semibold">{project.default_review_rounds}</p>
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm text-muted-foreground">Project Manager</p>
+                {project.pm_name ? (
+                  <>
+                    <p className="text-sm font-semibold truncate">{project.pm_name}</p>
+                    {project.pm_email && (
+                      <a 
+                        href={`mailto:${project.pm_email}`}
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Mail className="w-3 h-3" />
+                        <span className="truncate">{project.pm_email}</span>
+                      </a>
+                    )}
+                    {project.pm_whatsapp && (
+                      <a 
+                        href={`https://wa.me/${project.pm_whatsapp.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Phone className="w-3 h-3" />
+                        <span>{project.pm_whatsapp}</span>
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">Not assigned</p>
+                )}
               </div>
             </div>
           </CardContent>

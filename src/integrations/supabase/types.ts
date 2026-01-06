@@ -581,6 +581,9 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          pm_email: string | null
+          pm_name: string | null
+          pm_whatsapp: string | null
           start_date: string
           status: Database["public"]["Enums"]["project_status"]
           timezone_client: string | null
@@ -605,6 +608,9 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          pm_email?: string | null
+          pm_name?: string | null
+          pm_whatsapp?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["project_status"]
           timezone_client?: string | null
@@ -629,6 +635,9 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          pm_email?: string | null
+          pm_name?: string | null
+          pm_whatsapp?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["project_status"]
           timezone_client?: string | null
