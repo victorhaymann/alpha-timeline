@@ -229,6 +229,27 @@ function safeSessionSet(key: string, value: string) {
     // Ignore storage errors (some browsers/private modes disable storage)
   }
 }
+
+function safeDifferenceInDays(left: Date, right: Date): number {
+  try {
+    if (Number.isNaN(left.getTime()) || Number.isNaN(right.getTime())) return 0;
+    return differenceInDays(left, right);
+  } catch {
+    return 0;
+  }
+}
+
+function safeFormatDate(dateInput: string | Date | null | undefined, fmt = 'MMM d, yyyy'): string {
+  try {
+    if (!dateInput) return '—';
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (Number.isNaN(d.getTime())) return '—';
+    return format(d, fmt);
+  } catch {
+    return '—';
+  }
+}
+
 export default function SharedProjectView() {
   const { token } = useParams<{ token: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -976,8 +997,11 @@ export default function SharedProjectView() {
     );
   }
 
-  const totalDays = differenceInDays(new Date(project.end_date), new Date(project.start_date));
-  const daysElapsed = differenceInDays(new Date(), new Date(project.start_date));
+  const totalDays = Math.max(
+    1,
+    safeDifferenceInDays(new Date(project.end_date), new Date(project.start_date))
+  );
+  const daysElapsed = safeDifferenceInDays(new Date(), new Date(project.start_date));
   const progress = Math.max(0, Math.min(100, (daysElapsed / totalDays) * 100));
 
   return (
@@ -1077,8 +1101,8 @@ export default function SharedProjectView() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between text-sm mb-2">
-              <span>{format(new Date(project.start_date), 'MMM d, yyyy')}</span>
-              <span>{format(new Date(project.end_date), 'MMM d, yyyy')}</span>
+              <span>{safeFormatDate(project.start_date)}</span>
+              <span>{safeFormatDate(project.end_date)}</span>
             </div>
             <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div 
@@ -1151,7 +1175,7 @@ export default function SharedProjectView() {
                           <div>
                             <p className="font-medium">{doc.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {formatFileSize(doc.file_size)} • {format(new Date(doc.created_at), 'MMM d, yyyy')}
+                              {formatFileSize(doc.file_size)} • {safeFormatDate(doc.created_at)}
                             </p>
                           </div>
                         </div>
@@ -1198,7 +1222,7 @@ export default function SharedProjectView() {
                           <div>
                             <p className="font-medium">{doc.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {formatFileSize(doc.file_size)} • {format(new Date(doc.created_at), 'MMM d, yyyy')}
+                              {formatFileSize(doc.file_size)} • {safeFormatDate(doc.created_at)}
                             </p>
                           </div>
                         </div>
