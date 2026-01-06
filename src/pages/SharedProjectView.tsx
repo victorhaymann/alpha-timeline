@@ -333,6 +333,14 @@ export default function SharedProjectView() {
     addDebugStep(`Loading project data (user=${currentUser ? 'authenticated' : 'anonymous'})`);
 
     try {
+      const fail = (step: string, message: string) => {
+        addDebugStep(`${step} failed: ${message}`);
+        setLoadError({ step, message });
+        setLoading(false);
+        setBootStage('done');
+        inFlightRef.current = false;
+      };
+
       // For invite-only shares, we need auth
       if (shareInfo.share_type === 'invite') {
         addDebugStep('Invite share - checking auth...');
@@ -361,6 +369,11 @@ export default function SharedProjectView() {
           return;
         }
 
+        if (profileResult.error) {
+          fail('Fetch profile', profileResult.error.message);
+          return;
+        }
+
         if (!profileResult.data) {
           addDebugStep('Profile not found');
           setAccessDenied(true);
@@ -384,6 +397,11 @@ export default function SharedProjectView() {
 
         if (thisRequestId !== requestIdRef.current) {
           inFlightRef.current = false;
+          return;
+        }
+
+        if (inviteResult.error) {
+          fail('Fetch invite', inviteResult.error.message);
           return;
         }
 
@@ -418,11 +436,7 @@ export default function SharedProjectView() {
       }
 
       if (projectResult.error || !projectResult.data) {
-        addDebugStep(`Project fetch failed: ${projectResult.error?.message || 'No data'}`);
-        setAccessDenied(true);
-        setLoading(false);
-        setBootStage('done');
-        inFlightRef.current = false;
+        fail('Fetch project', projectResult.error?.message || 'No project data returned');
         return;
       }
 
@@ -443,6 +457,11 @@ export default function SharedProjectView() {
 
       if (thisRequestId !== requestIdRef.current) {
         inFlightRef.current = false;
+        return;
+      }
+
+      if (phasesResult.error) {
+        fail('Fetch phases', phasesResult.error.message);
         return;
       }
 
@@ -470,6 +489,11 @@ export default function SharedProjectView() {
           return;
         }
 
+        if (tasksResult.error) {
+          fail('Fetch tasks', tasksResult.error.message);
+          return;
+        }
+
         const tasksList = (tasksResult.data as Task[]) || [];
         addDebugStep(`Tasks loaded: ${tasksList.length}`);
         setTasks(tasksList);
@@ -489,6 +513,11 @@ export default function SharedProjectView() {
 
           if (thisRequestId !== requestIdRef.current) {
             inFlightRef.current = false;
+            return;
+          }
+
+          if (depsResult.error) {
+            fail('Fetch dependencies', depsResult.error.message);
             return;
           }
 
@@ -517,6 +546,15 @@ export default function SharedProjectView() {
 
       if (thisRequestId !== requestIdRef.current) {
         inFlightRef.current = false;
+        return;
+      }
+
+      if (quotationsRes.error) {
+        fail('Fetch quotations', quotationsRes.error.message);
+        return;
+      }
+      if (invoicesRes.error) {
+        fail('Fetch invoices', invoicesRes.error.message);
         return;
       }
 
@@ -650,8 +688,13 @@ export default function SharedProjectView() {
     try {
       if (share.password_hash === passwordInput) {
         sessionStorage.setItem(`share_verified_${token}`, 'true');
+        addDebugStep('Password verified - loading project data');
         setNeedsPassword(false);
         setPasswordInput('');
+        setLoadError(null);
+        setAccessDenied(false);
+        setLoading(true);
+        setBootStage('loading-data');
         inFlightRef.current = false;
         // Load project data after password verification
         loadProjectData(share, user);
