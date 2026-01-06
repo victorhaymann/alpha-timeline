@@ -1307,13 +1307,33 @@ export function GanttChart({
 
                       {/* Review cycles - 2 rows each with connected flow visualization */}
                       {!isCollapsed && section.type === 'phase' && section.cycles.map((cycle) => {
-                        // Get positions for all tasks in the cycle
-                        const baseStart = cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null;
-                        const baseEnd = cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null;
-                        const reviewStart = cycle.reviewTask?.start_date ? new Date(cycle.reviewTask.start_date) : null;
-                        const reviewEnd = cycle.reviewTask?.end_date ? new Date(cycle.reviewTask.end_date) : null;
-                        const reworkStart = cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null;
-                        const reworkEnd = cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null;
+                        // Check dragging states first
+                        const isBaseDragging = dragging?.taskId === cycle.baseTask.id;
+                        const isReviewDragging = cycle.reviewTask && dragging?.taskId === cycle.reviewTask.id;
+                        const isReworkDragging = cycle.reworkTask && dragging?.taskId === cycle.reworkTask.id;
+                        const isBaseJustDropped = justDropped === cycle.baseTask.id;
+                        const isReviewJustDropped = cycle.reviewTask && justDropped === cycle.reviewTask.id;
+                        const isReworkJustDropped = cycle.reworkTask && justDropped === cycle.reworkTask.id;
+
+                        // Get positions for all tasks in the cycle - USE DRAG PREVIEW when dragging
+                        const baseStart = isBaseDragging && dragPreview 
+                          ? dragPreview.start 
+                          : (cycle.baseTask.start_date ? new Date(cycle.baseTask.start_date) : null);
+                        const baseEnd = isBaseDragging && dragPreview 
+                          ? dragPreview.end 
+                          : (cycle.baseTask.end_date ? new Date(cycle.baseTask.end_date) : null);
+                        const reviewStart = isReviewDragging && dragPreview 
+                          ? dragPreview.start 
+                          : (cycle.reviewTask?.start_date ? new Date(cycle.reviewTask.start_date) : null);
+                        const reviewEnd = isReviewDragging && dragPreview 
+                          ? dragPreview.end 
+                          : (cycle.reviewTask?.end_date ? new Date(cycle.reviewTask.end_date) : null);
+                        const reworkStart = isReworkDragging && dragPreview 
+                          ? dragPreview.start 
+                          : (cycle.reworkTask?.start_date ? new Date(cycle.reworkTask.start_date) : null);
+                        const reworkEnd = isReworkDragging && dragPreview 
+                          ? dragPreview.end 
+                          : (cycle.reworkTask?.end_date ? new Date(cycle.reworkTask.end_date) : null);
 
                         const baseLeft = baseStart ? dateToX(baseStart) : 0;
                         const baseWidth = baseStart && baseEnd ? getTaskWidth(baseStart, baseEnd) : 0;
@@ -1321,14 +1341,6 @@ export function GanttChart({
                         const reviewWidth = reviewStart && reviewEnd ? getTaskWidth(reviewStart, reviewEnd) : columnWidth;
                         const reworkLeft = reworkStart ? dateToX(reworkStart) : 0;
                         const reworkWidth = reworkStart && reworkEnd ? getTaskWidth(reworkStart, reworkEnd) : 0;
-
-                        // Check dragging states
-                        const isBaseDragging = dragging?.taskId === cycle.baseTask.id;
-                        const isBaseJustDropped = justDropped === cycle.baseTask.id;
-                        const isReviewDragging = cycle.reviewTask && dragging?.taskId === cycle.reviewTask.id;
-                        const isReviewJustDropped = cycle.reviewTask && justDropped === cycle.reviewTask.id;
-                        const isReworkDragging = cycle.reworkTask && dragging?.taskId === cycle.reworkTask.id;
-                        const isReworkJustDropped = cycle.reworkTask && justDropped === cycle.reworkTask.id;
 
                         return (
                           <div key={cycle.id}>
@@ -1349,7 +1361,12 @@ export function GanttChart({
                               </div>
 
                               {/* Base Task bar */}
-                              {baseStart && baseEnd && baseWidth > 0 && (
+                              {baseStart && baseEnd && baseWidth > 0 && (() => {
+                                const baseDuration = differenceInDays(baseEnd, baseStart) + 1;
+                                const isBaseResizing = isBaseDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
+                                const baseDurationChanged = isBaseResizing && dragging?.originalDuration && baseDuration !== dragging.originalDuration;
+                                
+                                return (
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1390,6 +1407,20 @@ export function GanttChart({
                                           {baseWidth > 60 ? cycle.baseName : ''}
                                         </span>
                                       </div>
+                                      {/* Duration indicator during resize */}
+                                      {baseDurationChanged && (
+                                        <div className="gantt-duration-indicator">
+                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
+                                          <span className="mx-1.5 text-amber-500">→</span>
+                                          <span className="font-bold">{baseDuration}d</span>
+                                          <span className={cn(
+                                            "gantt-duration-indicator-change",
+                                            baseDuration > dragging.originalDuration ? "positive" : "negative"
+                                          )}>
+                                            {baseDuration > dragging.originalDuration ? '+' : ''}{baseDuration - dragging.originalDuration}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="font-semibold">
@@ -1399,10 +1430,16 @@ export function GanttChart({
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
-                              )}
+                              );
+                              })()}
 
                               {/* Rework Task bar (on same row) */}
-                              {cycle.reworkTask && reworkStart && reworkEnd && reworkWidth > 0 && (
+                              {cycle.reworkTask && reworkStart && reworkEnd && reworkWidth > 0 && (() => {
+                                const reworkDuration = differenceInDays(reworkEnd, reworkStart) + 1;
+                                const isReworkResizing = isReworkDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
+                                const reworkDurationChanged = isReworkResizing && dragging?.originalDuration && reworkDuration !== dragging.originalDuration;
+                                
+                                return (
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1443,6 +1480,20 @@ export function GanttChart({
                                           {reworkWidth > 50 ? 'Rework' : ''}
                                         </span>
                                       </div>
+                                      {/* Duration indicator during resize */}
+                                      {reworkDurationChanged && (
+                                        <div className="gantt-duration-indicator">
+                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
+                                          <span className="mx-1.5 text-amber-500">→</span>
+                                          <span className="font-bold">{reworkDuration}d</span>
+                                          <span className={cn(
+                                            "gantt-duration-indicator-change",
+                                            reworkDuration > dragging.originalDuration ? "positive" : "negative"
+                                          )}>
+                                            {reworkDuration > dragging.originalDuration ? '+' : ''}{reworkDuration - dragging.originalDuration}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="font-semibold">
@@ -1452,7 +1503,8 @@ export function GanttChart({
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
-                              )}
+                              );
+                              })()}
 
                               {/* SVG Connecting lines with arrowheads */}
                               {(cycle.reviewTask && baseEnd && reviewStart) || (cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart) ? (
@@ -1526,7 +1578,12 @@ export function GanttChart({
                               </div>
 
                               {/* Review task bar with dashed border (draggable) */}
-                              {cycle.reviewTask && reviewStart && reviewWidth > 0 && (
+                              {cycle.reviewTask && reviewStart && reviewEnd && reviewWidth > 0 && (() => {
+                                const reviewDuration = differenceInDays(reviewEnd, reviewStart) + 1;
+                                const isReviewResizing = isReviewDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
+                                const reviewDurationChanged = isReviewResizing && dragging?.originalDuration && reviewDuration !== dragging.originalDuration;
+                                
+                                return (
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1568,6 +1625,20 @@ export function GanttChart({
                                           {reviewWidth > 60 ? 'Review' : ''}
                                         </span>
                                       </div>
+                                      {/* Duration indicator during resize */}
+                                      {reviewDurationChanged && (
+                                        <div className="gantt-duration-indicator">
+                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
+                                          <span className="mx-1.5 text-amber-500">→</span>
+                                          <span className="font-bold">{reviewDuration}d</span>
+                                          <span className={cn(
+                                            "gantt-duration-indicator-change",
+                                            reviewDuration > dragging.originalDuration ? "positive" : "negative"
+                                          )}>
+                                            {reviewDuration > dragging.originalDuration ? '+' : ''}{reviewDuration - dragging.originalDuration}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="font-semibold">
@@ -1577,7 +1648,8 @@ export function GanttChart({
                                     </p>
                                   </TooltipContent>
                                 </Tooltip>
-                              )}
+                              );
+                              })()}
                             </div>
                           </div>
                         );
