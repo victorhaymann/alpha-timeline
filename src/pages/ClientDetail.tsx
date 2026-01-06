@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ErrorCard } from '@/components/errors/ErrorCard';
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,7 @@ export default function ClientDetail() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [clientUsers, setClientUsers] = useState<ClientUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [addUserDialogOpen, setAddUserDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -119,13 +121,13 @@ export default function ClientDetail() {
       } else {
         setClientUsers([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching client:', error);
-      navigate('/clients');
+      setLoadError(error?.message || 'Failed to load client');
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id]);
 
   useEffect(() => {
     fetchClientData();
@@ -227,7 +229,19 @@ export default function ClientDetail() {
     );
   }
 
-  if (!client) return null;
+  if (!client) {
+    return (
+      <ErrorCard
+        title="Client not found"
+        message={loadError || "The client could not be loaded. It may have been deleted or you don't have access."}
+        onRetry={() => {
+          setLoading(true);
+          setLoadError(null);
+          fetchClientData();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
