@@ -1793,45 +1793,35 @@ export function GanttChart({
                                     </marker>
                                   </defs>
 
-                                  {/* S-Curve: Base Task end → down to Review bar start */}
-                                  {cycle.reviewTask && baseEnd && reviewStart && (() => {
-                                    const x1 = baseLeft + baseWidth - 2;
-                                    const y1 = ROW_HEIGHT / 2;
-                                    const x2 = reviewLeft + 2;
-                                    const y2 = ROW_HEIGHT + ROW_HEIGHT / 2;
-                                    const midX = (x1 + x2) / 2;
-                                    return (
-                                      <path
-                                        d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-                                        stroke={sectionColor}
-                                        strokeWidth="2"
-                                        strokeDasharray="4 2"
-                                        fill="none"
-                                        className="opacity-60"
-                                        markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
-                                      />
-                                    );
-                                  })()}
+                                  {/* Line: Base Task end → down to Review bar start */}
+                                  {cycle.reviewTask && baseEnd && reviewStart && (
+                                    <line
+                                      x1={baseLeft + baseWidth - 2}
+                                      y1={ROW_HEIGHT / 2}
+                                      x2={reviewLeft + 2}
+                                      y2={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                      stroke={sectionColor}
+                                      strokeWidth="2"
+                                      strokeDasharray="4 2"
+                                      className="opacity-60"
+                                      markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
+                                    />
+                                  )}
 
-                                  {/* S-Curve: Review bar end → up to Rework start */}
-                                  {cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart && (() => {
-                                    const x1 = reviewLeft + reviewWidth - 2;
-                                    const y1 = ROW_HEIGHT + ROW_HEIGHT / 2;
-                                    const x2 = reworkLeft + 2;
-                                    const y2 = ROW_HEIGHT / 2;
-                                    const midX = (x1 + x2) / 2;
-                                    return (
-                                      <path
-                                        d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-                                        stroke={sectionColor}
-                                        strokeWidth="2"
-                                        strokeDasharray="4 2"
-                                        fill="none"
-                                        className="opacity-60"
-                                        markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
-                                      />
-                                    );
-                                  })()}
+                                  {/* Line: Review bar end → up to Rework start */}
+                                  {cycle.reviewTask && cycle.reworkTask && reviewEnd && reworkStart && (
+                                    <line
+                                      x1={reviewLeft + reviewWidth - 2}
+                                      y1={ROW_HEIGHT + ROW_HEIGHT / 2}
+                                      x2={reworkLeft + 2}
+                                      y2={ROW_HEIGHT / 2}
+                                      stroke={sectionColor}
+                                      strokeWidth="2"
+                                      strokeDasharray="4 2"
+                                      className="opacity-60"
+                                      markerEnd={`url(#arrowhead-${cycle.baseTask.id})`}
+                                    />
+                                  )}
                                 </svg>
                               ) : null}
                             </div>
