@@ -20,6 +20,16 @@ interface UseDragAndResizeOptions {
   columnWidth: number;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   readOnly?: boolean;
+  /**
+   * Optional working-day predicate. When provided, dragging/resizing will ignore weekends
+   * (or any non-working days) and durations will be calculated in working days.
+   */
+  isWorkingDay?: (date: Date) => boolean;
+  /**
+   * When true, each column represents a week group (Project view). We'll shift by weeks
+   * and then snap to a working day.
+   */
+  columnsAreWeeks?: boolean;
 }
 
 interface UseDragAndResizeReturn {
@@ -33,18 +43,88 @@ interface UseDragAndResizeReturn {
   getResizeHandleClasses: (position: 'start' | 'end') => string;
   getDurationChange: () => { original: number; current: number; delta: number } | null;
   getGhostPosition: () => { start: Date; end: Date } | null;
-  getDynamicTooltipInfo: () => { type: 'move' | 'resize-start' | 'resize-end'; start: Date; end: Date; originalStart: Date; originalEnd: Date } | null;
+  getDynamicTooltipInfo: () => {
+    type: 'move' | 'resize-start' | 'resize-end';
+    start: Date;
+    end: Date;
+    originalStart: Date;
+    originalEnd: Date;
+  } | null;
 }
 
 export function useDragAndResize({
   columnWidth,
   onTaskUpdate,
   readOnly = false,
+  isWorkingDay,
+  columnsAreWeeks = false,
 }: UseDragAndResizeOptions): UseDragAndResizeReturn {
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [justDropped, setJustDropped] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+
+  const snapToWorkingDay = useCallback(
+    (date: Date, direction: -1 | 1): Date => {
+      if (!isWorkingDay) return date;
+      let d = date;
+      // Avoid infinite loops: cap at 14 iterations (2 weeks)
+      for (let i = 0; i < 14; i++) {
+        if (isWorkingDay(d)) return d;
+        d = addDays(d, direction);
+      }
+      return d;
+    },
+    [isWorkingDay]
+  );
+
+  const addWorkingDays = useCallback(
+    (date: Date, deltaWorkingDays: number): Date => {
+      if (!isWorkingDay || deltaWorkingDays === 0) return addDays(date, deltaWorkingDays);
+      const direction: -1 | 1 = deltaWorkingDays < 0 ? -1 : 1;
+      let remaining = Math.abs(deltaWorkingDays);
+      let d = date;
+
+      while (remaining > 0) {
+        d = addDays(d, direction);
+        if (isWorkingDay(d)) remaining--;
+      }
+
+      return d;
+    },
+    [isWorkingDay]
+  );
+
+  const shiftDateByColumns = useCallback(
+    (date: Date, deltaColumns: number): Date => {
+      if (deltaColumns === 0) return date;
+
+      if (columnsAreWeeks) {
+        const direction: -1 | 1 = deltaColumns < 0 ? -1 : 1;
+        const shifted = addDays(date, deltaColumns * 7);
+        return snapToWorkingDay(shifted, direction);
+      }
+
+      // Day-based views: each column == 1 working day
+      return addWorkingDays(date, deltaColumns);
+    },
+    [addWorkingDays, columnsAreWeeks, snapToWorkingDay]
+  );
+
+  const countDurationDays = useCallback(
+    (start: Date, end: Date): number => {
+      if (!isWorkingDay) return differenceInDays(end, start) + 1;
+      let count = 0;
+      let d = start;
+      while (d <= end) {
+        if (isWorkingDay(d)) count++;
+        d = addDays(d, 1);
+      }
+      return Math.max(1, count);
+    },
+    [isWorkingDay]
+  );
 
   // Handle drag start with automatic edge detection
   const handleDragStart = useCallback((
@@ -54,18 +134,18 @@ export function useDragAndResize({
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (readOnly) return;
     if (!task.start_date || !task.end_date) return;
 
     // Auto-detect resize intent based on click position relative to task bar edges
     const EDGE_THRESHOLD = 12; // pixels from edge to trigger resize
     const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base');
-    
+
     if (taskBarElement && type === 'move') {
       const rect = taskBarElement.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
-      
+
       if (clickX <= EDGE_THRESHOLD) {
         type = 'resize-start';
       } else if (clickX >= rect.width - EDGE_THRESHOLD) {
@@ -75,7 +155,7 @@ export function useDragAndResize({
 
     const startDate = new Date(task.start_date);
     const endDate = new Date(task.end_date);
-    const originalDuration = differenceInDays(endDate, startDate) + 1;
+    const originalDuration = countDurationDays(startDate, endDate);
 
     // Add dragging class to body for cursor
     document.body.classList.add(type === 'move' ? 'gantt-dragging-move' : 'gantt-dragging-resize');
@@ -92,7 +172,7 @@ export function useDragAndResize({
       start: startDate,
       end: endDate,
     });
-  }, [readOnly]);
+  }, [readOnly, countDurationDays]);
 
   // Handle drag move with animation frame for performance
   const handleDragMove = useCallback((e: MouseEvent) => {
@@ -105,15 +185,15 @@ export function useDragAndResize({
 
     animationFrameRef.current = requestAnimationFrame(() => {
       const deltaX = e.clientX - dragging.startX;
-      const deltaDays = Math.round(deltaX / columnWidth);
+      const deltaColumns = Math.round(deltaX / columnWidth);
 
       if (dragging.type === 'move') {
         setDragPreview({
-          start: addDays(dragging.originalStart, deltaDays),
-          end: addDays(dragging.originalEnd, deltaDays),
+          start: shiftDateByColumns(dragging.originalStart, deltaColumns),
+          end: shiftDateByColumns(dragging.originalEnd, deltaColumns),
         });
       } else if (dragging.type === 'resize-end') {
-        const newEnd = addDays(dragging.originalEnd, deltaDays);
+        const newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
         if (newEnd >= dragging.originalStart) {
           setDragPreview({
             start: dragging.originalStart,
@@ -121,7 +201,7 @@ export function useDragAndResize({
           });
         }
       } else if (dragging.type === 'resize-start') {
-        const newStart = addDays(dragging.originalStart, deltaDays);
+        const newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
         if (newStart <= dragging.originalEnd) {
           setDragPreview({
             start: newStart,
@@ -130,7 +210,7 @@ export function useDragAndResize({
         }
       }
     });
-  }, [dragging, columnWidth]);
+  }, [dragging, columnWidth, shiftDateByColumns]);
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
@@ -256,13 +336,13 @@ export function useDragAndResize({
   // Get duration change info for tooltip
   const getDurationChange = useCallback(() => {
     if (!dragging || !dragPreview) return null;
-    
+
     const original = dragging.originalDuration;
-    const current = differenceInDays(dragPreview.end, dragPreview.start) + 1;
+    const current = countDurationDays(dragPreview.start, dragPreview.end);
     const delta = current - original;
-    
+
     return { original, current, delta };
-  }, [dragging, dragPreview]);
+  }, [dragging, dragPreview, countDurationDays]);
 
   return {
     dragging,

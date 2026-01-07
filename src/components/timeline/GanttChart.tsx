@@ -481,6 +481,8 @@ export function GanttChart({
     columnWidth,
     onTaskUpdate,
     readOnly,
+    isWorkingDay,
+    columnsAreWeeks: viewMode === 'project',
   });
 
   // Vertical reorder hook
