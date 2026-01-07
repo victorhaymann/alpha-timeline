@@ -99,15 +99,36 @@ function isValidDate(date: unknown): date is Date {
   return date instanceof Date && !isNaN(date.getTime());
 }
 
-// Safely parse a date string or Date, returning null if invalid
+// Reasonable date boundaries to prevent crashes from corrupted data
+const MIN_REASONABLE_YEAR = 1950;
+const MAX_REASONABLE_YEAR = 2125;
+
+// Check if a date is within reasonable bounds
+function isReasonableDate(date: Date | null | undefined): boolean {
+  if (!date || !isValidDate(date)) return false;
+  const year = date.getFullYear();
+  return year >= MIN_REASONABLE_YEAR && year <= MAX_REASONABLE_YEAR;
+}
+
+// Safely parse a date string or Date, returning null if invalid or unreasonable
 function safeParseDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
   if (value instanceof Date) {
-    return isValidDate(value) ? value : null;
+    if (!isValidDate(value)) return null;
+    if (!isReasonableDate(value)) {
+      console.warn('GanttChart: Date outside reasonable range:', value);
+      return null;
+    }
+    return value;
   }
   try {
     const parsed = new Date(value);
-    return isValidDate(parsed) ? parsed : null;
+    if (!isValidDate(parsed)) return null;
+    if (!isReasonableDate(parsed)) {
+      console.warn('GanttChart: Parsed date outside reasonable range:', value, '->', parsed);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }

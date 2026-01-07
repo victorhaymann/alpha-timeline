@@ -125,7 +125,20 @@ export default function ProjectDetail() {
           .in('phase_id', phaseIds)
           .order('order_index');
 
-        tasksData = (data as Task[]) || [];
+        // Filter out tasks with unreasonable dates to prevent chart crashes
+        const rawTasks = (data as Task[]) || [];
+        tasksData = rawTasks.filter(task => {
+          const startYear = new Date(task.start_date).getFullYear();
+          const endYear = new Date(task.end_date).getFullYear();
+          if (startYear > 2125 || endYear > 2125 || startYear < 1950 || endYear < 1950) {
+            console.warn(`Task "${task.name}" has unreasonable dates and will be skipped:`, {
+              start_date: task.start_date,
+              end_date: task.end_date,
+            });
+            return false;
+          }
+          return true;
+        });
         setTasks(tasksData);
       }
 
