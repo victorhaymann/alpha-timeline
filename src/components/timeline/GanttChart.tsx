@@ -17,13 +17,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu';
 import { MeetingHoverCard } from './MeetingHoverCard';
 import { 
   Flag, 
@@ -205,6 +198,10 @@ export function GanttChart({
     reworkTaskId: string | null;
   } | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  
+  // Task menu popover state (click-to-open instead of right-click)
+  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+  const clickStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Handle starting task name edit
   const handleStartEdit = useCallback((
@@ -1725,14 +1722,18 @@ export function GanttChart({
                                 
                                 return (
                                 <>
-                                <ContextMenu>
-                                  <ContextMenuTrigger asChild disabled={readOnly}>
+                                <Popover 
+                                  open={openTaskMenuId === cycle.baseTask.id} 
+                                  onOpenChange={(open) => setOpenTaskMenuId(open ? cycle.baseTask.id : null)}
+                                >
+                                  <PopoverTrigger asChild>
                                     <div>
                                       <Tooltip delayDuration={200}>
                                         <TooltipTrigger asChild>
                                           <div
                                             className={cn(
-                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md",
+                                              readOnly ? "cursor-default" : "cursor-pointer",
                                               "gantt-task-bar-base",
                                               "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                               getDragClasses(cycle.baseTask.id)
@@ -1744,7 +1745,20 @@ export function GanttChart({
                                               boxShadow: `0 4px 12px ${sectionColor}66`,
                                               ...getDragStyles(cycle.baseTask.id),
                                             }}
-                                            onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
+                                            onMouseDown={readOnly ? undefined : (e) => {
+                                              clickStartPosRef.current = { x: e.clientX, y: e.clientY };
+                                              handleDragStart(e, cycle.baseTask, 'move');
+                                            }}
+                                            onMouseUp={(e) => {
+                                              if (readOnly || !clickStartPosRef.current) return;
+                                              const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
+                                              const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
+                                              // Only open menu if it was a click (minimal movement)
+                                              if (dx < 5 && dy < 5 && !isDraggingAny) {
+                                                setOpenTaskMenuId(cycle.baseTask.id);
+                                              }
+                                              clickStartPosRef.current = null;
+                                            }}
                                           >
                                             {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
                                             {!readOnly && (
@@ -1764,7 +1778,7 @@ export function GanttChart({
                                             </div>
                                           </div>
                                         </TooltipTrigger>
-                                        {!isBaseDragging && (
+                                        {!isBaseDragging && openTaskMenuId !== cycle.baseTask.id && (
                                           <TooltipContent side="top" className="font-semibold">
                                             <p>{cycle.baseTask.name}</p>
                                             <p className="text-xs text-muted-foreground">
@@ -1776,61 +1790,81 @@ export function GanttChart({
                                                 {taskSegments.length} periods
                                               </p>
                                             )}
+                                            <p className="text-[10px] text-muted-foreground mt-1 opacity-70">
+                                              Click for options • Drag to move
+                                            </p>
                                           </TooltipContent>
                                         )}
                                       </Tooltip>
                                     </div>
-                                  </ContextMenuTrigger>
-                                  <ContextMenuContent className="w-48">
-                                    <ContextMenuItem
-                                      onClick={() => onAddSegment?.(cycle.baseTask.id, 'after')}
-                                      className="gap-2"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                      Add Period After
-                                    </ContextMenuItem>
-                                    <ContextMenuItem
-                                      onClick={() => onAddSegment?.(cycle.baseTask.id, 'before')}
-                                      className="gap-2"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                      Add Period Before
-                                    </ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem
-                                      onClick={() => onEditSegments?.(cycle.baseTask)}
-                                      className="gap-2"
-                                    >
-                                      <Layers className="w-4 h-4" />
-                                      Edit Periods...
-                                      {taskSegments.length > 1 && (
-                                        <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
-                                          {taskSegments.length}
-                                        </Badge>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-48 p-1" side="bottom" align="start">
+                                    <div className="flex flex-col">
+                                      <button
+                                        onClick={() => {
+                                          onAddSegment?.(cycle.baseTask.id, 'after');
+                                          setOpenTaskMenuId(null);
+                                        }}
+                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        Add Period After
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          onAddSegment?.(cycle.baseTask.id, 'before');
+                                          setOpenTaskMenuId(null);
+                                        }}
+                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        Add Period Before
+                                      </button>
+                                      <div className="h-px bg-border my-1" />
+                                      <button
+                                        onClick={() => {
+                                          onEditSegments?.(cycle.baseTask);
+                                          setOpenTaskMenuId(null);
+                                        }}
+                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                      >
+                                        <Layers className="w-4 h-4" />
+                                        Edit Periods...
+                                        {taskSegments.length > 1 && (
+                                          <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
+                                            {taskSegments.length}
+                                          </Badge>
+                                        )}
+                                      </button>
+                                      <div className="h-px bg-border my-1" />
+                                      <button
+                                        onClick={() => {
+                                          onAddReviewRound(cycle.baseTask.id);
+                                          setOpenTaskMenuId(null);
+                                        }}
+                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                      >
+                                        <RotateCcw className="w-4 h-4" />
+                                        Add Review Round
+                                      </button>
+                                      {onDeleteTask && (
+                                        <>
+                                          <div className="h-px bg-border my-1" />
+                                          <button
+                                            onClick={() => {
+                                              onDeleteTask(cycle.baseTask.id);
+                                              setOpenTaskMenuId(null);
+                                            }}
+                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                            Delete Task
+                                          </button>
+                                        </>
                                       )}
-                                    </ContextMenuItem>
-                                    <ContextMenuSeparator />
-                                    <ContextMenuItem
-                                      onClick={() => onAddReviewRound(cycle.baseTask.id)}
-                                      className="gap-2"
-                                    >
-                                      <RotateCcw className="w-4 h-4" />
-                                      Add Review Round
-                                    </ContextMenuItem>
-                                    {onDeleteTask && (
-                                      <>
-                                        <ContextMenuSeparator />
-                                        <ContextMenuItem
-                                          onClick={() => onDeleteTask(cycle.baseTask.id)}
-                                          className="gap-2 text-destructive focus:text-destructive"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                          Delete Task
-                                        </ContextMenuItem>
-                                      </>
-                                    )}
-                                  </ContextMenuContent>
-                                </ContextMenu>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                                 
                                 {/* Dynamic tooltip during drag - fixed position above bar */}
                                 {isBaseDragging && tooltipInfo && (
