@@ -588,7 +588,8 @@ export function GanttChart({
         e.preventDefault();
         setSlideDirection('right');
         setTimeout(() => setSlideDirection(null), 350);
-        setDateRange({ from: projectStartDate, to: projectEndDate });
+        // Use validated dates to avoid stale closure
+        setDateRange({ from: validStartDate, to: validEndDate });
       } else if (e.key === 'End') {
         e.preventDefault();
         if (containerRef.current) {
@@ -599,7 +600,7 @@ export function GanttChart({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigatePeriod, projectStartDate, projectEndDate]);
+  }, [navigatePeriod, validStartDate, validEndDate]);
 
   // Calculate position from date (accounting for working days only)
   const dateToX = useCallback((date: Date) => {
