@@ -1746,6 +1746,20 @@ export function GanttChart({
                                               boxShadow: `0 4px 12px ${sectionColor}66`,
                                               ...getDragStyles(cycle.baseTask.id),
                                             }}
+                                            onMouseEnter={() => {
+                                              if (readOnly) return;
+                                              if (isDraggingAny) return;
+                                              setOpenTaskMenuId(cycle.baseTask.id);
+                                            }}
+                                            onMouseLeave={() => {
+                                              if (readOnly) return;
+                                              // close unless the popover content re-enters
+                                              window.setTimeout(() => {
+                                                setOpenTaskMenuId((current) =>
+                                                  current === cycle.baseTask.id ? null : current
+                                                );
+                                              }, 120);
+                                            }}
                                             onMouseDown={readOnly ? undefined : (e) => {
                                               clickStartPosRef.current = { x: e.clientX, y: e.clientY };
                                               handleDragStart(e, cycle.baseTask, 'move');
@@ -1754,7 +1768,7 @@ export function GanttChart({
                                               if (readOnly || !clickStartPosRef.current) return;
                                               const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
                                               const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
-                                              // Only open menu if it was a click (minimal movement)
+                                              // Click (no movement) should also open the menu
                                               if (dx < 5 && dy < 5) {
                                                 e.preventDefault();
                                                 e.stopPropagation();
@@ -1813,7 +1827,13 @@ export function GanttChart({
                                       </Tooltip>
                                     </div>
                                   </PopoverTrigger>
-                                  <PopoverContent className="w-48 p-1" side="bottom" align="start">
+                                  <PopoverContent
+                                    className="w-48 p-1 animate-enter"
+                                    side="bottom"
+                                    align="start"
+                                    onMouseEnter={() => setOpenTaskMenuId(cycle.baseTask.id)}
+                                    onMouseLeave={() => setOpenTaskMenuId((current) => (current === cycle.baseTask.id ? null : current))}
+                                  >
                                     <div className="flex flex-col">
                                       <button
                                         onClick={() => {
