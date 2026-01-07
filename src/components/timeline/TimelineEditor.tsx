@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -11,12 +11,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
+import { useUndoRedo } from '@/hooks/useUndoRedo';
 import { GanttChart } from './GanttChart';
 import { AddTaskDialog } from './AddTaskDialog';
 import { 
   RefreshCw,
-  Loader2
+  Loader2,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
@@ -31,6 +39,11 @@ interface TimelineEditorProps {
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
   renderRegenerateButton?: (props: { onClick: () => void; isLoading: boolean }) => React.ReactNode;
+}
+
+// Type for tracking task state in history
+interface TasksSnapshot {
+  tasks: Task[];
 }
 
 export function TimelineEditor({
@@ -48,12 +61,130 @@ export function TimelineEditor({
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [addMeetingDialogOpen, setAddMeetingDialogOpen] = useState(false);
   const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
+  
+  // Track if we're applying an undo/redo operation
+  const isApplyingHistoryRef = useRef(false);
+  
+  // Initialize undo/redo with current tasks
+  const {
+    canUndo,
+    canRedo,
+    undoDescription,
+    redoDescription,
+    undo,
+    redo,
+    pushState,
+  } = useUndoRedo<TasksSnapshot>(
+    { tasks },
+    {
+      maxHistoryLength: 30,
+    }
+  );
+  
+  // Apply state from history (undo/redo)
+  const applyHistoryState = useCallback(async (snapshot: TasksSnapshot) => {
+    isApplyingHistoryRef.current = true;
+    
+    try {
+      // Update each task in the database
+      for (const task of snapshot.tasks) {
+        await supabase
+          .from('tasks')
+          .update({
+            start_date: task.start_date,
+            end_date: task.end_date,
+            order_index: task.order_index,
+            phase_id: task.phase_id,
+          })
+          .eq('id', task.id);
+      }
+      
+      // Update local state
+      onTasksChange(snapshot.tasks);
+    } catch (error) {
+      console.error('Error applying history state:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to apply undo/redo.',
+        variant: 'destructive',
+      });
+    } finally {
+      isApplyingHistoryRef.current = false;
+    }
+  }, [onTasksChange, toast]);
+  
+  // Handle undo
+  const handleUndo = useCallback(() => {
+    const previousState = undo();
+    if (previousState) {
+      applyHistoryState(previousState);
+      toast({
+        title: 'Undone',
+        description: undoDescription || 'Action undone',
+      });
+    }
+  }, [undo, applyHistoryState, toast, undoDescription]);
+  
+  // Handle redo
+  const handleRedo = useCallback(() => {
+    const nextState = redo();
+    if (nextState) {
+      applyHistoryState(nextState);
+      toast({
+        title: 'Redone',
+        description: redoDescription || 'Action redone',
+      });
+    }
+  }, [redo, applyHistoryState, toast, redoDescription]);
+  
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement?.tagName === 'INPUT' || 
+                            activeElement?.tagName === 'TEXTAREA' ||
+                            activeElement?.getAttribute('contenteditable') === 'true';
+      
+      if (isInputFocused) return;
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (cmdKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      } else if (cmdKey && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      } else if (cmdKey && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const projectStartDate = new Date(project.start_date);
   const projectEndDate = new Date(project.end_date);
+  
+  // Save state before making changes
+  const saveStateForUndo = useCallback((description: string) => {
+    if (!isApplyingHistoryRef.current) {
+      pushState({ tasks: [...tasks] }, description);
+    }
+  }, [tasks, pushState]);
 
   // Handle task update (from Gantt drag/resize)
   const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
+    // Save current state for undo
+    const task = tasks.find(t => t.id === taskId);
+    const actionDescription = task 
+      ? `Move ${task.name}` 
+      : 'Update task';
+    saveStateForUndo(actionDescription);
+    
     try {
       const { error } = await supabase
         .from('tasks')
@@ -78,6 +209,13 @@ export function TimelineEditor({
 
   // Handle task reorder (within phase or cross-phase)
   const handleTaskReorder = async (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => {
+    // Save current state for undo
+    const task = tasks.find(t => t.id === taskId);
+    const actionDescription = task 
+      ? `Reorder ${task.name}` 
+      : 'Reorder task';
+    saveStateForUndo(actionDescription);
+    
     const isCrossPhase = sourcePhaseId !== targetPhaseId;
     
     if (isCrossPhase) {
@@ -465,6 +603,9 @@ export function TimelineEditor({
 
   // Regenerate schedule
   const handleRegenerate = async () => {
+    // Save current state for undo before regenerating
+    saveStateForUndo('Regenerate schedule');
+    
     setIsRegenerating(true);
 
     try {
@@ -614,7 +755,48 @@ export function TimelineEditor({
 
   return (
     <div className="space-y-4">
-      {!renderRegenerateButton && regenerateButtonElement}
+      {/* Undo/Redo Controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleUndo}
+                disabled={!canUndo}
+                className="h-8 w-8"
+              >
+                <Undo2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Undo {undoDescription ? `(${undoDescription})` : ''}</p>
+              <p className="text-xs text-muted-foreground">Ctrl+Z</p>
+            </TooltipContent>
+          </Tooltip>
+          
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRedo}
+                disabled={!canRedo}
+                className="h-8 w-8"
+              >
+                <Redo2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>Redo {redoDescription ? `(${redoDescription})` : ''}</p>
+              <p className="text-xs text-muted-foreground">Ctrl+Shift+Z</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        
+        {!renderRegenerateButton && regenerateButtonElement}
+      </div>
 
       <GanttChart
         projectId={project.id}
