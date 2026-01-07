@@ -497,6 +497,58 @@ export function GanttChart({
     }
   }, [onUpdateSegment]);
 
+  // Helper to render the convert option - ALWAYS shows, handles all cases including 0 segments
+  const renderConvertOption = useCallback((task: Task, taskSegments: TaskSegment[]) => {
+    if (!onConvertSegmentType && !onAddSegment) return null;
+    
+    // Priority: hovered segment > first segment > create initial segment
+    const targetSeg = hoveredSegmentId 
+      ? taskSegments.find(s => s.id === hoveredSegmentId)
+      : taskSegments[0];
+    
+    if (targetSeg && onConvertSegmentType) {
+      // Existing segment - convert it
+      const isReview = targetSeg.segment_type === 'review';
+      return (
+        <>
+          <div className="h-px bg-border my-1" />
+          <button
+            onClick={() => {
+              onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
+              setOpenTaskMenuId(null);
+              setHoveredSegmentId(null);
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+          >
+            <RefreshCw className="w-4 h-4" />
+            {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+          </button>
+        </>
+      );
+    }
+    
+    // No segments exist - use onAddSegment with 'review' type to create initial review segment
+    if (onAddSegment) {
+      return (
+        <>
+          <div className="h-px bg-border my-1" />
+          <button
+            onClick={() => {
+              onAddSegment(task.id, 'after', 'review');
+              setOpenTaskMenuId(null);
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Convert to Review
+          </button>
+        </>
+      );
+    }
+    
+    return null;
+  }, [onConvertSegmentType, onAddSegment, hoveredSegmentId]);
+
   // Drag and drop hook
   const {
     dragging,
@@ -1881,21 +1933,14 @@ export function GanttChart({
                                         // Check if this is a review segment
                                         const isReviewSegment = seg.segment_type === 'review';
                                         
-                                        // Review segment: distinctive styling with diagonal stripes and thicker dashed border
+                                        // Review segment: subtle fill with dashed border and softer shadow
                                         const segmentStyle = isReviewSegment
                                           ? {
                                               left: segLeft + 2,
                                               width: segWidth - 4,
-                                              backgroundColor: `${sectionColor}12`,
-                                              backgroundImage: `repeating-linear-gradient(
-                                                135deg,
-                                                transparent,
-                                                transparent 6px,
-                                                ${sectionColor}15 6px,
-                                                ${sectionColor}15 12px
-                                              )`,
-                                              border: `3px dashed ${sectionColor}`,
-                                              boxShadow: `inset 0 0 12px ${sectionColor}15`,
+                                              backgroundColor: `${sectionColor}15`,
+                                              border: `2px dashed ${sectionColor}`,
+                                              boxShadow: `0 2px 8px ${sectionColor}20`,
                                               ...getDragStyles(cycle.baseTask.id, seg.id),
                                             }
                                           : {
@@ -2139,31 +2184,8 @@ export function GanttChart({
                                                 {taskSegments.length}
                                               </Badge>
                                             </button>
-                                            {/* Convert segment type option - always show with fallback logic */}
-                                            {onConvertSegmentType && (() => {
-                                              // Priority: hovered segment > first segment in array
-                                              const targetSeg = hoveredSegmentId 
-                                                ? taskSegments.find(s => s.id === hoveredSegmentId)
-                                                : taskSegments[0];
-                                              if (!targetSeg) return null;
-                                              const isReview = targetSeg.segment_type === 'review';
-                                              return (
-                                                <>
-                                                  <div className="h-px bg-border my-1" />
-                                                  <button
-                                                    onClick={() => {
-                                                      onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
-                                                      setOpenTaskMenuId(null);
-                                                      setHoveredSegmentId(null);
-                                                    }}
-                                                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                                  >
-                                                    <RefreshCw className="w-4 h-4" />
-                                                    {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-                                                  </button>
-                                                </>
-                                              );
-                                            })()}
+                                            {/* Convert segment type option - always available */}
+                                            {renderConvertOption(cycle.baseTask, taskSegments)}
                                             {onDeleteTask && (
                                               <>
                                                 <div className="h-px bg-border my-1" />
@@ -2376,31 +2398,8 @@ export function GanttChart({
                                           </Badge>
                                         )}
                                       </button>
-                                      {/* Convert to Review option - always show with fallback logic */}
-                                      {onConvertSegmentType && taskSegments.length >= 1 && (() => {
-                                        // Priority: hovered segment > first segment
-                                        const targetSeg = hoveredSegmentId 
-                                          ? taskSegments.find(s => s.id === hoveredSegmentId)
-                                          : taskSegments[0];
-                                        if (!targetSeg) return null;
-                                        const isReview = targetSeg.segment_type === 'review';
-                                        return (
-                                          <>
-                                            <div className="h-px bg-border my-1" />
-                                            <button
-                                              onClick={() => {
-                                                onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
-                                                setOpenTaskMenuId(null);
-                                                setHoveredSegmentId(null);
-                                              }}
-                                              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                            >
-                                              <RefreshCw className="w-4 h-4" />
-                                              {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-                                            </button>
-                                          </>
-                                        );
-                                      })()}
+                                      {/* Convert to Review option - always available */}
+                                      {renderConvertOption(cycle.baseTask, taskSegments)}
                                       {onDeleteTask && (
                                         <>
                                           <div className="h-px bg-border my-1" />
@@ -3371,28 +3370,8 @@ export function GanttChart({
                                               {taskSegments.length}
                                             </Badge>
                                           </button>
-                                          {/* Convert segment type option - show if hovered segment exists */}
-                                          {hoveredSegmentId && onConvertSegmentType && (() => {
-                                            const hoveredSeg = taskSegments.find(s => s.id === hoveredSegmentId);
-                                            if (!hoveredSeg) return null;
-                                            const isReview = hoveredSeg.segment_type === 'review';
-                                            return (
-                                              <>
-                                                <div className="h-px bg-border my-1" />
-                                                <button
-                                                  onClick={() => {
-                                                    onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
-                                                    setOpenTaskMenuId(null);
-                                                    setHoveredSegmentId(null);
-                                                  }}
-                                                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                                >
-                                                  <RefreshCw className="w-4 h-4" />
-                                                  {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-                                                </button>
-                                              </>
-                                            );
-                                          })()}
+                                          {/* Convert segment type option - always available */}
+                                          {renderConvertOption(task, taskSegments)}
                                           {onDeleteTask && (
                                             <>
                                               <div className="h-px bg-border my-1" />
@@ -3610,26 +3589,8 @@ export function GanttChart({
                                       <Layers className="w-4 h-4" />
                                       Edit Periods...
                                     </button>
-                                    {/* Convert to Review option - for single-segment tasks */}
-                                    {onConvertSegmentType && taskSegments.length === 1 && (() => {
-                                      const seg = taskSegments[0];
-                                      const isReview = seg.segment_type === 'review';
-                                      return (
-                                        <>
-                                          <div className="h-px bg-border my-1" />
-                                          <button
-                                            onClick={() => {
-                                              onConvertSegmentType(seg.id, isReview ? 'work' : 'review');
-                                              setOpenTaskMenuId(null);
-                                            }}
-                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                          >
-                                            <RefreshCw className="w-4 h-4" />
-                                            {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-                                          </button>
-                                        </>
-                                      );
-                                    })()}
+                                    {/* Convert to Review option - always available */}
+                                    {renderConvertOption(task, taskSegments)}
                                     {onDeleteTask && (
                                       <>
                                         <div className="h-px bg-border my-1" />
