@@ -1881,14 +1881,14 @@ export function GanttChart({
                                         // Check if this is a review segment
                                         const isReviewSegment = seg.segment_type === 'review';
                                         
-                                        // Review segment: outline-only style
+                                        // Review segment: distinctive outline style with subtle fill
                                         const segmentStyle = isReviewSegment
                                           ? {
                                               left: segLeft + 2,
                                               width: segWidth - 4,
-                                              backgroundColor: 'transparent',
+                                              backgroundColor: `${sectionColor}15`,
                                               border: `2px dashed ${sectionColor}`,
-                                              boxShadow: 'none',
+                                              boxShadow: `0 2px 8px ${sectionColor}20`,
                                               ...getDragStyles(cycle.baseTask.id, seg.id),
                                             }
                                           : {
@@ -1984,7 +1984,7 @@ export function GanttChart({
                                                         }}
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                       >
-                                                        <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                                        <MoreHorizontal className={cn("w-4 h-4 drop-shadow-md", isReviewSegment ? "text-foreground" : "text-white")} />
                                                       </button>
                                                     )}
                                                   </div>
