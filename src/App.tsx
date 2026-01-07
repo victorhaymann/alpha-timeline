@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
+import { BrandedLoader } from "@/components/ui/BrandedLoader";
 
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -19,7 +20,6 @@ import ClientPortal from "./pages/ClientPortal";
 import ClientProjectView from "./pages/ClientProjectView";
 import SharedProjectView from "./pages/SharedProjectView";
 import NotFound from "./pages/NotFound";
-import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
@@ -28,11 +28,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <BrandedLoader />;
   }
 
   if (!user) {
@@ -47,11 +43,7 @@ function RootRoute() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <BrandedLoader />;
   }
 
   return user ? <Navigate to="/projects" replace /> : <Auth />;
