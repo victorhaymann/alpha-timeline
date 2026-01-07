@@ -765,9 +765,9 @@ export function TimelineEditor({
                 size="icon"
                 onClick={handleUndo}
                 disabled={!canUndo}
-                className="h-8 w-8"
+                className="h-8 w-8 hover:bg-orange-50 disabled:opacity-40"
               >
-                <Undo2 className="w-4 h-4" />
+                <Undo2 className={`w-4 h-4 ${canUndo ? 'text-orange-500' : 'text-muted-foreground'}`} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
@@ -783,9 +783,9 @@ export function TimelineEditor({
                 size="icon"
                 onClick={handleRedo}
                 disabled={!canRedo}
-                className="h-8 w-8"
+                className="h-8 w-8 hover:bg-blue-50 disabled:opacity-40"
               >
-                <Redo2 className="w-4 h-4" />
+                <Redo2 className={`w-4 h-4 ${canRedo ? 'text-blue-500' : 'text-muted-foreground'}`} />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
