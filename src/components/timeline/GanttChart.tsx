@@ -69,7 +69,7 @@ interface GanttChartProps {
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskReorder: (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
-  onAddReviewRound: (taskId: string) => void;
+  onAddReviewRound?: (taskId: string) => void; // Deprecated - kept for backward compatibility
   onDeleteTask?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
@@ -157,7 +157,7 @@ export function GanttChart({
   onTaskUpdate,
   onTaskReorder,
   onAddTask,
-  onAddReviewRound,
+  onAddReviewRound, // Deprecated
   onDeleteTask,
   onAddMeeting,
   onDeleteMeeting,
@@ -2125,30 +2125,22 @@ export function GanttChart({
                                               if (!hoveredSeg) return null;
                                               const isReview = hoveredSeg.segment_type === 'review';
                                               return (
-                                                <button
-                                                  onClick={() => {
-                                                    onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
-                                                    setOpenTaskMenuId(null);
-                                                    setHoveredSegmentId(null);
-                                                  }}
-                                                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                                >
-                                                  <RefreshCw className="w-4 h-4" />
-                                                  {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-                                                </button>
+                                                <>
+                                                  <div className="h-px bg-border my-1" />
+                                                  <button
+                                                    onClick={() => {
+                                                      onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
+                                                      setOpenTaskMenuId(null);
+                                                      setHoveredSegmentId(null);
+                                                    }}
+                                                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                                  >
+                                                    <RefreshCw className="w-4 h-4" />
+                                                    {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+                                                  </button>
+                                                </>
                                               );
                                             })()}
-                                            <div className="h-px bg-border my-1" />
-                                            <button
-                                              onClick={() => {
-                                                onAddSegment?.(cycle.baseTask.id, 'after', 'review');
-                                                setOpenTaskMenuId(null);
-                                              }}
-                                              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                            >
-                                              <RotateCcw className="w-4 h-4" />
-                                              Add Client Review
-                                            </button>
                                             {onDeleteTask && (
                                               <>
                                                 <div className="h-px bg-border my-1" />
@@ -2361,17 +2353,26 @@ export function GanttChart({
                                           </Badge>
                                         )}
                                       </button>
-                                      <div className="h-px bg-border my-1" />
-                                      <button
-                                        onClick={() => {
-                                          onAddSegment?.(cycle.baseTask.id, 'after', 'review');
-                                          setOpenTaskMenuId(null);
-                                        }}
-                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                      >
-                                        <RotateCcw className="w-4 h-4" />
-                                        Add Client Review
-                                      </button>
+                                      {/* Convert to Review option - for single-segment tasks */}
+                                      {onConvertSegmentType && taskSegments.length === 1 && (() => {
+                                        const seg = taskSegments[0];
+                                        const isReview = seg.segment_type === 'review';
+                                        return (
+                                          <>
+                                            <div className="h-px bg-border my-1" />
+                                            <button
+                                              onClick={() => {
+                                                onConvertSegmentType(seg.id, isReview ? 'work' : 'review');
+                                                setOpenTaskMenuId(null);
+                                              }}
+                                              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                            >
+                                              <RefreshCw className="w-4 h-4" />
+                                              {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+                                            </button>
+                                          </>
+                                        );
+                                      })()}
                                       {onDeleteTask && (
                                         <>
                                           <div className="h-px bg-border my-1" />
@@ -3342,17 +3343,28 @@ export function GanttChart({
                                               {taskSegments.length}
                                             </Badge>
                                           </button>
-                                          <div className="h-px bg-border my-1" />
-                                          <button
-                                            onClick={() => {
-                                              onAddReviewRound(task.id);
-                                              setOpenTaskMenuId(null);
-                                            }}
-                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                          >
-                                            <RotateCcw className="w-4 h-4" />
-                                            Add Client Review
-                                          </button>
+                                          {/* Convert segment type option - show if hovered segment exists */}
+                                          {hoveredSegmentId && onConvertSegmentType && (() => {
+                                            const hoveredSeg = taskSegments.find(s => s.id === hoveredSegmentId);
+                                            if (!hoveredSeg) return null;
+                                            const isReview = hoveredSeg.segment_type === 'review';
+                                            return (
+                                              <>
+                                                <div className="h-px bg-border my-1" />
+                                                <button
+                                                  onClick={() => {
+                                                    onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
+                                                    setOpenTaskMenuId(null);
+                                                    setHoveredSegmentId(null);
+                                                  }}
+                                                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                                >
+                                                  <RefreshCw className="w-4 h-4" />
+                                                  {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+                                                </button>
+                                              </>
+                                            );
+                                          })()}
                                           {onDeleteTask && (
                                             <>
                                               <div className="h-px bg-border my-1" />
@@ -3570,17 +3582,26 @@ export function GanttChart({
                                       <Layers className="w-4 h-4" />
                                       Edit Periods...
                                     </button>
-                                    <div className="h-px bg-border my-1" />
-                                    <button
-                                      onClick={() => {
-                                        onAddReviewRound(task.id);
-                                        setOpenTaskMenuId(null);
-                                      }}
-                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                    >
-                                      <RotateCcw className="w-4 h-4" />
-                                      Add Client Review
-                                    </button>
+                                    {/* Convert to Review option - for single-segment tasks */}
+                                    {onConvertSegmentType && taskSegments.length === 1 && (() => {
+                                      const seg = taskSegments[0];
+                                      const isReview = seg.segment_type === 'review';
+                                      return (
+                                        <>
+                                          <div className="h-px bg-border my-1" />
+                                          <button
+                                            onClick={() => {
+                                              onConvertSegmentType(seg.id, isReview ? 'work' : 'review');
+                                              setOpenTaskMenuId(null);
+                                            }}
+                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                          >
+                                            <RefreshCw className="w-4 h-4" />
+                                            {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+                                          </button>
+                                        </>
+                                      );
+                                    })()}
                                     {onDeleteTask && (
                                       <>
                                         <div className="h-px bg-border my-1" />
