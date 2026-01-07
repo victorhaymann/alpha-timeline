@@ -60,10 +60,18 @@ export function useDragAndResize({
   columnsAreWeeks = false,
 }: UseDragAndResizeOptions): UseDragAndResizeReturn {
   const [dragging, setDragging] = useState<DragState | null>(null);
+  const [pendingDrag, setPendingDrag] = useState<{
+    task: Task;
+    type: DragState['type'];
+    startX: number;
+    startY: number;
+    originalStart: Date;
+    originalEnd: Date;
+    originalDuration: number;
+  } | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [justDropped, setJustDropped] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-
 
   const snapToWorkingDay = useCallback(
     (date: Date, direction: -1 | 1): Date => {
@@ -127,90 +135,150 @@ export function useDragAndResize({
   );
 
   // Handle drag start with automatic edge detection
-  const handleDragStart = useCallback((
-    e: React.MouseEvent,
-    task: Task,
-    type: DragState['type']
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // - resize-start / resize-end: start immediately
+  // - move: wait for a small movement threshold so clicks can be used for menus
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent, task: Task, type: DragState['type']) => {
+      if (readOnly) return;
+      if (!task.start_date || !task.end_date) return;
 
-    if (readOnly) return;
-    if (!task.start_date || !task.end_date) return;
+      // Auto-detect resize intent based on click position relative to task bar edges
+      const EDGE_THRESHOLD = 12; // pixels from edge to trigger resize
+      const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base');
 
-    // Auto-detect resize intent based on click position relative to task bar edges
-    const EDGE_THRESHOLD = 12; // pixels from edge to trigger resize
-    const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base');
+      if (taskBarElement && type === 'move') {
+        const rect = taskBarElement.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
 
-    if (taskBarElement && type === 'move') {
-      const rect = taskBarElement.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-
-      if (clickX <= EDGE_THRESHOLD) {
-        type = 'resize-start';
-      } else if (clickX >= rect.width - EDGE_THRESHOLD) {
-        type = 'resize-end';
+        if (clickX <= EDGE_THRESHOLD) {
+          type = 'resize-start';
+        } else if (clickX >= rect.width - EDGE_THRESHOLD) {
+          type = 'resize-end';
+        }
       }
-    }
 
-    const startDate = new Date(task.start_date);
-    const endDate = new Date(task.end_date);
-    const originalDuration = countDurationDays(startDate, endDate);
+      const startDate = new Date(task.start_date);
+      const endDate = new Date(task.end_date);
+      const originalDuration = countDurationDays(startDate, endDate);
 
-    // Add dragging class to body for cursor
-    document.body.classList.add(type === 'move' ? 'gantt-dragging-move' : 'gantt-dragging-resize');
+      // Resizes should behave exactly as before (immediate drag start)
+      if (type !== 'move') {
+        e.preventDefault();
+        e.stopPropagation();
 
-    setDragging({
-      taskId: task.id,
-      type,
-      startX: e.clientX,
-      originalStart: startDate,
-      originalEnd: endDate,
-      originalDuration,
-    });
-    setDragPreview({
-      start: startDate,
-      end: endDate,
-    });
-  }, [readOnly, countDurationDays]);
+        document.body.classList.add('gantt-dragging-resize');
+
+        setDragging({
+          taskId: task.id,
+          type,
+          startX: e.clientX,
+          originalStart: startDate,
+          originalEnd: endDate,
+          originalDuration,
+        });
+        setDragPreview({ start: startDate, end: endDate });
+        return;
+      }
+
+      // Move: arm a pending drag, but do NOT preventDefault so a click can still open menus
+      setPendingDrag({
+        task,
+        type,
+        startX: e.clientX,
+        startY: e.clientY,
+        originalStart: startDate,
+        originalEnd: endDate,
+        originalDuration,
+      });
+    },
+    [readOnly, countDurationDays]
+  );
+
+  // If the user moves enough after mousedown, convert pendingDrag -> dragging.
+  // If they release without moving, it's treated as a click.
+  useEffect(() => {
+    if (!pendingDrag) return;
+
+    const MOVE_THRESHOLD = 5; // px
+
+    const onMove = (e: MouseEvent) => {
+      if (!pendingDrag) return;
+      if (dragging) return;
+
+      const dx = Math.abs(e.clientX - pendingDrag.startX);
+      const dy = Math.abs(e.clientY - pendingDrag.startY);
+      if (dx < MOVE_THRESHOLD && dy < MOVE_THRESHOLD) return;
+
+      // Start the real drag
+      e.preventDefault();
+
+      document.body.classList.add('gantt-dragging-move');
+      setDragging({
+        taskId: pendingDrag.task.id,
+        type: 'move',
+        startX: pendingDrag.startX,
+        originalStart: pendingDrag.originalStart,
+        originalEnd: pendingDrag.originalEnd,
+        originalDuration: pendingDrag.originalDuration,
+      });
+      setDragPreview({ start: pendingDrag.originalStart, end: pendingDrag.originalEnd });
+      setPendingDrag(null);
+    };
+
+    const onUp = () => {
+      // Click (no movement) ends here
+      setPendingDrag(null);
+    };
+
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [pendingDrag, dragging]);
 
   // Handle drag move with animation frame for performance
-  const handleDragMove = useCallback((e: MouseEvent) => {
-    if (!dragging) return;
+  const handleDragMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragging) return;
 
-    // Cancel previous animation frame
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-
-    animationFrameRef.current = requestAnimationFrame(() => {
-      const deltaX = e.clientX - dragging.startX;
-      const deltaColumns = Math.round(deltaX / columnWidth);
-
-      if (dragging.type === 'move') {
-        setDragPreview({
-          start: shiftDateByColumns(dragging.originalStart, deltaColumns),
-          end: shiftDateByColumns(dragging.originalEnd, deltaColumns),
-        });
-      } else if (dragging.type === 'resize-end') {
-        const newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
-        if (newEnd >= dragging.originalStart) {
-          setDragPreview({
-            start: dragging.originalStart,
-            end: newEnd,
-          });
-        }
-      } else if (dragging.type === 'resize-start') {
-        const newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
-        if (newStart <= dragging.originalEnd) {
-          setDragPreview({
-            start: newStart,
-            end: dragging.originalEnd,
-          });
-        }
+      // Cancel previous animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
-    });
-  }, [dragging, columnWidth, shiftDateByColumns]);
+
+      animationFrameRef.current = requestAnimationFrame(() => {
+        const deltaX = e.clientX - dragging.startX;
+        const deltaColumns = Math.round(deltaX / columnWidth);
+
+        if (dragging.type === 'move') {
+          setDragPreview({
+            start: shiftDateByColumns(dragging.originalStart, deltaColumns),
+            end: shiftDateByColumns(dragging.originalEnd, deltaColumns),
+          });
+        } else if (dragging.type === 'resize-end') {
+          const newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
+          if (newEnd >= dragging.originalStart) {
+            setDragPreview({
+              start: dragging.originalStart,
+              end: newEnd,
+            });
+          }
+        } else if (dragging.type === 'resize-start') {
+          const newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
+          if (newStart <= dragging.originalEnd) {
+            setDragPreview({
+              start: newStart,
+              end: dragging.originalEnd,
+            });
+          }
+        }
+      });
+    },
+    [dragging, columnWidth, shiftDateByColumns]
+  );
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
@@ -223,8 +291,10 @@ export function useDragAndResize({
       setTimeout(() => setJustDropped(null), 500);
 
       // Only update if position changed
-      const startChanged = format(dragPreview.start, 'yyyy-MM-dd') !== format(dragging.originalStart, 'yyyy-MM-dd');
-      const endChanged = format(dragPreview.end, 'yyyy-MM-dd') !== format(dragging.originalEnd, 'yyyy-MM-dd');
+      const startChanged =
+        format(dragPreview.start, 'yyyy-MM-dd') !== format(dragging.originalStart, 'yyyy-MM-dd');
+      const endChanged =
+        format(dragPreview.end, 'yyyy-MM-dd') !== format(dragging.originalEnd, 'yyyy-MM-dd');
 
       if (startChanged || endChanged) {
         onTaskUpdate(dragging.taskId, {
@@ -243,7 +313,7 @@ export function useDragAndResize({
     if (dragging) {
       window.addEventListener('mousemove', handleDragMove);
       window.addEventListener('mouseup', handleDragEnd);
-      
+
       return () => {
         window.removeEventListener('mousemove', handleDragMove);
         window.removeEventListener('mouseup', handleDragEnd);
@@ -253,6 +323,7 @@ export function useDragAndResize({
       };
     }
   }, [dragging, handleDragMove, handleDragEnd]);
+
 
   // Get animation styles for a task
   const getDragStyles = useCallback((taskId: string): React.CSSProperties => {
