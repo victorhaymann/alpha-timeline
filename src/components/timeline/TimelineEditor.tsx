@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
+import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -14,13 +14,14 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { GanttChart } from './GanttChart';
 import { AddTaskDialog } from './AddTaskDialog';
+import { TaskSegmentDialog } from './TaskSegmentDialog';
 import { 
   RefreshCw,
   Loader2,
   Undo2,
   Wrench
 } from 'lucide-react';
-import { format, parse } from 'date-fns';
+import { format, parse, addDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
 import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib } from '@/lib/workingDays';
@@ -38,7 +39,9 @@ interface TimelineEditorProps {
   phases: Phase[];
   tasks: Task[];
   dependencies: Dependency[];
+  segments: TaskSegment[];
   onTasksChange: (tasks: Task[]) => void;
+  onSegmentsChange: (segments: TaskSegment[]) => void;
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
   renderRegenerateButton?: (props: { onClick: () => void; isLoading: boolean }) => React.ReactNode;
@@ -49,7 +52,9 @@ export function TimelineEditor({
   phases,
   tasks,
   dependencies,
+  segments,
   onTasksChange,
+  onSegmentsChange,
   onRefresh,
   renderRegenerateButton,
 }: TimelineEditorProps) {
@@ -62,6 +67,10 @@ export function TimelineEditor({
   const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
   const [isUndoing, setIsUndoing] = useState(false);
   const hasRunWeekendFixRef = useRef(false);
+  
+  // Segment dialog state
+  const [segmentDialogOpen, setSegmentDialogOpen] = useState(false);
+  const [selectedTaskForSegments, setSelectedTaskForSegments] = useState<Task | null>(null);
   
   // Undo stack - stores previous task states
   const undoStackRef = useRef<UndoState[]>([]);
@@ -905,6 +914,7 @@ export function TimelineEditor({
         projectEndDate={projectEndDate}
         phases={phases}
         tasks={tasks}
+        segments={segments}
         workingDaysMask={project.working_days_mask}
         checkinTime={project.checkin_time}
         checkinDuration={project.checkin_duration}
@@ -916,6 +926,10 @@ export function TimelineEditor({
         onDeleteTask={handleDeleteTask}
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
+        onEditSegments={(task) => {
+          setSelectedTaskForSegments(task);
+          setSegmentDialogOpen(true);
+        }}
       />
 
       <AddTaskDialog
@@ -958,6 +972,22 @@ export function TimelineEditor({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Segment Editor Dialog */}
+      {selectedTaskForSegments && (
+        <TaskSegmentDialog
+          open={segmentDialogOpen}
+          onOpenChange={setSegmentDialogOpen}
+          task={selectedTaskForSegments}
+          segments={segments.filter(s => s.task_id === selectedTaskForSegments.id)}
+          workingDaysMask={project.working_days_mask}
+          onSegmentsChange={(newSegments) => {
+            const otherSegments = segments.filter(s => s.task_id !== selectedTaskForSegments.id);
+            onSegmentsChange([...otherSegments, ...newSegments]);
+            onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }

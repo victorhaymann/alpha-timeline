@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
+import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -17,6 +17,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { MeetingHoverCard } from './MeetingHoverCard';
 import { 
   Flag, 
@@ -29,7 +36,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Trash2,
-  HelpCircle
+  HelpCircle,
+  Copy,
+  Layers
 } from 'lucide-react';
 import { 
   format, 
@@ -55,6 +64,7 @@ interface GanttChartProps {
   projectEndDate: Date;
   phases: Phase[];
   tasks: Task[];
+  segments: TaskSegment[];
   workingDaysMask: number;
   checkinTime?: string | null;
   checkinDuration?: number | null;
@@ -66,6 +76,9 @@ interface GanttChartProps {
   onDeleteTask?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
+  onAddSegment?: (taskId: string, position: 'before' | 'after') => void;
+  onEditSegments?: (task: Task) => void;
+  onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
   readOnly?: boolean;
 }
 
@@ -138,6 +151,7 @@ export function GanttChart({
   projectEndDate,
   phases,
   tasks,
+  segments,
   workingDaysMask,
   checkinTime,
   checkinDuration,
@@ -149,6 +163,9 @@ export function GanttChart({
   onDeleteTask,
   onAddMeeting,
   onDeleteMeeting,
+  onAddSegment,
+  onEditSegments,
+  onUpdateSegment,
   readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
