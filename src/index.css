@@ -407,9 +407,9 @@
     color: hsl(0 84% 65%);
   }
 
-  /* Resize handles */
+  /* Resize handles - visual indicators at edges */
   .gantt-resize-handle {
-    @apply absolute top-0 bottom-0 w-2 opacity-0 transition-all duration-200;
+    @apply absolute top-0 bottom-0 w-3 opacity-0 transition-all duration-200 pointer-events-none;
     cursor: ew-resize;
     z-index: 10;
   }
@@ -419,31 +419,37 @@
     transition: all 0.2s ease;
   }
   .gantt-resize-handle-start {
-    left: -2px;
+    left: 0;
   }
   .gantt-resize-handle-start::after {
-    left: 3px;
+    left: 4px;
   }
   .gantt-resize-handle-end {
-    right: -2px;
+    right: 0;
   }
   .gantt-resize-handle-end::after {
-    right: 3px;
+    right: 4px;
   }
 
   /* Show resize handles on task hover */
-  .gantt-task-bar:hover .gantt-resize-handle,
-  .gantt-review-bar:hover .gantt-resize-handle {
-    opacity: 1;
+  .gantt-task-bar-base:hover .gantt-resize-handle {
+    opacity: 0.7;
   }
-  .gantt-resize-handle:hover::after {
-    @apply h-5 bg-white/90;
-    box-shadow: 0 0 8px hsl(0 0% 100% / 0.5);
+  .gantt-resize-handle-active {
+    opacity: 1 !important;
   }
   .gantt-resize-handle-active::after {
     @apply h-6 bg-white;
     box-shadow: 0 0 12px hsl(0 0% 100% / 0.7);
     animation: resize-pulse 1s ease-in-out infinite;
+  }
+  
+  /* Cursor hint for resize zones on hover */
+  .gantt-task-bar-base {
+    cursor: grab;
+  }
+  .gantt-task-bar-base:active {
+    cursor: grabbing;
   }
 
   /* Duration indicator tooltip */

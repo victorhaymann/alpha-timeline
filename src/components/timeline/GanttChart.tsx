@@ -1723,21 +1723,14 @@ export function GanttChart({
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
                                     >
+                                      {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
                                       {!readOnly && (
                                         <>
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.baseTask, 'resize-start');
-                                            }}
                                           />
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.baseTask, 'resize-end');
-                                            }}
                                           />
                                         </>
                                       )}
@@ -1843,21 +1836,14 @@ export function GanttChart({
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reworkTask!, 'move')}
                                     >
+                                      {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
                                       {!readOnly && (
                                         <>
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-start", isReworkDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.reworkTask!, 'resize-start');
-                                            }}
                                           />
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-end", isReworkDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.reworkTask!, 'resize-end');
-                                            }}
                                           />
                                         </>
                                       )}
@@ -2049,21 +2035,14 @@ export function GanttChart({
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
                                     >
+                                      {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
                                       {!readOnly && (
                                         <>
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-start", isReviewDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.reviewTask!, 'resize-start');
-                                            }}
                                           />
                                           <div
                                             className={cn("gantt-resize-handle gantt-resize-handle-end", isReviewDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              handleDragStart(e, cycle.reviewTask!, 'resize-end');
-                                            }}
                                           />
                                         </>
                                       )}
