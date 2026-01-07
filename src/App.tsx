@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
-import { BrandedLoader } from "@/components/ui/BrandedLoader";
+import { LoadingTransition } from "@/components/ui/BrandedLoader";
 
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -27,26 +27,28 @@ const queryClient = new QueryClient();
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return <BrandedLoader />;
-  }
-
-  if (!user) {
+  if (!loading && !user) {
     return <Navigate to="/auth" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <LoadingTransition loading={loading}>
+      {children}
+    </LoadingTransition>
+  );
 }
 
 // Root route wrapper - handles auth loading for home page only
 function RootRoute() {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return <BrandedLoader />;
-  }
+  const content = user ? <Navigate to="/projects" replace /> : <Auth />;
 
-  return user ? <Navigate to="/projects" replace /> : <Auth />;
+  return (
+    <LoadingTransition loading={loading}>
+      {content}
+    </LoadingTransition>
+  );
 }
 
 function AppRoutes() {
