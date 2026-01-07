@@ -490,7 +490,7 @@
     filter: brightness(1.1);
   }
 
-  /* Vertical reorder dragging */
+  /* Vertical reorder dragging - body state */
   .gantt-dragging-vertical {
     cursor: grabbing !important;
     user-select: none !important;
@@ -499,41 +499,82 @@
     cursor: grabbing !important;
   }
 
+  /* Enhanced "Lift" state for dragged item */
   .gantt-vertical-dragging {
-    @apply bg-card/95 rounded-lg shadow-2xl;
-    border: 1px solid hsl(var(--primary) / 0.3);
+    @apply bg-card rounded-lg;
+    transform: scale(1.02);
+    box-shadow: 
+      0 12px 40px rgba(0, 0, 0, 0.2),
+      0 4px 16px rgba(0, 0, 0, 0.1),
+      0 0 0 2px hsl(var(--primary) / 0.3);
+    filter: brightness(1.05);
+    z-index: 100;
+    position: relative;
     animation: vertical-lift 0.15s ease-out forwards;
-  }
-
-  .gantt-vertical-drop-target {
-    @apply relative;
-  }
-  .gantt-vertical-drop-target::before {
-    content: '';
-    @apply absolute left-4 right-4 h-0.5 bg-primary rounded-full;
-    top: -1px;
-    animation: drop-indicator-pulse 1s ease-in-out infinite;
   }
 
   @keyframes vertical-lift {
     from {
       transform: scale(1);
       box-shadow: 0 2px 8px hsl(0 0% 0% / 0.1);
+      filter: brightness(1);
     }
     to {
       transform: scale(1.02);
-      box-shadow: 0 12px 32px hsl(0 0% 0% / 0.25);
+      box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.2),
+        0 4px 16px rgba(0, 0, 0, 0.1),
+        0 0 0 2px hsl(var(--primary) / 0.3);
+      filter: brightness(1.05);
     }
   }
 
-  @keyframes drop-indicator-pulse {
-    0%, 100% {
-      opacity: 1;
-      transform: scaleX(1);
+  /* Drop indicator line - shows exactly where task will land */
+  .gantt-drop-indicator {
+    background: hsl(var(--primary));
+    border-radius: 1px;
+    box-shadow: 
+      0 0 8px hsl(var(--primary) / 0.6),
+      0 0 16px hsl(var(--primary) / 0.3);
+    animation: drop-indicator-glow 1s ease-in-out infinite;
+  }
+
+  .gantt-drop-indicator::before,
+  .gantt-drop-indicator::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 6px hsl(var(--primary) / 0.5);
+  }
+  .gantt-drop-indicator::before { left: -4px; }
+  .gantt-drop-indicator::after { right: -4px; }
+
+  @keyframes drop-indicator-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Ghost element at original position */
+  .gantt-vertical-ghost {
+    background: hsl(var(--muted) / 0.4);
+    border: 2px dashed hsl(var(--border));
+    border-radius: 6px;
+    pointer-events: none;
+    animation: ghost-appear 0.15s ease-out forwards;
+  }
+
+  @keyframes ghost-appear {
+    from {
+      opacity: 0;
+      border-color: transparent;
     }
-    50% {
-      opacity: 0.6;
-      transform: scaleX(0.98);
+    to {
+      opacity: 1;
+      border-color: hsl(var(--border));
     }
   }
 
@@ -546,12 +587,6 @@
   }
   .gantt-grip-handle:active {
     @apply cursor-grabbing text-primary;
-  }
-
-  /* Swap target highlight - only the item being swapped */
-  .gantt-swap-target {
-    @apply bg-primary/5 border-l-2 border-primary/30;
-    transition: all 200ms cubic-bezier(0.2, 0, 0, 1);
   }
 
   /* Drop target phase highlight for cross-phase drag */

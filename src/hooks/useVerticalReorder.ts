@@ -31,6 +31,8 @@ interface UseVerticalReorderReturn {
   getSwapTargetClasses: (taskId: string, actualIndex: number, phaseId: string) => string;
   getDropTargetPhaseClasses: (phaseId: string) => string;
   getDropIndicatorIndex: () => number | null;
+  getDropIndicatorStyle: (phaseId: string) => React.CSSProperties | null;
+  getGhostInfo: () => { phaseId: string; originalIndex: number } | null;
 }
 
 export function useVerticalReorder({
@@ -126,7 +128,7 @@ export function useVerticalReorder({
 
   const getVerticalDragClasses = useCallback((taskId: string): string => {
     if (verticalDrag?.taskId === taskId) {
-      return 'gantt-vertical-dragging z-50 shadow-lg';
+      return 'gantt-vertical-dragging';
     }
     return '';
   }, [verticalDrag]);
@@ -136,60 +138,62 @@ export function useVerticalReorder({
     
     const isSamePhase = verticalDrag.phaseId === phaseId;
     const isTargetPhase = verticalDrag.targetPhaseId === phaseId;
+    const insertionIndex = verticalDrag.currentIndex;
+    const originalIndex = verticalDrag.originalIndex;
     
-    // The dragged item
+    // The dragged item follows cursor
     if (verticalDrag.taskId === taskId) {
-      // If dragging to a different phase, just lift the item (visual feedback only)
+      // If dragging to a different phase, show faded state
       if (verticalDrag.targetPhaseId !== verticalDrag.phaseId) {
         return {
-          opacity: 0.5,
-          transition: 'opacity 200ms ease-out',
+          opacity: 0.4,
+          transition: 'opacity 150ms ease-out',
           zIndex: 100,
           position: 'relative',
         };
       }
       
       // Same phase - follow cursor position
-      const deltaY = (verticalDrag.currentIndex - verticalDrag.originalIndex) * rowHeight;
+      const deltaY = (insertionIndex - originalIndex) * rowHeight;
       return {
-        transform: `translateY(${deltaY}px)`,
+        transform: `translateY(${deltaY}px) scale(1.02)`,
         transition: 'none',
         zIndex: 100,
         position: 'relative',
       };
     }
     
-    // For cross-phase: shift items in target phase to make room
+    // For cross-phase: create gap at insertion point in target phase
     if (isTargetPhase && verticalDrag.targetPhaseId !== verticalDrag.phaseId) {
-      // Items at or after the insertion point shift down
-      if (actualIndex >= verticalDrag.currentIndex) {
+      // Items at or after the insertion point shift down to create gap
+      if (actualIndex >= insertionIndex) {
         return {
           transform: `translateY(${rowHeight}px)`,
-          transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+          transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
         };
       }
       return {
-        transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+        transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
       };
     }
     
-    // For same-phase reordering
+    // For same-phase reordering - create visible gap
     if (isSamePhase && verticalDrag.targetPhaseId === verticalDrag.phaseId) {
-      const draggedOriginalIndex = verticalDrag.originalIndex;
-      const draggedCurrentIndex = verticalDrag.currentIndex;
-      
-      if (draggedCurrentIndex > draggedOriginalIndex) {
-        if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex) {
+      // Moving DOWN: items between original and current shift UP
+      if (insertionIndex > originalIndex) {
+        if (actualIndex > originalIndex && actualIndex <= insertionIndex) {
           return {
             transform: `translateY(-${rowHeight}px)`,
-            transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+            transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
           };
         }
-      } else if (draggedCurrentIndex < draggedOriginalIndex) {
-        if (actualIndex >= draggedCurrentIndex && actualIndex < draggedOriginalIndex) {
+      } 
+      // Moving UP: items between current and original shift DOWN
+      else if (insertionIndex < originalIndex) {
+        if (actualIndex >= insertionIndex && actualIndex < originalIndex) {
           return {
             transform: `translateY(${rowHeight}px)`,
-            transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+            transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
           };
         }
       }
@@ -197,50 +201,23 @@ export function useVerticalReorder({
     
     // Original phase - shift up to fill the gap when dragging to another phase
     if (isSamePhase && verticalDrag.targetPhaseId !== verticalDrag.phaseId) {
-      if (actualIndex > verticalDrag.originalIndex) {
+      if (actualIndex > originalIndex) {
         return {
           transform: `translateY(-${rowHeight}px)`,
-          transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+          transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
         };
       }
     }
     
     return {
-      transition: 'transform 200ms cubic-bezier(0.2, 0, 0, 1)',
+      transition: 'transform 180ms cubic-bezier(0.25, 0.1, 0.25, 1)',
     };
   }, [verticalDrag, rowHeight]);
 
   const getSwapTargetClasses = useCallback((taskId: string, actualIndex: number, phaseId: string): string => {
-    if (!verticalDrag) return '';
-    
-    const isSamePhase = verticalDrag.phaseId === phaseId;
-    const isTargetPhase = verticalDrag.targetPhaseId === phaseId;
-    
-    // Cross-phase: highlight insertion point in target phase
-    if (isTargetPhase && verticalDrag.targetPhaseId !== verticalDrag.phaseId) {
-      if (actualIndex === verticalDrag.currentIndex && verticalDrag.taskId !== taskId) {
-        return 'gantt-swap-target';
-      }
-      return '';
-    }
-    
-    // Same phase reordering
-    if (isSamePhase && verticalDrag.targetPhaseId === verticalDrag.phaseId) {
-      const draggedOriginalIndex = verticalDrag.originalIndex;
-      const draggedCurrentIndex = verticalDrag.currentIndex;
-      
-      if (draggedCurrentIndex > draggedOriginalIndex) {
-        if (actualIndex > draggedOriginalIndex && actualIndex <= draggedCurrentIndex && verticalDrag.taskId !== taskId) {
-          return 'gantt-swap-target';
-        }
-      } else if (draggedCurrentIndex < draggedOriginalIndex) {
-        if (actualIndex >= draggedCurrentIndex && actualIndex < draggedOriginalIndex && verticalDrag.taskId !== taskId) {
-          return 'gantt-swap-target';
-        }
-      }
-    }
+    // Removed - we use drop indicator instead
     return '';
-  }, [verticalDrag]);
+  }, []);
 
   const getDropTargetPhaseClasses = useCallback((phaseId: string): string => {
     if (!verticalDrag) return '';
@@ -257,6 +234,48 @@ export function useVerticalReorder({
     return verticalDrag.currentIndex;
   }, [verticalDrag]);
 
+  // Get the drop indicator style for a specific phase
+  const getDropIndicatorStyle = useCallback((phaseId: string): React.CSSProperties | null => {
+    if (!verticalDrag) return null;
+    
+    // Only show in target phase
+    if (verticalDrag.targetPhaseId !== phaseId) return null;
+    
+    // Don't show if at original position in same phase
+    if (verticalDrag.targetPhaseId === verticalDrag.phaseId && 
+        verticalDrag.currentIndex === verticalDrag.originalIndex) {
+      return null;
+    }
+    
+    const yPosition = verticalDrag.currentIndex * rowHeight;
+    
+    return {
+      top: yPosition - 1,
+      left: 16,
+      right: 16,
+      height: 2,
+      position: 'absolute' as const,
+      pointerEvents: 'none' as const,
+      zIndex: 200,
+    };
+  }, [verticalDrag, rowHeight]);
+
+  // Get ghost element info to show at original position
+  const getGhostInfo = useCallback(() => {
+    if (!verticalDrag) return null;
+    
+    // Only show ghost if moved from original position
+    if (verticalDrag.currentIndex === verticalDrag.originalIndex &&
+        verticalDrag.targetPhaseId === verticalDrag.phaseId) {
+      return null;
+    }
+    
+    return {
+      phaseId: verticalDrag.phaseId,
+      originalIndex: verticalDrag.originalIndex,
+    };
+  }, [verticalDrag]);
+
   return {
     verticalDrag,
     isVerticalDragging: !!verticalDrag,
@@ -267,5 +286,7 @@ export function useVerticalReorder({
     getSwapTargetClasses,
     getDropTargetPhaseClasses,
     getDropIndicatorIndex,
+    getDropIndicatorStyle,
+    getGhostInfo,
   };
 }
