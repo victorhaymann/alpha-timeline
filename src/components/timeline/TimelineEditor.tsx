@@ -725,6 +725,43 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, getLibMask, onSegmentsChange, onTasksChange, toast]);
 
+  // Handle convert segment type (work <-> review)
+  const handleConvertSegmentType = useCallback(async (segmentId: string, newType: SegmentType) => {
+    const segment = segments.find(s => s.id === segmentId);
+    if (!segment) return;
+    
+    const task = tasks.find(t => t.id === segment.task_id);
+    const typeLabel = newType === 'review' ? 'review' : 'work period';
+    saveToUndoStack(`Convert to ${typeLabel} for "${task?.name || 'task'}"`);
+    
+    try {
+      const { error } = await supabase
+        .from('task_segments')
+        .update({ segment_type: newType })
+        .eq('id', segmentId);
+
+      if (error) throw error;
+      
+      // Update local state
+      const updatedSegments = segments.map(s => 
+        s.id === segmentId ? { ...s, segment_type: newType } : s
+      );
+      onSegmentsChange(updatedSegments);
+      
+      toast({
+        title: 'Segment converted',
+        description: `Converted to ${newType === 'review' ? 'client review' : 'work period'}.`,
+      });
+    } catch (error: any) {
+      console.error('Error converting segment type:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to convert segment.',
+        variant: 'destructive',
+      });
+    }
+  }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
+
   // Handle add segment to task
   const handleAddSegment = async (taskId: string, position: 'before' | 'after', segmentType: SegmentType = 'work') => {
     const task = tasks.find(t => t.id === taskId);
@@ -1176,6 +1213,7 @@ export function TimelineEditor({
           setSegmentDialogOpen(true);
         }}
         onUpdateSegment={handleUpdateSegment}
+        onConvertSegmentType={handleConvertSegmentType}
       />
 
       <AddTaskDialog
