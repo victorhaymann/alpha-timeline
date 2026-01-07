@@ -179,6 +179,41 @@ export function GanttChart({
   
   // Slide animation state
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  
+  // Inline editing state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskName, setEditingTaskName] = useState<string>('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle starting task name edit
+  const handleStartEdit = useCallback((taskId: string, currentName: string) => {
+    if (readOnly) return;
+    setEditingTaskId(taskId);
+    setEditingTaskName(currentName);
+  }, [readOnly]);
+
+  // Handle saving task name edit
+  const handleSaveEdit = useCallback(() => {
+    if (editingTaskId && editingTaskName.trim()) {
+      onTaskUpdate(editingTaskId, { name: editingTaskName.trim() });
+    }
+    setEditingTaskId(null);
+    setEditingTaskName('');
+  }, [editingTaskId, editingTaskName, onTaskUpdate]);
+
+  // Handle cancelling task name edit
+  const handleCancelEdit = useCallback(() => {
+    setEditingTaskId(null);
+    setEditingTaskName('');
+  }, []);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (editingTaskId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingTaskId]);
 
   const toggleSectionCollapse = useCallback((sectionKey: string) => {
     setCollapsedSections(prev => {
@@ -1196,10 +1231,30 @@ export function GanttChart({
                           </div>
                         )}
                           <div className="w-2.5 md:w-3.5 shrink-0" />
-                          <span className="text-[10px] md:text-xs font-medium text-foreground truncate min-w-0">
-                            {cycle.baseName}
-                            {cycle.reworkTask && <span className="text-muted-foreground ml-1 hidden sm:inline">+ Rework</span>}
-                          </span>
+                          {editingTaskId === cycle.baseTask.id ? (
+                            <input
+                              ref={editInputRef}
+                              type="text"
+                              value={editingTaskName}
+                              onChange={(e) => setEditingTaskName(e.target.value)}
+                              onBlur={handleSaveEdit}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveEdit();
+                                if (e.key === 'Escape') handleCancelEdit();
+                              }}
+                              className="text-[10px] md:text-xs font-medium text-foreground bg-background border border-primary rounded px-1 py-0.5 min-w-0 flex-1 outline-none"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span 
+                              className="text-[10px] md:text-xs font-medium text-foreground truncate min-w-0 cursor-pointer hover:text-primary transition-colors"
+                              onClick={() => handleStartEdit(cycle.baseTask.id, cycle.baseName)}
+                              title="Click to edit"
+                            >
+                              {cycle.baseName}
+                              {cycle.reworkTask && <span className="text-muted-foreground ml-1 hidden sm:inline">+ Rework</span>}
+                            </span>
+                          )}
                           <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                             {baseDuration !== null && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
@@ -1305,7 +1360,29 @@ export function GanttChart({
                         {task.task_type === 'meeting' && <Users className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />}
                         {task.task_type === 'task' && <div className="w-3 md:w-3.5 shrink-0" />}
                         
-                        <span className="text-[10px] md:text-xs font-medium text-foreground truncate flex-1 min-w-0">{task.name}</span>
+                        {editingTaskId === task.id ? (
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            value={editingTaskName}
+                            onChange={(e) => setEditingTaskName(e.target.value)}
+                            onBlur={handleSaveEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveEdit();
+                              if (e.key === 'Escape') handleCancelEdit();
+                            }}
+                            className="text-[10px] md:text-xs font-medium text-foreground bg-background border border-primary rounded px-1 py-0.5 min-w-0 flex-1 outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span 
+                            className="text-[10px] md:text-xs font-medium text-foreground truncate flex-1 min-w-0 cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => handleStartEdit(task.id, task.name)}
+                            title="Click to edit"
+                          >
+                            {task.name}
+                          </span>
+                        )}
                         
                         <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
                           {duration !== null && (
