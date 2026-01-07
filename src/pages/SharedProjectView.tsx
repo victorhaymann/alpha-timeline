@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import type { Project, Phase, Task, Dependency } from '@/types/database';
+import type { Project, Phase, Task, Dependency, TaskSegment } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -273,6 +273,7 @@ export default function SharedProjectView() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [segments, setSegments] = useState<TaskSegment[]>([]);
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   
@@ -569,6 +570,31 @@ export default function SharedProjectView() {
 
           addDebugStep(`Dependencies loaded: ${depsResult.data?.length || 0}`);
           setDependencies((depsResult.data as Dependency[]) || []);
+
+          // Fetch task segments
+          addDebugStep('Fetching task segments...');
+          const segmentsResult = await withTimeout(
+            supabase
+              .from('task_segments')
+              .select('*')
+              .in('task_id', taskIds)
+              .order('order_index'),
+            REQUEST_TIMEOUT_MS,
+            'Fetch segments'
+          );
+
+          if (thisRequestId !== requestIdRef.current) {
+            inFlightRef.current = false;
+            return;
+          }
+
+          if (segmentsResult.error) {
+            addDebugStep(`Segments fetch warning: ${segmentsResult.error.message}`);
+            // Non-fatal - continue with empty segments
+          } else {
+            addDebugStep(`Segments loaded: ${segmentsResult.data?.length || 0}`);
+            setSegments((segmentsResult.data as TaskSegment[]) || []);
+          }
         }
       } else {
         addDebugStep('No phases, skipping tasks');
@@ -1160,7 +1186,7 @@ export default function SharedProjectView() {
                   projectEndDate={new Date(project.end_date)}
                   phases={phases}
                   tasks={tasks}
-                  segments={[]}
+                  segments={segments}
                   workingDaysMask={project.working_days_mask || 31}
                   checkinTime={project.checkin_time}
                   checkinDuration={project.checkin_duration}

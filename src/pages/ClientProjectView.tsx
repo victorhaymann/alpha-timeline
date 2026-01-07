@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import type { Project, Phase, Task, Dependency } from '@/types/database';
+import type { Project, Phase, Task, Dependency, TaskSegment } from '@/types/database';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,7 @@ export default function ClientProjectView() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
+  const [segments, setSegments] = useState<TaskSegment[]>([]);
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
@@ -102,7 +103,7 @@ export default function ClientProjectView() {
         const tasksResult = (tasksData as Task[]) || [];
         setTasks(tasksResult);
 
-        // Fetch dependencies
+        // Fetch dependencies and segments
         if (tasksResult.length > 0) {
           const taskIds = tasksResult.map((t) => t.id);
           const { data: depsData } = await supabase
@@ -113,6 +114,15 @@ export default function ClientProjectView() {
             );
 
           setDependencies((depsData as Dependency[]) || []);
+
+          // Fetch task segments
+          const { data: segmentsData } = await supabase
+            .from('task_segments')
+            .select('*')
+            .in('task_id', taskIds)
+            .order('order_index');
+
+          setSegments((segmentsData as TaskSegment[]) || []);
         }
       }
 
@@ -287,7 +297,7 @@ export default function ClientProjectView() {
             projectEndDate={new Date(project.end_date)}
             phases={phases}
             tasks={tasks}
-            segments={[]}
+            segments={segments}
             workingDaysMask={project.working_days_mask || 31}
             checkinTime={project.checkin_time}
             checkinDuration={project.checkin_duration}
