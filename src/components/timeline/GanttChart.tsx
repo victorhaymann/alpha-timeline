@@ -183,28 +183,57 @@ export function GanttChart({
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskName, setEditingTaskName] = useState<string>('');
+  const [editingCycleContext, setEditingCycleContext] = useState<{
+    reviewTaskId: string | null;
+    reworkTaskId: string | null;
+  } | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   // Handle starting task name edit
-  const handleStartEdit = useCallback((taskId: string, currentName: string) => {
+  const handleStartEdit = useCallback((
+    taskId: string, 
+    currentName: string,
+    cycleContext?: { reviewTaskId: string | null; reworkTaskId: string | null }
+  ) => {
     if (readOnly) return;
     setEditingTaskId(taskId);
     setEditingTaskName(currentName);
+    setEditingCycleContext(cycleContext || null);
   }, [readOnly]);
 
   // Handle saving task name edit
   const handleSaveEdit = useCallback(() => {
     if (editingTaskId && editingTaskName.trim()) {
-      onTaskUpdate(editingTaskId, { name: editingTaskName.trim() });
+      const newName = editingTaskName.trim();
+      
+      // Update the base task
+      onTaskUpdate(editingTaskId, { name: newName });
+      
+      // If this was a cycle base task, cascade the rename to related tasks
+      if (editingCycleContext) {
+        const { reviewTaskId, reworkTaskId } = editingCycleContext;
+        
+        // Update review task name: "OldName Review" -> "NewName Review"
+        if (reviewTaskId) {
+          onTaskUpdate(reviewTaskId, { name: `${newName} Review` });
+        }
+        
+        // Update rework task name: "OldName Rework" -> "NewName Rework"
+        if (reworkTaskId) {
+          onTaskUpdate(reworkTaskId, { name: `${newName} Rework` });
+        }
+      }
     }
     setEditingTaskId(null);
     setEditingTaskName('');
-  }, [editingTaskId, editingTaskName, onTaskUpdate]);
+    setEditingCycleContext(null);
+  }, [editingTaskId, editingTaskName, editingCycleContext, onTaskUpdate]);
 
   // Handle cancelling task name edit
   const handleCancelEdit = useCallback(() => {
     setEditingTaskId(null);
     setEditingTaskName('');
+    setEditingCycleContext(null);
   }, []);
 
   // Focus input when editing starts
@@ -1248,7 +1277,14 @@ export function GanttChart({
                           ) : (
                             <span 
                               className="text-[10px] md:text-xs font-medium text-foreground truncate min-w-0 cursor-pointer hover:text-primary transition-colors"
-                              onClick={() => handleStartEdit(cycle.baseTask.id, cycle.baseName)}
+                              onClick={() => handleStartEdit(
+                                cycle.baseTask.id, 
+                                cycle.baseName,
+                                {
+                                  reviewTaskId: cycle.reviewTask?.id || null,
+                                  reworkTaskId: cycle.reworkTask?.id || null,
+                                }
+                              )}
                               title="Click to edit"
                             >
                               {cycle.baseName}
