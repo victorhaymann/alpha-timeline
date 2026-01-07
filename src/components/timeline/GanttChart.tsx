@@ -2033,7 +2033,7 @@ export function GanttChart({
                                                       "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
                                                       isReviewSegment ? "text-foreground" : "text-white"
                                                     )}>
-                                                      {segWidth > 60 ? (isReviewSegment ? '' : (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`)) : ''}
+                                                      {segWidth > 60 ? (isReviewSegment ? '' : cycle.baseName) : ''}
                                                     </span>
                                                     {!readOnly && segWidth > 40 && (
                                                       <button
@@ -3251,7 +3251,7 @@ export function GanttChart({
                                                     "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
                                                     isReviewSegment ? "text-foreground" : "text-white"
                                                   )}>
-                                                    {segWidth > 60 ? (isReviewSegment ? '' : (isFirstSegment ? task.name : `P${segIdx + 1}`)) : ''}
+                                                    {segWidth > 60 ? (isReviewSegment ? '' : task.name) : ''}
                                                   </span>
                                                   {!readOnly && segWidth > 40 && (
                                                     <button
