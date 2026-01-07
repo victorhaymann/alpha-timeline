@@ -1733,7 +1733,7 @@ export function GanttChart({
                                         <TooltipTrigger asChild>
                                           <div
                                             className={cn(
-                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md",
+                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar",
                                               readOnly ? "cursor-default" : "cursor-pointer",
                                               "gantt-task-bar-base",
                                               "hover:shadow-xl hover:ring-2 hover:ring-white/40",
@@ -1774,7 +1774,7 @@ export function GanttChart({
                                                 />
                                               </>
                                             )}
-                                            <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden group/taskbar">
+                                            <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
                                               <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
                                                 {baseWidth > 60 ? cycle.baseName : ''}
                                               </span>
