@@ -1754,7 +1754,9 @@ export function GanttChart({
                                               const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
                                               const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
                                               // Only open menu if it was a click (minimal movement)
-                                              if (dx < 5 && dy < 5 && !isDraggingAny) {
+                                              if (dx < 5 && dy < 5) {
+                                                e.preventDefault();
+                                                e.stopPropagation();
                                                 setOpenTaskMenuId(cycle.baseTask.id);
                                               }
                                               clickStartPosRef.current = null;
