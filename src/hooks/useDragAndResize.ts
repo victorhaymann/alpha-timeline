@@ -46,7 +46,7 @@ export function useDragAndResize({
   const [justDropped, setJustDropped] = useState<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Handle drag start
+  // Handle drag start with automatic edge detection
   const handleDragStart = useCallback((
     e: React.MouseEvent,
     task: Task,
@@ -57,6 +57,21 @@ export function useDragAndResize({
     
     if (readOnly) return;
     if (!task.start_date || !task.end_date) return;
+
+    // Auto-detect resize intent based on click position relative to task bar edges
+    const EDGE_THRESHOLD = 12; // pixels from edge to trigger resize
+    const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base');
+    
+    if (taskBarElement && type === 'move') {
+      const rect = taskBarElement.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      
+      if (clickX <= EDGE_THRESHOLD) {
+        type = 'resize-start';
+      } else if (clickX >= rect.width - EDGE_THRESHOLD) {
+        type = 'resize-end';
+      }
+    }
 
     const startDate = new Date(task.start_date);
     const endDate = new Date(task.end_date);
