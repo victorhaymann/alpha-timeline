@@ -91,6 +91,21 @@ export interface Task {
   recurring_dates?: string[]; // For recurring meetings (e.g., weekly calls) - client-side only
 }
 
+// Task segment for multi-period tasks
+export interface TaskSegment {
+  id: string;
+  task_id: string;
+  start_date: string;
+  end_date: string;
+  order_index: number;
+  created_at: string;
+}
+
+// Extended task type with segments
+export interface TaskWithSegments extends Task {
+  segments?: TaskSegment[];
+}
+
 export interface Dependency {
   id: string;
   predecessor_task_id: string;

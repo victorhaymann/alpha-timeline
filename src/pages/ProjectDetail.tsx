@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import type { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PhaseCategory } from '@/types/database';
+import type { Project, Phase, Task, Dependency, CanonicalStep, ProjectStep, PhaseCategory, TaskSegment } from '@/types/database';
 import { PHASE_CATEGORY_COLORS } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -66,6 +66,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [segments, setSegments] = useState<TaskSegment[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [projectSteps, setProjectSteps] = useState<ProjectStepWithCanonical[]>([]);
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
@@ -136,6 +137,15 @@ export default function ProjectDetail() {
           .or(`predecessor_task_id.in.(${taskIds.join(',')}),successor_task_id.in.(${taskIds.join(',')})`);
 
         setDependencies((depsData as Dependency[]) || []);
+
+        // Fetch task segments
+        const { data: segmentsData } = await supabase
+          .from('task_segments')
+          .select('*')
+          .in('task_id', taskIds)
+          .order('order_index');
+
+        setSegments((segmentsData as TaskSegment[]) || []);
       }
 
       // Fetch project steps with canonical step data
@@ -507,7 +517,9 @@ export default function ProjectDetail() {
             phases={phases}
             tasks={tasks}
             dependencies={dependencies}
+            segments={segments}
             onTasksChange={handleTasksChange}
+            onSegmentsChange={setSegments}
             onRefresh={fetchProjectData}
             onTaskClick={handleTaskClick}
             renderRegenerateButton={(props) => {
