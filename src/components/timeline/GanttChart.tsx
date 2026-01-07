@@ -2020,7 +2020,7 @@ export function GanttChart({
                                   <TooltipTrigger asChild>
                                     <div
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
                                         "gantt-task-bar-base",
                                         "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                         getDragClasses(cycle.reworkTask.id)
@@ -2031,6 +2031,31 @@ export function GanttChart({
                                         background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                                         boxShadow: `0 4px 12px ${sectionColor}66`,
                                         ...getDragStyles(cycle.reworkTask.id),
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (readOnly || isDraggingAny) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                          closeTaskMenuTimeoutRef.current = null;
+                                        }
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                        setOpenTaskMenuId(cycle.reworkTask!.id);
+                                      }}
+                                      onMouseMove={(e) => {
+                                        if (readOnly || openTaskMenuId !== cycle.reworkTask!.id) return;
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                      }}
+                                      onMouseLeave={() => {
+                                        if (readOnly) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        }
+                                        closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                          setOpenTaskMenuId((current) =>
+                                            current === cycle.reworkTask!.id ? null : current
+                                          );
+                                          setTaskMenuPos(null);
+                                        }, 120);
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reworkTask!, 'move')}
                                     >
@@ -2045,10 +2070,23 @@ export function GanttChart({
                                           />
                                         </>
                                       )}
-                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                      <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
                                           {reworkWidth > 50 ? 'Rework' : ''}
                                         </span>
+                                        {!readOnly && reworkWidth > 40 && (
+                                          <button
+                                            className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                              setOpenTaskMenuId(cycle.reworkTask!.id);
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   </TooltipTrigger>
@@ -2218,7 +2256,7 @@ export function GanttChart({
                                   <TooltipTrigger asChild>
                                     <div
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
                                         "gantt-review-bar",
                                         "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                         getDragClasses(cycle.reviewTask.id)
@@ -2230,6 +2268,31 @@ export function GanttChart({
                                         borderColor: sectionColor,
                                         boxShadow: `0 2px 8px ${sectionColor}33`,
                                         ...getDragStyles(cycle.reviewTask.id),
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (readOnly || isDraggingAny) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                          closeTaskMenuTimeoutRef.current = null;
+                                        }
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                        setOpenTaskMenuId(cycle.reviewTask!.id);
+                                      }}
+                                      onMouseMove={(e) => {
+                                        if (readOnly || openTaskMenuId !== cycle.reviewTask!.id) return;
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                      }}
+                                      onMouseLeave={() => {
+                                        if (readOnly) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        }
+                                        closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                          setOpenTaskMenuId((current) =>
+                                            current === cycle.reviewTask!.id ? null : current
+                                          );
+                                          setTaskMenuPos(null);
+                                        }, 120);
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
                                     >
@@ -2244,10 +2307,23 @@ export function GanttChart({
                                           />
                                         </>
                                       )}
-                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                        <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide" style={{ color: sectionColor }}>
+                                      <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                        <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide flex-1 text-center" style={{ color: sectionColor }}>
                                           {reviewWidth > 80 ? 'Client Review' : ''}
                                         </span>
+                                        {!readOnly && reviewWidth > 40 && (
+                                          <button
+                                            className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                              setOpenTaskMenuId(cycle.reviewTask!.id);
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreHorizontal className="w-4 h-4 drop-shadow-md" style={{ color: sectionColor }} />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
                                   </TooltipTrigger>
@@ -2433,7 +2509,7 @@ export function GanttChart({
                                 <TooltipTrigger asChild>
                                   <div
                                     className={cn(
-                                      "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                      "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
                                       "gantt-task-bar-base",
                                       "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                       getDragClasses(task.id),
@@ -2449,6 +2525,31 @@ export function GanttChart({
                                       boxShadow: `0 4px 12px ${sectionColor}66`,
                                       ...getDragStyles(task.id),
                                     }}
+                                    onMouseEnter={(e) => {
+                                      if (readOnly || isDraggingAny) return;
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        closeTaskMenuTimeoutRef.current = null;
+                                      }
+                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                      setOpenTaskMenuId(task.id);
+                                    }}
+                                    onMouseMove={(e) => {
+                                      if (readOnly || openTaskMenuId !== task.id) return;
+                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (readOnly) return;
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                      }
+                                      closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                        setOpenTaskMenuId((current) =>
+                                          current === task.id ? null : current
+                                        );
+                                        setTaskMenuPos(null);
+                                      }, 120);
+                                    }}
                                     onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                                   >
                                     {!readOnly && (
@@ -2461,10 +2562,23 @@ export function GanttChart({
                                       />
                                     )}
 
-                                    <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                    <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
                                         {clippedWidth > 60 ? task.name : ''}
                                       </span>
+                                      {!readOnly && clippedWidth > 40 && (
+                                        <button
+                                          className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                            setOpenTaskMenuId(task.id);
+                                          }}
+                                          onMouseDown={(e) => e.stopPropagation()}
+                                        >
+                                          <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                        </button>
+                                      )}
                                     </div>
 
                                     {!readOnly && (
