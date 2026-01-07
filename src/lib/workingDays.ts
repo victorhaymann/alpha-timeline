@@ -129,6 +129,42 @@ export function normalizeTaskDates(
 }
 
 /**
+ * Snap task dates to working days while preserving the working-day duration.
+ * Use this for move/resize operations where the task was already correctly sized.
+ * 
+ * Example: A 3-working-day task moved to start on Saturday becomes Mon→Wed
+ */
+export function snapTaskToWorkingDays(
+  startDate: Date,
+  endDate: Date,
+  mask: number = DEFAULT_WORKING_DAYS_MASK
+): { start: Date; end: Date; changed: boolean } {
+  const originalStart = new Date(startDate);
+  const originalEnd = new Date(endDate);
+  
+  // Count the current working-day duration (what we want to preserve)
+  const workingDayDuration = countWorkingDays(originalStart, originalEnd, mask);
+  
+  // Snap start to a working day
+  const normalizedStart = nextWorkingDay(originalStart, mask);
+  
+  // If it's a single-day task or zero duration
+  if (workingDayDuration <= 1) {
+    const changed = normalizedStart.getTime() !== originalStart.getTime();
+    return { start: normalizedStart, end: normalizedStart, changed };
+  }
+  
+  // Calculate end by adding (workingDayDuration - 1) working days
+  const normalizedEnd = addWorkingDays(normalizedStart, workingDayDuration - 1, mask);
+  
+  const changed =
+    normalizedStart.getTime() !== originalStart.getTime() ||
+    normalizedEnd.getTime() !== originalEnd.getTime();
+
+  return { start: normalizedStart, end: normalizedEnd, changed };
+}
+
+/**
  * Check if a date range contains any non-working days
  */
 export function hasNonWorkingDays(

@@ -23,7 +23,7 @@ import {
 import { format, parse } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
-import { normalizeTaskDates, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib } from '@/lib/workingDays';
+import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib } from '@/lib/workingDays';
 
 // Maximum number of undo states to keep
 const MAX_UNDO_STACK_SIZE = 20;
@@ -162,7 +162,8 @@ export function TimelineEditor({
       let normalizedUpdates = { ...updates };
       if (updates.start_date && updates.end_date) {
         const libMask = getLibMask();
-        const normalized = normalizeTaskDates(
+        // Use snapTaskToWorkingDays to preserve working-day duration on move/resize
+        const normalized = snapTaskToWorkingDays(
           new Date(updates.start_date),
           new Date(updates.end_date),
           libMask
