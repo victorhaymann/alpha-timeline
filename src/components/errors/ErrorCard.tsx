@@ -10,26 +10,18 @@ interface ErrorCardProps {
   onRetry?: () => void;
 }
 
-export function ErrorCard({ 
+interface ErrorCardContentProps extends ErrorCardProps {
+  onGoHome: () => void;
+}
+
+// Shared UI component
+function ErrorCardContent({ 
   title = 'Something went wrong', 
   message = 'An unexpected error occurred',
   showHomeButton = true,
-  onRetry 
-}: ErrorCardProps) {
-  // Check if we're inside a Router context to avoid crashes when ErrorBoundary
-  // catches errors outside the Router (e.g., global ErrorBoundary wrapping BrowserRouter)
-  const isInRouter = useInRouterContext();
-  const navigate = isInRouter ? useNavigate() : null;
-
-  const handleGoHome = () => {
-    if (navigate) {
-      navigate('/projects');
-    } else {
-      // Fallback when outside Router context
-      window.location.assign('/projects');
-    }
-  };
-
+  onRetry,
+  onGoHome
+}: ErrorCardContentProps) {
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
       <Card className="w-full max-w-md">
@@ -50,7 +42,7 @@ export function ErrorCard({
             </Button>
           )}
           {showHomeButton && (
-            <Button onClick={handleGoHome}>
+            <Button onClick={onGoHome}>
               <Home className="mr-2 h-4 w-4" />
               Go to Projects
             </Button>
@@ -59,4 +51,25 @@ export function ErrorCard({
       </Card>
     </div>
   );
+}
+
+// Component that uses useNavigate (only rendered inside Router)
+function ErrorCardWithRouter(props: ErrorCardProps) {
+  const navigate = useNavigate();
+  return <ErrorCardContent {...props} onGoHome={() => navigate('/projects')} />;
+}
+
+// Component for when outside Router
+function ErrorCardWithoutRouter(props: ErrorCardProps) {
+  return <ErrorCardContent {...props} onGoHome={() => window.location.assign('/projects')} />;
+}
+
+// Main exported component - checks Router context first
+export function ErrorCard(props: ErrorCardProps) {
+  const isInRouter = useInRouterContext();
+  
+  if (isInRouter) {
+    return <ErrorCardWithRouter {...props} />;
+  }
+  return <ErrorCardWithoutRouter {...props} />;
 }
