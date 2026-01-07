@@ -3144,6 +3144,30 @@ export function GanttChart({
                                       const isSegmentDragging = dragging?.segmentId === seg.id;
                                       const tooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
                                       
+                                      // Check if this is a review segment
+                                      const isReviewSegment = seg.segment_type === 'review';
+                                      
+                                      // Review segment: subtle fill with dashed border and softer shadow
+                                      const segmentStyle = isReviewSegment
+                                        ? {
+                                            left: segLeft + 2,
+                                            width: segWidth - 4,
+                                            backgroundColor: `${sectionColor}15`,
+                                            border: `2px dashed ${sectionColor}`,
+                                            boxShadow: `0 2px 8px ${sectionColor}20`,
+                                            ...getDragStyles(task.id, seg.id),
+                                          }
+                                        : {
+                                            left: segLeft + 2,
+                                            width: segWidth - 4,
+                                            background: isFeedback 
+                                              ? `${sectionColor}99` 
+                                              : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                            borderColor: isFeedback ? sectionColor : undefined,
+                                            boxShadow: `0 4px 12px ${sectionColor}66`,
+                                            ...getDragStyles(task.id, seg.id),
+                                          };
+                                      
                                       return (
                                         <React.Fragment key={seg.id}>
                                           <Tooltip delayDuration={200}>
@@ -3152,21 +3176,12 @@ export function GanttChart({
                                                 className={cn(
                                                   "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
                                                   readOnly ? "cursor-default" : "cursor-pointer",
-                                                  "gantt-task-bar-base",
+                                                  !isReviewSegment && "gantt-task-bar-base",
                                                   "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                                  isFeedback && "gantt-review-bar",
+                                                  (isFeedback || isReviewSegment) && "gantt-review-bar",
                                                   getDragClasses(task.id, seg.id)
                                                 )}
-                                                style={{
-                                                  left: segLeft + 2,
-                                                  width: segWidth - 4,
-                                                  background: isFeedback 
-                                                    ? `${sectionColor}99` 
-                                                    : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                                  borderColor: isFeedback ? sectionColor : undefined,
-                                                  boxShadow: `0 4px 12px ${sectionColor}66`,
-                                                  ...getDragStyles(task.id, seg.id),
-                                                }}
+                                                style={segmentStyle}
                                                 onMouseEnter={(e) => {
                                                   if (readOnly || isDraggingAny) return;
                                                   if (closeTaskMenuTimeoutRef.current) {
@@ -3175,6 +3190,7 @@ export function GanttChart({
                                                   }
                                                   setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                                   setOpenTaskMenuId(task.id);
+                                                  setHoveredSegmentId(seg.id);
                                                 }}
                                                 onMouseMove={(e) => {
                                                   if (readOnly || openTaskMenuId !== task.id) return;
@@ -3210,6 +3226,15 @@ export function GanttChart({
                                                   clickStartPosRef.current = null;
                                                 }}
                                               >
+                                                {/* Review badge indicator */}
+                                                {isReviewSegment && segWidth > 50 && (
+                                                  <span 
+                                                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-background border-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10"
+                                                    style={{ borderColor: sectionColor, color: sectionColor }}
+                                                  >
+                                                    Review
+                                                  </span>
+                                                )}
                                                 {/* Resize handles for segments */}
                                                 {!readOnly && (
                                                   <>
@@ -3222,20 +3247,27 @@ export function GanttChart({
                                                   </>
                                                 )}
                                                 <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                                  <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
-                                                    {segWidth > 60 ? (isFirstSegment ? task.name : `P${segIdx + 1}`) : ''}
+                                                  <span className={cn(
+                                                    "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
+                                                    isReviewSegment ? "text-foreground" : "text-white"
+                                                  )}>
+                                                    {segWidth > 60 ? (isReviewSegment ? '' : (isFirstSegment ? task.name : `P${segIdx + 1}`)) : ''}
                                                   </span>
-                                                  {!readOnly && isLastSegment && segWidth > 40 && (
+                                                  {!readOnly && segWidth > 40 && (
                                                     <button
-                                                      className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
+                                                      className={cn(
+                                                        "opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded shrink-0 ml-1 absolute right-1",
+                                                        isReviewSegment ? "hover:bg-black/10" : "hover:bg-white/20"
+                                                      )}
                                                       onClick={(e) => {
                                                         e.stopPropagation();
                                                         setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                                         setOpenTaskMenuId(task.id);
+                                                        setHoveredSegmentId(seg.id);
                                                       }}
                                                       onMouseDown={(e) => e.stopPropagation()}
                                                     >
-                                                      <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                                      <MoreHorizontal className={cn("w-4 h-4 drop-shadow-md", isReviewSegment ? "text-foreground" : "text-white")} />
                                                     </button>
                                                   )}
                                                 </div>
@@ -3243,7 +3275,7 @@ export function GanttChart({
                                             </TooltipTrigger>
                                             {!isSegmentDragging && (
                                               <TooltipContent side="top" className="font-semibold">
-                                                <p>{task.name} - Period {segIdx + 1}</p>
+                                                <p>{task.name} - {isReviewSegment ? 'Client Review' : `Period ${segIdx + 1}`}</p>
                                                 <p className="text-xs text-muted-foreground">
                                                   {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
                                                 </p>
