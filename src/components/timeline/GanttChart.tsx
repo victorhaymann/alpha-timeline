@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { MeetingHoverCard } from './MeetingHoverCard';
+import { InlineDatePicker } from './InlineDatePicker';
 import { 
   Flag, 
   Users, 
@@ -1349,9 +1350,17 @@ export function GanttChart({
                               {cycle.reviewTask.start_date && (() => {
                                 const reviewDate = safeParseDate(cycle.reviewTask.start_date);
                                 return reviewDate ? (
-                                  <span className="font-medium">
-                                    {safeFormat(reviewDate, 'MMM d')}
-                                  </span>
+                                  <InlineDatePicker
+                                    date={reviewDate}
+                                    onDateChange={(newDate) => {
+                                      onTaskUpdate(cycle.reviewTask!.id, {
+                                        start_date: format(newDate, 'yyyy-MM-dd'),
+                                        end_date: format(newDate, 'yyyy-MM-dd'),
+                                      });
+                                    }}
+                                    disabled={readOnly}
+                                    className="text-[11px]"
+                                  />
                                 ) : null;
                               })()}
                             </div>
@@ -1447,17 +1456,27 @@ export function GanttChart({
                             </span>
                           )}
                           {startDate && (
-                            <span className="font-medium">
-                              {safeFormat(startDate, 'MMM d')}
-                            </span>
+                            <InlineDatePicker
+                              date={startDate}
+                              onDateChange={(newDate) => {
+                                onTaskUpdate(task.id, { start_date: format(newDate, 'yyyy-MM-dd') });
+                              }}
+                              disabled={readOnly}
+                              className="text-[11px]"
+                            />
                           )}
                           {startDate && endDate && (
                             <span className="opacity-50">→</span>
                           )}
                           {endDate && (
-                            <span className="font-medium">
-                              {safeFormat(endDate, 'MMM d')}
-                            </span>
+                            <InlineDatePicker
+                              date={endDate}
+                              onDateChange={(newDate) => {
+                                onTaskUpdate(task.id, { end_date: format(newDate, 'yyyy-MM-dd') });
+                              }}
+                              disabled={readOnly}
+                              className="text-[11px]"
+                            />
                           )}
                         </div>
 
