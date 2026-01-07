@@ -232,6 +232,24 @@ export function TimelineEditor({
     }
   };
 
+  /**
+   * Convert project's legacy working days mask to the new library format.
+   * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
+   * New: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
+   */
+  const getLibMask = useCallback(() => {
+    const oldMask = project.working_days_mask ?? 31; // Default Mon-Fri
+    let newMask = 0;
+    if (oldMask & 1) newMask |= (1 << 1);   // Mon
+    if (oldMask & 2) newMask |= (1 << 2);   // Tue
+    if (oldMask & 4) newMask |= (1 << 3);   // Wed
+    if (oldMask & 8) newMask |= (1 << 4);   // Thu
+    if (oldMask & 16) newMask |= (1 << 5);  // Fri
+    if (oldMask & 32) newMask |= (1 << 6);  // Sat
+    if (oldMask & 64) newMask |= (1 << 0);  // Sun
+    return newMask;
+  }, [project.working_days_mask]);
+
   // Handle task reorder (within phase or cross-phase)
   const handleTaskReorder = async (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => {
     // Save current state before making changes
@@ -635,6 +653,78 @@ export function TimelineEditor({
     }
   };
 
+  // Handle update segment (from Gantt drag/resize)
+  const handleUpdateSegment = useCallback(async (segmentId: string, updates: { start_date?: string; end_date?: string }) => {
+    // Find the segment being updated
+    const segment = segments.find(s => s.id === segmentId);
+    if (!segment) return;
+    
+    const task = tasks.find(t => t.id === segment.task_id);
+    const updateDescription = task 
+      ? `Update period for "${task.name}"` 
+      : 'Update period';
+    saveToUndoStack(updateDescription);
+    
+    try {
+      // Normalize dates if they're being updated
+      let normalizedUpdates = { ...updates };
+      if (updates.start_date && updates.end_date) {
+        const libMask = getLibMask();
+        const normalized = snapTaskToWorkingDays(
+          new Date(updates.start_date),
+          new Date(updates.end_date),
+          libMask
+        );
+        normalizedUpdates.start_date = format(normalized.start, 'yyyy-MM-dd');
+        normalizedUpdates.end_date = format(normalized.end, 'yyyy-MM-dd');
+      }
+      
+      // Update the segment in the database
+      const { error } = await supabase
+        .from('task_segments')
+        .update(normalizedUpdates)
+        .eq('id', segmentId);
+
+      if (error) throw error;
+      
+      // Update local state for segments
+      const updatedSegments = segments.map(s => 
+        s.id === segmentId ? { ...s, ...normalizedUpdates } : s
+      );
+      onSegmentsChange(updatedSegments);
+      
+      // Sync parent task's start_date and end_date to span all its segments
+      const taskId = segment.task_id;
+      const taskSegments = updatedSegments.filter(s => s.task_id === taskId);
+      
+      if (taskSegments.length > 0) {
+        const minStart = taskSegments.reduce((min, s) => 
+          s.start_date < min ? s.start_date : min, taskSegments[0].start_date);
+        const maxEnd = taskSegments.reduce((max, s) => 
+          s.end_date > max ? s.end_date : max, taskSegments[0].end_date);
+        
+        // Update parent task in database
+        await supabase.from('tasks').update({
+          start_date: minStart,
+          end_date: maxEnd
+        }).eq('id', taskId);
+        
+        // Update local state for tasks
+        const updatedTasks = tasks.map(t => 
+          t.id === taskId ? { ...t, start_date: minStart, end_date: maxEnd } : t
+        );
+        onTasksChange(updatedTasks);
+      }
+    } catch (error: any) {
+      console.error('Error updating segment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update period.',
+        variant: 'destructive',
+      });
+    }
+  }, [segments, tasks, saveToUndoStack, getLibMask, onSegmentsChange, onTasksChange, toast]);
+
   // Handle add segment to task
   const handleAddSegment = async (taskId: string, position: 'before' | 'after') => {
     const task = tasks.find(t => t.id === taskId);
@@ -895,24 +985,6 @@ export function TimelineEditor({
     }
   };
 
-  /**
-   * Convert project's legacy working days mask to the new library format.
-   * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
-   * New: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
-   */
-  const getLibMask = useCallback(() => {
-    const oldMask = project.working_days_mask ?? 31; // Default Mon-Fri
-    let newMask = 0;
-    if (oldMask & 1) newMask |= (1 << 1);   // Mon
-    if (oldMask & 2) newMask |= (1 << 2);   // Tue
-    if (oldMask & 4) newMask |= (1 << 3);   // Wed
-    if (oldMask & 8) newMask |= (1 << 4);   // Thu
-    if (oldMask & 16) newMask |= (1 << 5);  // Fri
-    if (oldMask & 32) newMask |= (1 << 6);  // Sat
-    if (oldMask & 64) newMask |= (1 << 0);  // Sun
-    return newMask;
-  }, [project.working_days_mask]);
-
   // Fix tasks with weekend dates
   const handleFixWeekends = useCallback(async () => {
     setIsFixingWeekends(true);
@@ -1099,6 +1171,7 @@ export function TimelineEditor({
           setSelectedTaskForSegments(task);
           setSegmentDialogOpen(true);
         }}
+        onUpdateSegment={handleUpdateSegment}
       />
 
       <AddTaskDialog
