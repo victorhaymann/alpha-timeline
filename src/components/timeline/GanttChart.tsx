@@ -2689,102 +2689,162 @@ export function GanttChart({
                                 );
                               })()}
 
-                              <Tooltip delayDuration={200}>
-                                <TooltipTrigger asChild>
-                                  <div
-                                    className={cn(
-                                      "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
-                                      "gantt-task-bar-base",
-                                      "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                      getDragClasses(task.id),
-                                      isFeedback && "gantt-review-bar"
-                                    )}
-                                    style={{
-                                      left: clippedLeft + 2,
-                                      width: clippedWidth - 4,
-                                      background: isFeedback 
-                                        ? `${sectionColor}99` 
-                                        : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                      borderColor: isFeedback ? sectionColor : undefined,
-                                      boxShadow: `0 4px 12px ${sectionColor}66`,
-                                      ...getDragStyles(task.id),
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      if (readOnly || isDraggingAny) return;
-                                      if (closeTaskMenuTimeoutRef.current) {
-                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                        closeTaskMenuTimeoutRef.current = null;
-                                      }
-                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                      setOpenTaskMenuId(task.id);
-                                    }}
-                                    onMouseMove={(e) => {
-                                      if (readOnly || openTaskMenuId !== task.id) return;
-                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                    }}
-                                    onMouseLeave={() => {
-                                      if (readOnly) return;
-                                      if (closeTaskMenuTimeoutRef.current) {
-                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                      }
-                                      closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                        setOpenTaskMenuId((current) =>
-                                          current === task.id ? null : current
-                                        );
-                                        setTaskMenuPos(null);
-                                      }, 120);
-                                    }}
-                                    onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
-                                  >
-                                    {!readOnly && (
-                                      <div
-                                        className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          handleDragStart(e, task, 'resize-start');
-                                        }}
-                                      />
-                                    )}
+                              <Popover 
+                                open={openTaskMenuId === task.id}
+                                onOpenChange={(open) => {
+                                  setOpenTaskMenuId(open ? task.id : null);
+                                  if (!open) setTaskMenuPos(null);
+                                }}
+                              >
+                                {openTaskMenuId === task.id && taskMenuPos && (
+                                  <PopoverAnchor asChild>
+                                    <div
+                                      style={{
+                                        position: 'fixed',
+                                        left: taskMenuPos.x,
+                                        top: taskMenuPos.y,
+                                        width: 1,
+                                        height: 1,
+                                        pointerEvents: 'none',
+                                      }}
+                                    />
+                                  </PopoverAnchor>
+                                )}
 
-                                    <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
-                                      <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
-                                        {clippedWidth > 60 ? task.name : ''}
-                                      </span>
-                                      {!readOnly && clippedWidth > 40 && (
-                                        <button
-                                          className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
-                                          onClick={(e) => {
+                                <Tooltip delayDuration={200}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
+                                        "gantt-task-bar-base",
+                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                        getDragClasses(task.id),
+                                        isFeedback && "gantt-review-bar"
+                                      )}
+                                      style={{
+                                        left: clippedLeft + 2,
+                                        width: clippedWidth - 4,
+                                        background: isFeedback 
+                                          ? `${sectionColor}99` 
+                                          : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                        borderColor: isFeedback ? sectionColor : undefined,
+                                        boxShadow: `0 4px 12px ${sectionColor}66`,
+                                        ...getDragStyles(task.id),
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (readOnly || isDraggingAny) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                          closeTaskMenuTimeoutRef.current = null;
+                                        }
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                        setOpenTaskMenuId(task.id);
+                                      }}
+                                      onMouseMove={(e) => {
+                                        if (readOnly || openTaskMenuId !== task.id) return;
+                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                      }}
+                                      onMouseLeave={() => {
+                                        if (readOnly) return;
+                                        if (closeTaskMenuTimeoutRef.current) {
+                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        }
+                                        closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                          setOpenTaskMenuId((current) =>
+                                            current === task.id ? null : current
+                                          );
+                                          setTaskMenuPos(null);
+                                        }, 120);
+                                      }}
+                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
+                                    >
+                                      {!readOnly && (
+                                        <div
+                                          className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                          onMouseDown={(e) => {
                                             e.stopPropagation();
-                                            setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                            setOpenTaskMenuId(task.id);
+                                            handleDragStart(e, task, 'resize-start');
                                           }}
-                                          onMouseDown={(e) => e.stopPropagation()}
-                                        >
-                                          <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
-                                        </button>
+                                        />
+                                      )}
+
+                                      <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
+                                          {clippedWidth > 60 ? task.name : ''}
+                                        </span>
+                                        {!readOnly && clippedWidth > 40 && (
+                                          <button
+                                            className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                              setOpenTaskMenuId(task.id);
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                          >
+                                            <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {!readOnly && (
+                                        <div
+                                          className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                          onMouseDown={(e) => {
+                                            e.stopPropagation();
+                                            handleDragStart(e, task, 'resize-end');
+                                          }}
+                                        />
                                       )}
                                     </div>
+                                  </TooltipTrigger>
+                                  {!isCurrentlyDragging && viewMode === 'project' && (
+                                    <TooltipContent side="top" className="font-semibold">
+                                      <p>{task.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {safeFormat(displayStart, 'MMM d')} → {safeFormat(displayEnd, 'MMM d')}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
 
-                                    {!readOnly && (
-                                      <div
-                                        className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                        onMouseDown={(e) => {
-                                          e.stopPropagation();
-                                          handleDragStart(e, task, 'resize-end');
+                                <PopoverContent
+                                  className="w-40 p-1 animate-enter"
+                                  side="bottom"
+                                  align="start"
+                                  sideOffset={8}
+                                  onMouseEnter={() => {
+                                    if (closeTaskMenuTimeoutRef.current) {
+                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                      closeTaskMenuTimeoutRef.current = null;
+                                    }
+                                  }}
+                                  onMouseLeave={() => {
+                                    if (closeTaskMenuTimeoutRef.current) {
+                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                    }
+                                    closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                      setOpenTaskMenuId((current) => (current === task.id ? null : current));
+                                      setTaskMenuPos(null);
+                                    }, 120);
+                                  }}
+                                >
+                                  <div className="flex flex-col">
+                                    {onDeleteTask && (
+                                      <button
+                                        onClick={() => {
+                                          onDeleteTask(task.id);
+                                          setOpenTaskMenuId(null);
                                         }}
-                                      />
+                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete Task
+                                      </button>
                                     )}
                                   </div>
-                                </TooltipTrigger>
-                                {!isCurrentlyDragging && viewMode === 'project' && (
-                                  <TooltipContent side="top" className="font-semibold">
-                                    <p>{task.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {safeFormat(displayStart, 'MMM d')} → {safeFormat(displayEnd, 'MMM d')}
-                                    </p>
-                                  </TooltipContent>
-                                )}
-                              </Tooltip>
+                                </PopoverContent>
+                              </Popover>
                               
                               {/* Dynamic tooltip during drag */}
                               {isCurrentlyDragging && tooltipInfo && (
