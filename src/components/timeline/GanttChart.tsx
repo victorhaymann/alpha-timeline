@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
@@ -200,8 +201,10 @@ export function GanttChart({
   } | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   
-  // Task menu popover state (click-to-open instead of right-click)
+  // Task menu popover state (mouse-positioned)
   const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+  const [taskMenuPos, setTaskMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const closeTaskMenuTimeoutRef = useRef<number | null>(null);
   const clickStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Handle starting task name edit
@@ -1725,114 +1728,159 @@ export function GanttChart({
                                 <>
                                 <Popover 
                                   open={openTaskMenuId === cycle.baseTask.id} 
-                                  onOpenChange={(open) => setOpenTaskMenuId(open ? cycle.baseTask.id : null)}
+                                  onOpenChange={(open) => {
+                                    setOpenTaskMenuId(open ? cycle.baseTask.id : null);
+                                    if (!open) setTaskMenuPos(null);
+                                  }}
                                 >
-                                  <PopoverTrigger asChild>
-                                    <div>
-                                      <Tooltip delayDuration={200}>
-                                        <TooltipTrigger asChild>
-                                          <div
-                                            className={cn(
-                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar",
-                                              readOnly ? "cursor-default" : "cursor-pointer",
-                                              "gantt-task-bar-base",
-                                              "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                              getDragClasses(cycle.baseTask.id)
-                                            )}
-                                            style={{
-                                              left: baseLeft + 2,
-                                              width: baseWidth - 4,
-                                              background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                              boxShadow: `0 4px 12px ${sectionColor}66`,
-                                              ...getDragStyles(cycle.baseTask.id),
-                                            }}
-                                            onMouseEnter={() => {
-                                              if (readOnly) return;
-                                              if (isDraggingAny) return;
+                                  {openTaskMenuId === cycle.baseTask.id && taskMenuPos && (
+                                    <PopoverAnchor asChild>
+                                      <div
+                                        style={{
+                                          position: 'fixed',
+                                          left: taskMenuPos.x,
+                                          top: taskMenuPos.y,
+                                          width: 1,
+                                          height: 1,
+                                          pointerEvents: 'none',
+                                        }}
+                                      />
+                                    </PopoverAnchor>
+                                  )}
+
+                                  <div>
+                                    <Tooltip delayDuration={200}>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className={cn(
+                                            "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar",
+                                            readOnly ? "cursor-default" : "cursor-pointer",
+                                            "gantt-task-bar-base",
+                                            "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                            getDragClasses(cycle.baseTask.id)
+                                          )}
+                                          style={{
+                                            left: baseLeft + 2,
+                                            width: baseWidth - 4,
+                                            background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                            boxShadow: `0 4px 12px ${sectionColor}66`,
+                                            ...getDragStyles(cycle.baseTask.id),
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (readOnly) return;
+                                            if (isDraggingAny) return;
+                                            if (closeTaskMenuTimeoutRef.current) {
+                                              window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                              closeTaskMenuTimeoutRef.current = null;
+                                            }
+                                            setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                            setOpenTaskMenuId(cycle.baseTask.id);
+                                          }}
+                                          onMouseMove={(e) => {
+                                            if (readOnly) return;
+                                            if (openTaskMenuId !== cycle.baseTask.id) return;
+                                            setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                          }}
+                                          onMouseLeave={() => {
+                                            if (readOnly) return;
+                                            if (closeTaskMenuTimeoutRef.current) {
+                                              window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                            }
+                                            closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                              setOpenTaskMenuId((current) =>
+                                                current === cycle.baseTask.id ? null : current
+                                              );
+                                              setTaskMenuPos(null);
+                                            }, 120);
+                                          }}
+                                          onMouseDown={readOnly ? undefined : (e) => {
+                                            clickStartPosRef.current = { x: e.clientX, y: e.clientY };
+                                            handleDragStart(e, cycle.baseTask, 'move');
+                                          }}
+                                          onMouseUp={(e) => {
+                                            if (readOnly || !clickStartPosRef.current) return;
+                                            const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
+                                            const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
+                                            if (dx < 5 && dy < 5) {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                               setOpenTaskMenuId(cycle.baseTask.id);
-                                            }}
-                                            onMouseLeave={() => {
-                                              if (readOnly) return;
-                                              // close unless the popover content re-enters
-                                              window.setTimeout(() => {
-                                                setOpenTaskMenuId((current) =>
-                                                  current === cycle.baseTask.id ? null : current
-                                                );
-                                              }, 120);
-                                            }}
-                                            onMouseDown={readOnly ? undefined : (e) => {
-                                              clickStartPosRef.current = { x: e.clientX, y: e.clientY };
-                                              handleDragStart(e, cycle.baseTask, 'move');
-                                            }}
-                                            onMouseUp={(e) => {
-                                              if (readOnly || !clickStartPosRef.current) return;
-                                              const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
-                                              const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
-                                              // Click (no movement) should also open the menu
-                                              if (dx < 5 && dy < 5) {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setOpenTaskMenuId(cycle.baseTask.id);
-                                              }
-                                              clickStartPosRef.current = null;
-                                            }}
-                                          >
-                                            {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
-                                            {!readOnly && (
-                                              <>
-                                                <div
-                                                  className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                                />
-                                                <div
-                                                  className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                                />
-                                              </>
+                                            }
+                                            clickStartPosRef.current = null;
+                                          }}
+                                        >
+                                          {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
+                                          {!readOnly && (
+                                            <>
+                                              <div
+                                                className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                              />
+                                              <div
+                                                className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                              />
+                                            </>
+                                          )}
+                                          <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                            <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
+                                              {baseWidth > 60 ? cycle.baseName : ''}
+                                            </span>
+                                            {!readOnly && baseWidth > 40 && (
+                                              <button
+                                                className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                  setOpenTaskMenuId(cycle.baseTask.id);
+                                                }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                              >
+                                                <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                              </button>
                                             )}
-                                            <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
-                                              <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
-                                                {baseWidth > 60 ? cycle.baseName : ''}
-                                              </span>
-                                              {!readOnly && baseWidth > 40 && (
-                                                <button
-                                                  className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setOpenTaskMenuId(cycle.baseTask.id);
-                                                  }}
-                                                  onMouseDown={(e) => e.stopPropagation()}
-                                                >
-                                                  <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
-                                                </button>
-                                              )}
-                                            </div>
                                           </div>
-                                        </TooltipTrigger>
-                                        {!isBaseDragging && openTaskMenuId !== cycle.baseTask.id && (
-                                          <TooltipContent side="top" className="font-semibold">
-                                            <p>{cycle.baseTask.name}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
+                                        </div>
+                                      </TooltipTrigger>
+                                      {!isBaseDragging && openTaskMenuId !== cycle.baseTask.id && (
+                                        <TooltipContent side="top" className="font-semibold">
+                                          <p>{cycle.baseTask.name}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
+                                          </p>
+                                          {taskSegments.length > 1 && (
+                                            <p className="text-xs text-primary mt-1">
+                                              <Layers className="w-3 h-3 inline mr-1" />
+                                              {taskSegments.length} periods
                                             </p>
-                                            {taskSegments.length > 1 && (
-                                              <p className="text-xs text-primary mt-1">
-                                                <Layers className="w-3 h-3 inline mr-1" />
-                                                {taskSegments.length} periods
-                                              </p>
-                                            )}
-                                            <p className="text-[10px] text-muted-foreground mt-1 opacity-70">
-                                              Click for options • Drag to move
-                                            </p>
-                                          </TooltipContent>
-                                        )}
-                                      </Tooltip>
-                                    </div>
-                                  </PopoverTrigger>
+                                          )}
+                                          <p className="text-[10px] text-muted-foreground mt-1 opacity-70">
+                                            Hover for options • Drag to move
+                                          </p>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </div>
+
                                   <PopoverContent
                                     className="w-48 p-1 animate-enter"
                                     side="bottom"
                                     align="start"
-                                    onMouseEnter={() => setOpenTaskMenuId(cycle.baseTask.id)}
-                                    onMouseLeave={() => setOpenTaskMenuId((current) => (current === cycle.baseTask.id ? null : current))}
+                                    sideOffset={8}
+                                    onMouseEnter={() => {
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        closeTaskMenuTimeoutRef.current = null;
+                                      }
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                      }
+                                      closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                        setOpenTaskMenuId((current) => (current === cycle.baseTask.id ? null : current));
+                                        setTaskMenuPos(null);
+                                      }, 120);
+                                    }}
                                   >
                                     <div className="flex flex-col">
                                       <button
