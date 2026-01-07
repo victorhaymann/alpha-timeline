@@ -31,7 +31,8 @@ import {
   Trash2,
   HelpCircle,
   Copy,
-  Layers
+  Layers,
+  MoreHorizontal
 } from 'lucide-react';
 import { 
   format, 
@@ -1773,10 +1774,22 @@ export function GanttChart({
                                                 />
                                               </>
                                             )}
-                                            <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                              <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                            <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden group/taskbar">
+                                              <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide flex-1 text-center">
                                                 {baseWidth > 60 ? cycle.baseName : ''}
                                               </span>
+                                              {!readOnly && baseWidth > 40 && (
+                                                <button
+                                                  className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenTaskMenuId(cycle.baseTask.id);
+                                                  }}
+                                                  onMouseDown={(e) => e.stopPropagation()}
+                                                >
+                                                  <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                                </button>
+                                              )}
                                             </div>
                                           </div>
                                         </TooltipTrigger>
