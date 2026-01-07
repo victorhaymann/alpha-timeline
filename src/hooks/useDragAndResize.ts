@@ -32,6 +32,8 @@ interface UseDragAndResizeReturn {
   getDragClasses: (taskId: string) => string;
   getResizeHandleClasses: (position: 'start' | 'end') => string;
   getDurationChange: () => { original: number; current: number; delta: number } | null;
+  getGhostPosition: () => { start: Date; end: Date } | null;
+  getDynamicTooltipInfo: () => { type: 'move' | 'resize-start' | 'resize-end'; start: Date; end: Date; originalStart: Date; originalEnd: Date } | null;
 }
 
 export function useDragAndResize({
@@ -172,11 +174,37 @@ export function useDragAndResize({
     if (wasJustDropped) {
       return {
         zIndex: 50,
+        // Smooth magnetic settle transition
+        transition: 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease-out',
       };
     }
 
-    return {};
+    // Default smooth transition for non-dragged items
+    return {
+      transition: 'transform 0.15s ease-out, box-shadow 0.15s ease-out',
+    };
   }, [dragging, justDropped]);
+
+  // Get ghost element position (original position during drag)
+  const getGhostPosition = useCallback(() => {
+    if (!dragging) return null;
+    return {
+      start: dragging.originalStart,
+      end: dragging.originalEnd,
+    };
+  }, [dragging]);
+
+  // Get dynamic tooltip information during drag
+  const getDynamicTooltipInfo = useCallback(() => {
+    if (!dragging || !dragPreview) return null;
+    return {
+      type: dragging.type,
+      start: dragPreview.start,
+      end: dragPreview.end,
+      originalStart: dragging.originalStart,
+      originalEnd: dragging.originalEnd,
+    };
+  }, [dragging, dragPreview]);
 
   // Get animation classes for a task
   const getDragClasses = useCallback((taskId: string): string => {
@@ -231,5 +259,7 @@ export function useDragAndResize({
     getDragClasses,
     getResizeHandleClasses,
     getDurationChange,
+    getGhostPosition,
+    getDynamicTooltipInfo,
   };
 }
