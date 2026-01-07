@@ -599,6 +599,123 @@ export function TimelineEditor({
     }
   };
 
+  // Handle add segment to task
+  const handleAddSegment = async (taskId: string, position: 'before' | 'after') => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    try {
+      const taskSegments = segments.filter(s => s.task_id === taskId);
+      const libMask = getLibMask();
+      
+      let newStart: Date;
+      let newEnd: Date;
+      
+      if (taskSegments.length === 0) {
+        // No segments yet - create initial segment from task dates, then add new one
+        if (task.start_date && task.end_date) {
+          // First create the initial segment
+          const { error: initialError } = await supabase
+            .from('task_segments')
+            .insert({
+              task_id: taskId,
+              start_date: task.start_date,
+              end_date: task.end_date,
+              order_index: 0,
+            });
+          
+          if (initialError) throw initialError;
+        }
+        
+        // Calculate new segment position based on task dates
+        const taskEndDate = task.end_date ? new Date(task.end_date) : new Date();
+        const taskStartDate = task.start_date ? new Date(task.start_date) : new Date();
+        
+        if (position === 'after') {
+          newStart = addDays(taskEndDate, 3);
+          newEnd = addDays(newStart, 2);
+        } else {
+          newEnd = addDays(taskStartDate, -3);
+          newStart = addDays(newEnd, -2);
+        }
+      } else {
+        // Has segments - add relative to first/last
+        const sortedSegments = [...taskSegments].sort((a, b) => a.order_index - b.order_index);
+        
+        if (position === 'after') {
+          const lastSegment = sortedSegments[sortedSegments.length - 1];
+          newStart = addDays(new Date(lastSegment.end_date), 3);
+          newEnd = addDays(newStart, 2);
+        } else {
+          const firstSegment = sortedSegments[0];
+          newEnd = addDays(new Date(firstSegment.start_date), -3);
+          newStart = addDays(newEnd, -2);
+        }
+      }
+      
+      // Snap to working days
+      const normalized = snapTaskToWorkingDays(newStart, newEnd, libMask);
+      
+      // Determine order index
+      const existingSegments = segments.filter(s => s.task_id === taskId);
+      const newOrderIndex = position === 'after' 
+        ? existingSegments.length 
+        : 0;
+      
+      // If adding before, need to increment all existing segment order_index
+      if (position === 'before' && existingSegments.length > 0) {
+        for (const seg of existingSegments) {
+          await supabase
+            .from('task_segments')
+            .update({ order_index: seg.order_index + 1 })
+            .eq('id', seg.id);
+        }
+      }
+      
+      const { data: newSegment, error } = await supabase
+        .from('task_segments')
+        .insert({
+          task_id: taskId,
+          start_date: format(normalized.start, 'yyyy-MM-dd'),
+          end_date: format(normalized.end, 'yyyy-MM-dd'),
+          order_index: newOrderIndex,
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Update task's main dates to span all segments
+      const allSegments = [...existingSegments, newSegment as TaskSegment];
+      const allStarts = allSegments.map(s => new Date(s.start_date));
+      const allEnds = allSegments.map(s => new Date(s.end_date));
+      const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
+      const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
+      
+      await supabase
+        .from('tasks')
+        .update({
+          start_date: format(minStart, 'yyyy-MM-dd'),
+          end_date: format(maxEnd, 'yyyy-MM-dd'),
+        })
+        .eq('id', taskId);
+      
+      toast({
+        title: 'Period added',
+        description: `New period added ${position} existing work.`,
+      });
+      
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error adding segment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add period.',
+        variant: 'destructive',
+      });
+    }
+  }
+
   // Regenerate schedule
   const handleRegenerate = async () => {
     setIsRegenerating(true);
@@ -926,6 +1043,7 @@ export function TimelineEditor({
         onDeleteTask={handleDeleteTask}
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
+        onAddSegment={handleAddSegment}
         onEditSegments={(task) => {
           setSelectedTaskForSegments(task);
           setSegmentDialogOpen(true);
