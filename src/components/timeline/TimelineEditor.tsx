@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment } from '@/types/database';
+import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment, SegmentType } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -726,12 +726,13 @@ export function TimelineEditor({
   }, [segments, tasks, saveToUndoStack, getLibMask, onSegmentsChange, onTasksChange, toast]);
 
   // Handle add segment to task
-  const handleAddSegment = async (taskId: string, position: 'before' | 'after') => {
+  const handleAddSegment = async (taskId: string, position: 'before' | 'after', segmentType: SegmentType = 'work') => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
     // Save to undo stack before making changes
-    saveToUndoStack(`Add period ${position} "${task.name}"`);
+    const typeLabel = segmentType === 'review' ? 'client review' : 'period';
+    saveToUndoStack(`Add ${typeLabel} ${position} "${task.name}"`);
     
     try {
       const libMask = getLibMask();
@@ -759,6 +760,7 @@ export function TimelineEditor({
               start_date: task.start_date,
               end_date: task.end_date,
               order_index: position === 'before' ? 1 : 0, // Position correctly based on where new segment goes
+              segment_type: 'work', // Original task is always a work segment
             });
           
           if (initialError) throw initialError;
@@ -816,6 +818,7 @@ export function TimelineEditor({
           start_date: format(normalized.start, 'yyyy-MM-dd'),
           end_date: format(normalized.end, 'yyyy-MM-dd'),
           order_index: newOrderIndex,
+          segment_type: segmentType,
         });
       
       if (error) throw error;
@@ -841,9 +844,10 @@ export function TimelineEditor({
           .eq('id', taskId);
       }
       
+      const typeLabel = segmentType === 'review' ? 'Client review' : 'Period';
       toast({
-        title: 'Period added',
-        description: `New 2-day period added ${position} existing work.`,
+        title: `${typeLabel} added`,
+        description: `New ${segmentType === 'review' ? 'client review' : '2-day period'} added ${position} existing work.`,
       });
       
       onRefresh();

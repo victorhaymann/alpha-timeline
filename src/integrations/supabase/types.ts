@@ -771,6 +771,7 @@ export type Database = {
           end_date: string
           id: string
           order_index: number
+          segment_type: string | null
           start_date: string
           task_id: string
         }
@@ -779,6 +780,7 @@ export type Database = {
           end_date: string
           id?: string
           order_index?: number
+          segment_type?: string | null
           start_date: string
           task_id: string
         }
@@ -787,6 +789,7 @@ export type Database = {
           end_date?: string
           id?: string
           order_index?: number
+          segment_type?: string | null
           start_date?: string
           task_id?: string
         }
