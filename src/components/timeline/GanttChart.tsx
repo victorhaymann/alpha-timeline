@@ -26,6 +26,7 @@ import {
   GripVertical,
   Plus,
   RotateCcw,
+  RefreshCw,
   CalendarIcon,
   ChevronDown,
   ChevronRight,
@@ -75,6 +76,7 @@ interface GanttChartProps {
   onAddSegment?: (taskId: string, position: 'before' | 'after', segmentType?: SegmentType) => void;
   onEditSegments?: (task: Task) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
+  onConvertSegmentType?: (segmentId: string, newType: SegmentType) => void;
   readOnly?: boolean;
 }
 
@@ -162,6 +164,7 @@ export function GanttChart({
   onAddSegment,
   onEditSegments,
   onUpdateSegment,
+  onConvertSegmentType,
   readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -204,6 +207,7 @@ export function GanttChart({
   
   // Task menu popover state (mouse-positioned)
   const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+  const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
   const [taskMenuPos, setTaskMenuPos] = useState<{ x: number; y: number } | null>(null);
   const closeTaskMenuTimeoutRef = useRef<number | null>(null);
   const clickStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -1916,6 +1920,7 @@ export function GanttChart({
                                                     }
                                                     setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                                     setOpenTaskMenuId(cycle.baseTask.id);
+                                                    setHoveredSegmentId(seg.id);
                                                   }}
                                                   onMouseMove={(e) => {
                                                     if (readOnly || openTaskMenuId !== cycle.baseTask.id) return;
@@ -2114,6 +2119,25 @@ export function GanttChart({
                                                 {taskSegments.length}
                                               </Badge>
                                             </button>
+                                            {/* Convert segment type option - only show if hovered segment exists */}
+                                            {hoveredSegmentId && onConvertSegmentType && (() => {
+                                              const hoveredSeg = taskSegments.find(s => s.id === hoveredSegmentId);
+                                              if (!hoveredSeg) return null;
+                                              const isReview = hoveredSeg.segment_type === 'review';
+                                              return (
+                                                <button
+                                                  onClick={() => {
+                                                    onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
+                                                    setOpenTaskMenuId(null);
+                                                    setHoveredSegmentId(null);
+                                                  }}
+                                                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                                >
+                                                  <RefreshCw className="w-4 h-4" />
+                                                  {isReview ? 'Convert to Work Period' : 'Convert to Review'}
+                                                </button>
+                                              );
+                                            })()}
                                             <div className="h-px bg-border my-1" />
                                             <button
                                               onClick={() => {
