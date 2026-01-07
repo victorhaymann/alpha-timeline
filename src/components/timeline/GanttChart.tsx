@@ -1721,54 +1721,116 @@ export function GanttChart({
                                 const isBaseResizing = isBaseDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                                 const baseDurationChanged = isBaseResizing && dragging?.originalDuration && baseDuration !== dragging.originalDuration;
                                 const tooltipInfo = isBaseDragging ? getDynamicTooltipInfo() : null;
+                                const taskSegments = segments.filter(s => s.task_id === cycle.baseTask.id);
                                 
                                 return (
                                 <>
-                                <Tooltip delayDuration={200}>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
-                                        "gantt-task-bar-base",
-                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                        getDragClasses(cycle.baseTask.id)
-                                      )}
-                                      style={{
-                                        left: baseLeft + 2,
-                                        width: baseWidth - 4,
-                                        background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                        boxShadow: `0 4px 12px ${sectionColor}66`,
-                                        ...getDragStyles(cycle.baseTask.id),
-                                      }}
-                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
-                                    >
-                                      {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
-                                      {!readOnly && (
-                                        <>
+                                <ContextMenu>
+                                  <ContextMenuTrigger asChild disabled={readOnly}>
+                                    <div>
+                                      <Tooltip delayDuration={200}>
+                                        <TooltipTrigger asChild>
                                           <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                          />
-                                          <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                          />
-                                        </>
-                                      )}
-                                      <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
-                                        <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
-                                          {baseWidth > 60 ? cycle.baseName : ''}
-                                        </span>
-                                      </div>
+                                            className={cn(
+                                              "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move",
+                                              "gantt-task-bar-base",
+                                              "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                              getDragClasses(cycle.baseTask.id)
+                                            )}
+                                            style={{
+                                              left: baseLeft + 2,
+                                              width: baseWidth - 4,
+                                              background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                              boxShadow: `0 4px 12px ${sectionColor}66`,
+                                              ...getDragStyles(cycle.baseTask.id),
+                                            }}
+                                            onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
+                                          >
+                                            {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
+                                            {!readOnly && (
+                                              <>
+                                                <div
+                                                  className={cn("gantt-resize-handle gantt-resize-handle-start", isBaseDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                                />
+                                                <div
+                                                  className={cn("gantt-resize-handle gantt-resize-handle-end", isBaseDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                                />
+                                              </>
+                                            )}
+                                            <div className="absolute inset-0 flex items-center justify-center px-3 overflow-hidden">
+                                              <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide">
+                                                {baseWidth > 60 ? cycle.baseName : ''}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </TooltipTrigger>
+                                        {!isBaseDragging && (
+                                          <TooltipContent side="top" className="font-semibold">
+                                            <p>{cycle.baseTask.name}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
+                                            </p>
+                                            {taskSegments.length > 1 && (
+                                              <p className="text-xs text-primary mt-1">
+                                                <Layers className="w-3 h-3 inline mr-1" />
+                                                {taskSegments.length} periods
+                                              </p>
+                                            )}
+                                          </TooltipContent>
+                                        )}
+                                      </Tooltip>
                                     </div>
-                                  </TooltipTrigger>
-                                  {!isBaseDragging && (
-                                    <TooltipContent side="top" className="font-semibold">
-                                      <p>{cycle.baseTask.name}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
-                                      </p>
-                                    </TooltipContent>
-                                  )}
-                                </Tooltip>
+                                  </ContextMenuTrigger>
+                                  <ContextMenuContent className="w-48">
+                                    <ContextMenuItem
+                                      onClick={() => onAddSegment?.(cycle.baseTask.id, 'after')}
+                                      className="gap-2"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      Add Period After
+                                    </ContextMenuItem>
+                                    <ContextMenuItem
+                                      onClick={() => onAddSegment?.(cycle.baseTask.id, 'before')}
+                                      className="gap-2"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      Add Period Before
+                                    </ContextMenuItem>
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem
+                                      onClick={() => onEditSegments?.(cycle.baseTask)}
+                                      className="gap-2"
+                                    >
+                                      <Layers className="w-4 h-4" />
+                                      Edit Periods...
+                                      {taskSegments.length > 1 && (
+                                        <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
+                                          {taskSegments.length}
+                                        </Badge>
+                                      )}
+                                    </ContextMenuItem>
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem
+                                      onClick={() => onAddReviewRound(cycle.baseTask.id)}
+                                      className="gap-2"
+                                    >
+                                      <RotateCcw className="w-4 h-4" />
+                                      Add Review Round
+                                    </ContextMenuItem>
+                                    {onDeleteTask && (
+                                      <>
+                                        <ContextMenuSeparator />
+                                        <ContextMenuItem
+                                          onClick={() => onDeleteTask(cycle.baseTask.id)}
+                                          className="gap-2 text-destructive focus:text-destructive"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          Delete Task
+                                        </ContextMenuItem>
+                                      </>
+                                    )}
+                                  </ContextMenuContent>
+                                </ContextMenu>
                                 
                                 {/* Dynamic tooltip during drag - fixed position above bar */}
                                 {isBaseDragging && tooltipInfo && (
