@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -16,11 +16,20 @@ import { GanttChart } from './GanttChart';
 import { AddTaskDialog } from './AddTaskDialog';
 import { 
   RefreshCw,
-  Loader2
+  Loader2,
+  Undo2
 } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
+
+// Maximum number of undo states to keep
+const MAX_UNDO_STACK_SIZE = 20;
+
+interface UndoState {
+  tasks: Task[];
+  description: string;
+}
 
 interface TimelineEditorProps {
   project: Project;
@@ -48,12 +57,84 @@ export function TimelineEditor({
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [addMeetingDialogOpen, setAddMeetingDialogOpen] = useState(false);
   const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
+  const [isUndoing, setIsUndoing] = useState(false);
+  
+  // Undo stack - stores previous task states
+  const undoStackRef = useRef<UndoState[]>([]);
+  const [undoStackLength, setUndoStackLength] = useState(0);
 
   const projectStartDate = new Date(project.start_date);
   const projectEndDate = new Date(project.end_date);
 
+  // Save current state to undo stack before making changes
+  const saveToUndoStack = useCallback((description: string) => {
+    const newState: UndoState = {
+      tasks: JSON.parse(JSON.stringify(tasks)), // Deep clone
+      description,
+    };
+    
+    undoStackRef.current = [
+      ...undoStackRef.current.slice(-(MAX_UNDO_STACK_SIZE - 1)),
+      newState,
+    ];
+    setUndoStackLength(undoStackRef.current.length);
+  }, [tasks]);
+
+  // Undo the last change
+  const handleUndo = useCallback(async () => {
+    if (undoStackRef.current.length === 0) return;
+    
+    setIsUndoing(true);
+    
+    try {
+      const previousState = undoStackRef.current.pop();
+      setUndoStackLength(undoStackRef.current.length);
+      
+      if (!previousState) return;
+      
+      // Restore tasks to database
+      for (const task of previousState.tasks) {
+        await supabase
+          .from('tasks')
+          .update({
+            name: task.name,
+            start_date: task.start_date,
+            end_date: task.end_date,
+            order_index: task.order_index,
+            phase_id: task.phase_id,
+          })
+          .eq('id', task.id);
+      }
+      
+      // Update local state
+      onTasksChange(previousState.tasks);
+      
+      toast({
+        title: 'Undone',
+        description: `Reverted: ${previousState.description}`,
+      });
+    } catch (error: any) {
+      console.error('Error undoing changes:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to undo changes.',
+        variant: 'destructive',
+      });
+      onRefresh();
+    } finally {
+      setIsUndoing(false);
+    }
+  }, [onTasksChange, onRefresh, toast]);
+
   // Handle task update (from Gantt drag/resize)
   const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
+    // Save current state before making changes
+    const task = tasks.find(t => t.id === taskId);
+    const updateDescription = task 
+      ? `Update "${task.name}"` 
+      : 'Update task';
+    saveToUndoStack(updateDescription);
+    
     try {
       const { error } = await supabase
         .from('tasks')
@@ -78,6 +159,10 @@ export function TimelineEditor({
 
   // Handle task reorder (within phase or cross-phase)
   const handleTaskReorder = async (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => {
+    // Save current state before making changes
+    const task = tasks.find(t => t.id === taskId);
+    saveToUndoStack(task ? `Reorder "${task.name}"` : 'Reorder task');
+    
     const isCrossPhase = sourcePhaseId !== targetPhaseId;
     
     if (isCrossPhase) {
@@ -595,7 +680,21 @@ export function TimelineEditor({
   const regenerateButtonElement = renderRegenerateButton 
     ? renderRegenerateButton({ onClick: handleRegenerate, isLoading: isRegenerating })
     : (
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={handleUndo}
+          disabled={undoStackLength === 0 || isUndoing}
+          className="gap-2"
+          title={undoStackLength > 0 ? `Undo (${undoStackLength} changes)` : 'No changes to undo'}
+        >
+          {isUndoing ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Undo2 className="w-4 h-4" />
+          )}
+          Undo
+        </Button>
         <Button
           variant="outline"
           onClick={handleRegenerate}
@@ -612,9 +711,33 @@ export function TimelineEditor({
       </div>
     );
 
+  // Undo button for when using custom regenerate button
+  const undoButton = (
+    <Button
+      variant="outline"
+      onClick={handleUndo}
+      disabled={undoStackLength === 0 || isUndoing}
+      className="gap-2"
+      title={undoStackLength > 0 ? `Undo (${undoStackLength} changes)` : 'No changes to undo'}
+    >
+      {isUndoing ? (
+        <Loader2 className="w-4 h-4 animate-spin" />
+      ) : (
+        <Undo2 className="w-4 h-4" />
+      )}
+      Undo
+    </Button>
+  );
+
   return (
     <div className="space-y-4">
-      {!renderRegenerateButton && regenerateButtonElement}
+      {renderRegenerateButton ? (
+        <div className="flex items-center justify-end gap-2">
+          {undoButton}
+        </div>
+      ) : (
+        regenerateButtonElement
+      )}
 
       <GanttChart
         projectId={project.id}
