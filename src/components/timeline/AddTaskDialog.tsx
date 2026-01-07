@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, addDays } from 'date-fns';
+import { format, getDay } from 'date-fns';
+import { nextWorkingDay, addWorkingDays, DEFAULT_WORKING_DAYS_MASK } from '@/lib/workingDays';
 
 interface AddTaskDialogProps {
   open: boolean;
@@ -28,14 +29,20 @@ export function AddTaskDialog({
   projectStartDate,
   projectEndDate,
 }: AddTaskDialogProps) {
+  // Calculate working days mask for Mon-Fri
+  const workingDaysMask = DEFAULT_WORKING_DAYS_MASK;
+  
   const today = new Date();
-  const defaultStart = today < projectStartDate ? projectStartDate : today;
+  const defaultStart = useMemo(() => {
+    const base = today < projectStartDate ? projectStartDate : today;
+    return nextWorkingDay(base, workingDaysMask);
+  }, [projectStartDate]);
   
   const [name, setName] = useState('');
   const [taskType, setTaskType] = useState<'task' | 'milestone' | 'meeting'>('task');
   const [clientVisible, setClientVisible] = useState(true);
   const [startDate, setStartDate] = useState(format(defaultStart, 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(addDays(defaultStart, 3), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(addWorkingDays(defaultStart, 3, workingDaysMask), 'yyyy-MM-dd'));
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -48,12 +55,13 @@ export function AddTaskDialog({
       end_date: taskType === 'milestone' ? startDate : endDate,
     });
 
-    // Reset form
+    // Reset form with proper working day defaults
+    const resetStart = nextWorkingDay(today < projectStartDate ? projectStartDate : today, workingDaysMask);
     setName('');
     setTaskType('task');
     setClientVisible(true);
-    setStartDate(format(defaultStart, 'yyyy-MM-dd'));
-    setEndDate(format(addDays(defaultStart, 3), 'yyyy-MM-dd'));
+    setStartDate(format(resetStart, 'yyyy-MM-dd'));
+    setEndDate(format(addWorkingDays(resetStart, 3, workingDaysMask), 'yyyy-MM-dd'));
   };
 
   return (
