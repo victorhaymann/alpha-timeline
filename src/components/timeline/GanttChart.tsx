@@ -2809,7 +2809,7 @@ export function GanttChart({
                                 </Tooltip>
 
                                 <PopoverContent
-                                  className="w-40 p-1 animate-enter"
+                                  className="w-48 p-1 animate-enter"
                                   side="bottom"
                                   align="start"
                                   sideOffset={8}
@@ -2830,17 +2830,62 @@ export function GanttChart({
                                   }}
                                 >
                                   <div className="flex flex-col">
+                                    <button
+                                      onClick={() => {
+                                        onAddSegment?.(task.id, 'after');
+                                        setOpenTaskMenuId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      Add Period After
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        onAddSegment?.(task.id, 'before');
+                                        setOpenTaskMenuId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      Add Period Before
+                                    </button>
+                                    <div className="h-px bg-border my-1" />
+                                    <button
+                                      onClick={() => {
+                                        onEditSegments?.(task);
+                                        setOpenTaskMenuId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                    >
+                                      <Layers className="w-4 h-4" />
+                                      Edit Periods...
+                                    </button>
+                                    <div className="h-px bg-border my-1" />
+                                    <button
+                                      onClick={() => {
+                                        onAddReviewRound(task.id);
+                                        setOpenTaskMenuId(null);
+                                      }}
+                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
+                                    >
+                                      <RotateCcw className="w-4 h-4" />
+                                      Add Client Review
+                                    </button>
                                     {onDeleteTask && (
-                                      <button
-                                        onClick={() => {
-                                          onDeleteTask(task.id);
-                                          setOpenTaskMenuId(null);
-                                        }}
-                                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                        Delete Task
-                                      </button>
+                                      <>
+                                        <div className="h-px bg-border my-1" />
+                                        <button
+                                          onClick={() => {
+                                            onDeleteTask(task.id);
+                                            setOpenTaskMenuId(null);
+                                          }}
+                                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          Delete Task
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                 </PopoverContent>
