@@ -70,8 +70,9 @@ export function LoadingTransition({
   loading: boolean; 
   children: React.ReactNode;
 }) {
-  const [showContent, setShowContent] = useState(false);
-  const [fadeOutLoader, setFadeOutLoader] = useState(false);
+  // Initialize based on initial loading state to prevent infinite loading when already loaded
+  const [showContent, setShowContent] = useState(!loading);
+  const [fadeOutLoader, setFadeOutLoader] = useState(!loading);
 
   useEffect(() => {
     if (!loading) {
