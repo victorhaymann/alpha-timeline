@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment } from '@/types/database';
+import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment, SegmentType } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -72,7 +72,7 @@ interface GanttChartProps {
   onDeleteTask?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
-  onAddSegment?: (taskId: string, position: 'before' | 'after') => void;
+  onAddSegment?: (taskId: string, position: 'before' | 'after', segmentType?: SegmentType) => void;
   onEditSegments?: (task: Task) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
   readOnly?: boolean;
@@ -1874,6 +1874,27 @@ export function GanttChart({
                                         const isSegmentDragging = dragging?.segmentId === seg.id;
                                         const tooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
                                         
+                                        // Check if this is a review segment
+                                        const isReviewSegment = seg.segment_type === 'review';
+                                        
+                                        // Review segment: outline-only style
+                                        const segmentStyle = isReviewSegment
+                                          ? {
+                                              left: segLeft + 2,
+                                              width: segWidth - 4,
+                                              backgroundColor: 'transparent',
+                                              border: `2px dashed ${sectionColor}`,
+                                              boxShadow: 'none',
+                                              ...getDragStyles(cycle.baseTask.id, seg.id),
+                                            }
+                                          : {
+                                              left: segLeft + 2,
+                                              width: segWidth - 4,
+                                              background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                              boxShadow: `0 4px 12px ${sectionColor}66`,
+                                              ...getDragStyles(cycle.baseTask.id, seg.id),
+                                            };
+                                        
                                         return (
                                           <React.Fragment key={seg.id}>
                                             <Tooltip delayDuration={200}>
@@ -1882,17 +1903,11 @@ export function GanttChart({
                                                   className={cn(
                                                     "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
                                                     readOnly ? "cursor-default" : "cursor-pointer",
-                                                    "gantt-task-bar-base",
+                                                    !isReviewSegment && "gantt-task-bar-base",
                                                     "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                                     getDragClasses(cycle.baseTask.id, seg.id)
                                                   )}
-                                                  style={{
-                                                    left: segLeft + 2,
-                                                    width: segWidth - 4,
-                                                    background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                                    boxShadow: `0 4px 12px ${sectionColor}66`,
-                                                    ...getDragStyles(cycle.baseTask.id, seg.id),
-                                                  }}
+                                                  style={segmentStyle}
                                                   onMouseEnter={(e) => {
                                                     if (readOnly || isDraggingAny) return;
                                                     if (closeTaskMenuTimeoutRef.current) {
@@ -1948,8 +1963,11 @@ export function GanttChart({
                                                     </>
                                                   )}
                                                   <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                                    <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
-                                                      {segWidth > 60 ? (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`) : ''}
+                                                    <span className={cn(
+                                                      "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
+                                                      isReviewSegment ? "text-foreground" : "text-white"
+                                                    )}>
+                                                      {segWidth > 60 ? (isReviewSegment ? 'Review' : (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`)) : ''}
                                                     </span>
                                                     {!readOnly && isLastSegment && segWidth > 40 && (
                                                       <button
@@ -1969,7 +1987,7 @@ export function GanttChart({
                                               </TooltipTrigger>
                                               {!isSegmentDragging && (
                                                 <TooltipContent side="top" className="font-semibold">
-                                                  <p>{cycle.baseTask.name} - Period {segIdx + 1}</p>
+                                                  <p>{cycle.baseTask.name} - {isReviewSegment ? 'Client Review' : `Period ${segIdx + 1}`}</p>
                                                   <p className="text-xs text-muted-foreground">
                                                     {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
                                                   </p>
@@ -2099,7 +2117,7 @@ export function GanttChart({
                                             <div className="h-px bg-border my-1" />
                                             <button
                                               onClick={() => {
-                                                onAddReviewRound(cycle.baseTask.id);
+                                                onAddSegment?.(cycle.baseTask.id, 'after', 'review');
                                                 setOpenTaskMenuId(null);
                                               }}
                                               className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
@@ -2322,13 +2340,13 @@ export function GanttChart({
                                       <div className="h-px bg-border my-1" />
                                       <button
                                         onClick={() => {
-                                          onAddReviewRound(cycle.baseTask.id);
+                                          onAddSegment?.(cycle.baseTask.id, 'after', 'review');
                                           setOpenTaskMenuId(null);
                                         }}
                                         className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
                                       >
                                         <RotateCcw className="w-4 h-4" />
-                                        Add Review Round
+                                        Add Client Review
                                       </button>
                                       {onDeleteTask && (
                                         <>

@@ -56,6 +56,7 @@ export function TaskSegmentDialog({
           start_date: task.start_date,
           end_date: task.end_date,
           order_index: 0,
+          segment_type: 'work',
           created_at: new Date().toISOString(),
         }]);
       }
@@ -79,6 +80,7 @@ export function TaskSegmentDialog({
       start_date: format(normalized.start, 'yyyy-MM-dd'),
       end_date: format(normalized.end, 'yyyy-MM-dd'),
       order_index: localSegments.length,
+      segment_type: 'work',
       created_at: new Date().toISOString(),
     };
 
@@ -150,6 +152,7 @@ export function TaskSegmentDialog({
         start_date: seg.start_date,
         end_date: seg.end_date,
         order_index: index,
+        segment_type: seg.segment_type || 'work',
       }));
 
       const { data: insertedSegments, error } = await supabase

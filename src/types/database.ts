@@ -91,6 +91,9 @@ export interface Task {
   recurring_dates?: string[]; // For recurring meetings (e.g., weekly calls) - client-side only
 }
 
+// Segment types
+export type SegmentType = 'work' | 'review';
+
 // Task segment for multi-period tasks
 export interface TaskSegment {
   id: string;
@@ -98,6 +101,7 @@ export interface TaskSegment {
   start_date: string;
   end_date: string;
   order_index: number;
+  segment_type: SegmentType;
   created_at: string;
 }
 
