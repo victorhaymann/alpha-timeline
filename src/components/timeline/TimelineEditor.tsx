@@ -612,9 +612,8 @@ export function TimelineEditor({
       let newEnd: Date;
       
       if (taskSegments.length === 0) {
-        // No segments yet - create initial segment from task dates, then add new one
+        // No segments yet - create initial segment from task dates to preserve original task
         if (task.start_date && task.end_date) {
-          // First create the initial segment
           const { error: initialError } = await supabase
             .from('task_segments')
             .insert({
@@ -627,82 +626,84 @@ export function TimelineEditor({
           if (initialError) throw initialError;
         }
         
-        // Calculate new segment position based on task dates
+        // Calculate new segment: 2 days gap, 2 days duration
         const taskEndDate = task.end_date ? new Date(task.end_date) : new Date();
         const taskStartDate = task.start_date ? new Date(task.start_date) : new Date();
         
         if (position === 'after') {
-          newStart = addDays(taskEndDate, 3);
-          newEnd = addDays(newStart, 2);
+          // Start 2 days after the task ends
+          newStart = addDays(taskEndDate, 2);
+          newEnd = addDays(newStart, 1); // 2 days total (inclusive)
         } else {
-          newEnd = addDays(taskStartDate, -3);
-          newStart = addDays(newEnd, -2);
+          // End 2 days before the task starts
+          newEnd = addDays(taskStartDate, -2);
+          newStart = addDays(newEnd, -1); // 2 days total (inclusive)
         }
       } else {
-        // Has segments - add relative to first/last
+        // Has segments - add relative to first/last segment
         const sortedSegments = [...taskSegments].sort((a, b) => a.order_index - b.order_index);
         
         if (position === 'after') {
           const lastSegment = sortedSegments[sortedSegments.length - 1];
-          newStart = addDays(new Date(lastSegment.end_date), 3);
-          newEnd = addDays(newStart, 2);
+          newStart = addDays(new Date(lastSegment.end_date), 2);
+          newEnd = addDays(newStart, 1); // 2 days total
         } else {
           const firstSegment = sortedSegments[0];
-          newEnd = addDays(new Date(firstSegment.start_date), -3);
-          newStart = addDays(newEnd, -2);
+          newEnd = addDays(new Date(firstSegment.start_date), -2);
+          newStart = addDays(newEnd, -1); // 2 days total
         }
       }
       
       // Snap to working days
       const normalized = snapTaskToWorkingDays(newStart, newEnd, libMask);
       
-      // Determine order index
+      // Determine order index for the new segment
       const existingSegments = segments.filter(s => s.task_id === taskId);
+      // Account for the initial segment we just created if there were no segments before
+      const segmentCountAfterInitial = taskSegments.length === 0 ? 1 : existingSegments.length;
       const newOrderIndex = position === 'after' 
-        ? existingSegments.length 
+        ? segmentCountAfterInitial 
         : 0;
       
-      // If adding before, need to increment all existing segment order_index
-      if (position === 'before' && existingSegments.length > 0) {
-        for (const seg of existingSegments) {
-          await supabase
-            .from('task_segments')
-            .update({ order_index: seg.order_index + 1 })
-            .eq('id', seg.id);
+      // If adding before, increment all existing segment order_index
+      if (position === 'before') {
+        const segsToUpdate = taskSegments.length === 0 
+          ? [{ id: 'initial', order_index: 0 }] // We just created one
+          : existingSegments;
+        
+        // Re-fetch segments to get the initial one we just created
+        const { data: currentSegs } = await supabase
+          .from('task_segments')
+          .select('*')
+          .eq('task_id', taskId);
+        
+        if (currentSegs) {
+          for (const seg of currentSegs) {
+            await supabase
+              .from('task_segments')
+              .update({ order_index: seg.order_index + 1 })
+              .eq('id', seg.id);
+          }
         }
       }
       
-      const { data: newSegment, error } = await supabase
+      const { error } = await supabase
         .from('task_segments')
         .insert({
           task_id: taskId,
           start_date: format(normalized.start, 'yyyy-MM-dd'),
           end_date: format(normalized.end, 'yyyy-MM-dd'),
           order_index: newOrderIndex,
-        })
-        .select()
-        .single();
+        });
       
       if (error) throw error;
       
-      // Update task's main dates to span all segments
-      const allSegments = [...existingSegments, newSegment as TaskSegment];
-      const allStarts = allSegments.map(s => new Date(s.start_date));
-      const allEnds = allSegments.map(s => new Date(s.end_date));
-      const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
-      const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
-      
-      await supabase
-        .from('tasks')
-        .update({
-          start_date: format(minStart, 'yyyy-MM-dd'),
-          end_date: format(maxEnd, 'yyyy-MM-dd'),
-        })
-        .eq('id', taskId);
+      // DO NOT update task's main dates - keep them as they were
+      // The Gantt chart will render each segment separately
       
       toast({
         title: 'Period added',
-        description: `New period added ${position} existing work.`,
+        description: `New 2-day period added ${position} existing work.`,
       });
       
       onRefresh();
