@@ -429,6 +429,8 @@ export function GanttChart({
     getVerticalDragStyles,
     getSwapTargetClasses,
     getDropTargetPhaseClasses,
+    getDropIndicatorStyle,
+    getGhostInfo,
   } = useVerticalReorder({
     rowHeight: ROW_HEIGHT,
     onReorder: onTaskReorder,
@@ -1036,12 +1038,15 @@ export function GanttChart({
               const hasNoMeetings = isWeeklyCall && (!section.task.recurring_dates || section.task.recurring_dates.length === 0);
               if (hasNoMeetings) return null;
 
+              const ghostInfo = section.type === 'phase' ? getGhostInfo() : null;
+              const dropIndicatorStyle = section.type === 'phase' ? getDropIndicatorStyle(section.phase.id) : null;
+
               return (
                 <div 
                   key={sectionKey}
                   className={cn(
                     section.type === 'phase' && getDropTargetPhaseClasses(section.phase.id),
-                    "rounded-lg transition-all"
+                    "rounded-lg transition-all relative"
                   )}
                   onMouseEnter={() => {
                     if (isVerticalDragging && section.type === 'phase') {
@@ -1051,6 +1056,25 @@ export function GanttChart({
                     }
                   }}
                 >
+                  {/* Drop indicator line - shows exactly where task will land */}
+                  {dropIndicatorStyle && (
+                    <div 
+                      className="gantt-drop-indicator"
+                      style={dropIndicatorStyle}
+                    />
+                  )}
+
+                  {/* Ghost element at original position */}
+                  {ghostInfo && ghostInfo.phaseId === (section.type === 'phase' ? section.phase.id : '') && (
+                    <div 
+                      className="gantt-vertical-ghost absolute left-2 right-2"
+                      style={{ 
+                        height: ROW_HEIGHT * 2, // Account for review cycle rows
+                        top: PHASE_HEADER_HEIGHT + ghostInfo.originalIndex * ROW_HEIGHT * 2,
+                        zIndex: 1,
+                      }}
+                    />
+                  )}
                   {/* Section header */}
                   <div 
                     className="flex items-center gap-3 px-4 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
