@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
@@ -1776,10 +1776,28 @@ export function GanttChart({
                                 })}
                               </div>
 
-                              {/* Ghost element at original position during drag */}
-                              {isBaseDragging && (() => {
+                              {/* Ghost element at original position during drag (for single-segment tasks or whole task drag) */}
+                              {isBaseDragging && !dragging?.segmentId && (() => {
                                 const ghost = getGhostPosition();
                                 if (!ghost) return null;
+                                const ghostLeft = dateToX(ghost.start);
+                                const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                return (
+                                  <div
+                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    style={{
+                                      left: ghostLeft + 2,
+                                      width: ghostWidth - 4,
+                                      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                    }}
+                                  />
+                                );
+                              })()}
+                              
+                              {/* Ghost elements for segment-level dragging */}
+                              {dragging?.taskId === cycle.baseTask.id && dragging?.segmentId && (() => {
+                                const ghost = getGhostPosition();
+                                if (!ghost || ghost.segmentId !== dragging.segmentId) return null;
                                 const ghostLeft = dateToX(ghost.start);
                                 const ghostWidth = getTaskWidth(ghost.start, ghost.end);
                                 return (
@@ -1853,94 +1871,150 @@ export function GanttChart({
                                         const isFirstSegment = segIdx === 0;
                                         const isLastSegment = segIdx === taskSegments.length - 1;
                                         
+                                        const isSegmentDragging = dragging?.segmentId === seg.id;
+                                        const tooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
+                                        
                                         return (
-                                          <Tooltip key={seg.id} delayDuration={200}>
-                                            <TooltipTrigger asChild>
-                                              <div
-                                                className={cn(
-                                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
-                                                  readOnly ? "cursor-default" : "cursor-pointer",
-                                                  "gantt-task-bar-base",
-                                                  "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                                  getDragClasses(cycle.baseTask.id, seg.id)
-                                                )}
-                                                style={{
-                                                  left: segLeft + 2,
-                                                  width: segWidth - 4,
-                                                  background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                                  boxShadow: `0 4px 12px ${sectionColor}66`,
-                                                  ...getDragStyles(cycle.baseTask.id, seg.id),
-                                                }}
-                                                onMouseEnter={(e) => {
-                                                  if (readOnly || isDraggingAny) return;
-                                                  if (closeTaskMenuTimeoutRef.current) {
-                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                    closeTaskMenuTimeoutRef.current = null;
-                                                  }
-                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                  setOpenTaskMenuId(cycle.baseTask.id);
-                                                }}
-                                                onMouseMove={(e) => {
-                                                  if (readOnly || openTaskMenuId !== cycle.baseTask.id) return;
-                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                }}
-                                                onMouseLeave={() => {
-                                                  if (readOnly) return;
-                                                  if (closeTaskMenuTimeoutRef.current) {
-                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                  }
-                                                  closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                                    setOpenTaskMenuId((current) =>
-                                                      current === cycle.baseTask.id ? null : current
-                                                    );
-                                                    setTaskMenuPos(null);
-                                                  }, 120);
-                                                }}
-                                                onMouseDown={readOnly ? undefined : (e) => {
-                                                  clickStartPosRef.current = { x: e.clientX, y: e.clientY };
-                                                  // Enable segment-level dragging
-                                                  handleDragStart(e, cycle.baseTask, 'move', seg);
-                                                }}
-                                                onMouseUp={(e) => {
-                                                  if (readOnly || !clickStartPosRef.current) return;
-                                                  const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
-                                                  const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
-                                                  if (dx < 5 && dy < 5) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
+                                          <React.Fragment key={seg.id}>
+                                            <Tooltip delayDuration={200}>
+                                              <TooltipTrigger asChild>
+                                                <div
+                                                  className={cn(
+                                                    "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
+                                                    readOnly ? "cursor-default" : "cursor-pointer",
+                                                    "gantt-task-bar-base",
+                                                    "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                                    getDragClasses(cycle.baseTask.id, seg.id)
+                                                  )}
+                                                  style={{
+                                                    left: segLeft + 2,
+                                                    width: segWidth - 4,
+                                                    background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                                    boxShadow: `0 4px 12px ${sectionColor}66`,
+                                                    ...getDragStyles(cycle.baseTask.id, seg.id),
+                                                  }}
+                                                  onMouseEnter={(e) => {
+                                                    if (readOnly || isDraggingAny) return;
+                                                    if (closeTaskMenuTimeoutRef.current) {
+                                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                                      closeTaskMenuTimeoutRef.current = null;
+                                                    }
                                                     setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                                     setOpenTaskMenuId(cycle.baseTask.id);
-                                                  }
-                                                  clickStartPosRef.current = null;
+                                                  }}
+                                                  onMouseMove={(e) => {
+                                                    if (readOnly || openTaskMenuId !== cycle.baseTask.id) return;
+                                                    setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                  }}
+                                                  onMouseLeave={() => {
+                                                    if (readOnly) return;
+                                                    if (closeTaskMenuTimeoutRef.current) {
+                                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                                    }
+                                                    closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                                      setOpenTaskMenuId((current) =>
+                                                        current === cycle.baseTask.id ? null : current
+                                                      );
+                                                      setTaskMenuPos(null);
+                                                    }, 120);
+                                                  }}
+                                                  onMouseDown={readOnly ? undefined : (e) => {
+                                                    clickStartPosRef.current = { x: e.clientX, y: e.clientY };
+                                                    // Enable segment-level dragging
+                                                    handleDragStart(e, cycle.baseTask, 'move', seg);
+                                                  }}
+                                                  onMouseUp={(e) => {
+                                                    if (readOnly || !clickStartPosRef.current) return;
+                                                    const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
+                                                    const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
+                                                    if (dx < 5 && dy < 5) {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                      setOpenTaskMenuId(cycle.baseTask.id);
+                                                    }
+                                                    clickStartPosRef.current = null;
+                                                  }}
+                                                >
+                                                  {/* Resize handles for segments */}
+                                                  {!readOnly && (
+                                                    <>
+                                                      <div
+                                                        className={cn("gantt-resize-handle gantt-resize-handle-start", isSegmentDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                                      />
+                                                      <div
+                                                        className={cn("gantt-resize-handle gantt-resize-handle-end", isSegmentDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                                      />
+                                                    </>
+                                                  )}
+                                                  <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
+                                                    <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
+                                                      {segWidth > 60 ? (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`) : ''}
+                                                    </span>
+                                                    {!readOnly && isLastSegment && segWidth > 40 && (
+                                                      <button
+                                                        className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                          setOpenTaskMenuId(cycle.baseTask.id);
+                                                        }}
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                      >
+                                                        <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </TooltipTrigger>
+                                              {!isSegmentDragging && (
+                                                <TooltipContent side="top" className="font-semibold">
+                                                  <p>{cycle.baseTask.name} - Period {segIdx + 1}</p>
+                                                  <p className="text-xs text-muted-foreground">
+                                                    {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
+                                                  </p>
+                                                </TooltipContent>
+                                              )}
+                                            </Tooltip>
+                                            
+                                            {/* Dynamic tooltip during segment drag */}
+                                            {isSegmentDragging && tooltipInfo && (
+                                              <div 
+                                                className="gantt-dynamic-tooltip"
+                                                style={{ 
+                                                  left: segLeft + segWidth / 2,
+                                                  top: '50%',
+                                                  transform: 'translate(-50%, -200%)',
                                                 }}
                                               >
-                                                <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                                  <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
-                                                    {segWidth > 60 ? (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`) : ''}
+                                                <div className="gantt-dynamic-tooltip-arrow" />
+                                                {tooltipInfo.type === 'move' ? (
+                                                  <span>
+                                                    <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                                    <span className="gantt-tooltip-separator">→</span>
+                                                    <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
                                                   </span>
-                                                  {!readOnly && isLastSegment && segWidth > 40 && (
-                                                    <button
-                                                      className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                        setOpenTaskMenuId(cycle.baseTask.id);
-                                                      }}
-                                                      onMouseDown={(e) => e.stopPropagation()}
-                                                    >
-                                                      <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
-                                                    </button>
-                                                  )}
-                                                </div>
+                                                ) : (
+                                                  <span>
+                                                    <span className="gantt-tooltip-date">
+                                                      {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                                    </span>
+                                                    {(() => {
+                                                      const durationChange = getDurationChange();
+                                                      if (durationChange && durationChange.delta !== 0) {
+                                                        return (
+                                                          <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                            {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                                          </span>
+                                                        );
+                                                      }
+                                                      return null;
+                                                    })()}
+                                                  </span>
+                                                )}
                                               </div>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top" className="font-semibold">
-                                              <p>{cycle.baseTask.name} - Period {segIdx + 1}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
-                                              </p>
-                                            </TooltipContent>
-                                          </Tooltip>
+                                            )}
+                                          </React.Fragment>
                                         );
                                       })}
                                       
@@ -2968,97 +3042,183 @@ export function GanttChart({
                                       })}
                                     </svg>
                                     
+                                    {/* Ghost elements for segment-level dragging */}
+                                    {dragging?.taskId === task.id && dragging?.segmentId && (() => {
+                                      const ghost = getGhostPosition();
+                                      if (!ghost || ghost.segmentId !== dragging.segmentId) return null;
+                                      const ghostLeft = dateToX(ghost.start);
+                                      const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                      return (
+                                        <div
+                                          className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                          style={{
+                                            left: ghostLeft + 2,
+                                            width: ghostWidth - 4,
+                                            background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                          }}
+                                        />
+                                      );
+                                    })()}
+                                    
                                     {/* Render each segment as a bar */}
                                     {taskSegments.map((seg, segIdx) => {
-                                      const segStart = safeParseDate(seg.start_date);
-                                      const segEnd = safeParseDate(seg.end_date);
+                                      const segmentPreview = getSegmentDragPreview(seg.id);
+                                      const segStart = segmentPreview ? segmentPreview.start : safeParseDate(seg.start_date);
+                                      const segEnd = segmentPreview ? segmentPreview.end : safeParseDate(seg.end_date);
                                       if (!segStart || !segEnd) return null;
                                       
                                       const segLeft = dateToX(segStart);
                                       const segWidth = getTaskWidth(segStart, segEnd);
                                       const isFirstSegment = segIdx === 0;
                                       const isLastSegment = segIdx === taskSegments.length - 1;
+                                      const isSegmentDragging = dragging?.segmentId === seg.id;
+                                      const tooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
                                       
                                       return (
-                                        <Tooltip key={seg.id} delayDuration={200}>
-                                          <TooltipTrigger asChild>
-                                            <div
-                                              className={cn(
-                                                "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar",
-                                                readOnly ? "cursor-default" : "cursor-pointer",
-                                                "gantt-task-bar-base",
-                                                "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                                isFeedback && "gantt-review-bar",
-                                                isFirstSegment && getDragClasses(task.id)
-                                              )}
-                                              style={{
-                                                left: segLeft + 2,
-                                                width: segWidth - 4,
-                                                background: isFeedback 
-                                                  ? `${sectionColor}99` 
-                                                  : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                                borderColor: isFeedback ? sectionColor : undefined,
-                                                boxShadow: `0 4px 12px ${sectionColor}66`,
-                                                ...(isFirstSegment ? getDragStyles(task.id) : {}),
-                                              }}
-                                              onMouseEnter={(e) => {
-                                                if (readOnly || isDraggingAny) return;
-                                                if (closeTaskMenuTimeoutRef.current) {
-                                                  window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                  closeTaskMenuTimeoutRef.current = null;
-                                                }
-                                                setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                setOpenTaskMenuId(task.id);
-                                              }}
-                                              onMouseMove={(e) => {
-                                                if (readOnly || openTaskMenuId !== task.id) return;
-                                                setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                              }}
-                                              onMouseLeave={() => {
-                                                if (readOnly) return;
-                                                if (closeTaskMenuTimeoutRef.current) {
-                                                  window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                }
-                                                closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                                  setOpenTaskMenuId((current) =>
-                                                    current === task.id ? null : current
-                                                  );
-                                                  setTaskMenuPos(null);
-                                                }, 120);
-                                              }}
-                                              onMouseDown={readOnly ? undefined : (e) => {
-                                                if (isFirstSegment) {
-                                                  handleDragStart(e, task, 'move');
-                                                }
+                                        <React.Fragment key={seg.id}>
+                                          <Tooltip delayDuration={200}>
+                                            <TooltipTrigger asChild>
+                                              <div
+                                                className={cn(
+                                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
+                                                  readOnly ? "cursor-default" : "cursor-pointer",
+                                                  "gantt-task-bar-base",
+                                                  "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                                  isFeedback && "gantt-review-bar",
+                                                  getDragClasses(task.id, seg.id)
+                                                )}
+                                                style={{
+                                                  left: segLeft + 2,
+                                                  width: segWidth - 4,
+                                                  background: isFeedback 
+                                                    ? `${sectionColor}99` 
+                                                    : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
+                                                  borderColor: isFeedback ? sectionColor : undefined,
+                                                  boxShadow: `0 4px 12px ${sectionColor}66`,
+                                                  ...getDragStyles(task.id, seg.id),
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                  if (readOnly || isDraggingAny) return;
+                                                  if (closeTaskMenuTimeoutRef.current) {
+                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                                    closeTaskMenuTimeoutRef.current = null;
+                                                  }
+                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                  setOpenTaskMenuId(task.id);
+                                                }}
+                                                onMouseMove={(e) => {
+                                                  if (readOnly || openTaskMenuId !== task.id) return;
+                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                }}
+                                                onMouseLeave={() => {
+                                                  if (readOnly) return;
+                                                  if (closeTaskMenuTimeoutRef.current) {
+                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                                  }
+                                                  closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                                    setOpenTaskMenuId((current) =>
+                                                      current === task.id ? null : current
+                                                    );
+                                                    setTaskMenuPos(null);
+                                                  }, 120);
+                                                }}
+                                                onMouseDown={readOnly ? undefined : (e) => {
+                                                  clickStartPosRef.current = { x: e.clientX, y: e.clientY };
+                                                  // Enable segment-level dragging for all segments
+                                                  handleDragStart(e, task, 'move', seg);
+                                                }}
+                                                onMouseUp={(e) => {
+                                                  if (readOnly || !clickStartPosRef.current) return;
+                                                  const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
+                                                  const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
+                                                  if (dx < 5 && dy < 5) {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                    setOpenTaskMenuId(task.id);
+                                                  }
+                                                  clickStartPosRef.current = null;
+                                                }}
+                                              >
+                                                {/* Resize handles for segments */}
+                                                {!readOnly && (
+                                                  <>
+                                                    <div
+                                                      className={cn("gantt-resize-handle gantt-resize-handle-start", isSegmentDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                                    />
+                                                    <div
+                                                      className={cn("gantt-resize-handle gantt-resize-handle-end", isSegmentDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                                    />
+                                                  </>
+                                                )}
+                                                <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
+                                                  <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
+                                                    {segWidth > 60 ? (isFirstSegment ? task.name : `P${segIdx + 1}`) : ''}
+                                                  </span>
+                                                  {!readOnly && isLastSegment && segWidth > 40 && (
+                                                    <button
+                                                      className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                        setOpenTaskMenuId(task.id);
+                                                      }}
+                                                      onMouseDown={(e) => e.stopPropagation()}
+                                                    >
+                                                      <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </TooltipTrigger>
+                                            {!isSegmentDragging && (
+                                              <TooltipContent side="top" className="font-semibold">
+                                                <p>{task.name} - Period {segIdx + 1}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                  {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
+                                                </p>
+                                              </TooltipContent>
+                                            )}
+                                          </Tooltip>
+                                          
+                                          {/* Dynamic tooltip during segment drag */}
+                                          {isSegmentDragging && tooltipInfo && (
+                                            <div 
+                                              className="gantt-dynamic-tooltip"
+                                              style={{ 
+                                                left: segLeft + segWidth / 2,
+                                                top: '50%',
+                                                transform: 'translate(-50%, -200%)',
                                               }}
                                             >
-                                              <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                                <span className="text-xs font-semibold text-white truncate drop-shadow-md tracking-wide text-center">
-                                                  {segWidth > 60 ? (isFirstSegment ? task.name : `P${segIdx + 1}`) : ''}
+                                              <div className="gantt-dynamic-tooltip-arrow" />
+                                              {tooltipInfo.type === 'move' ? (
+                                                <span>
+                                                  <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                                  <span className="gantt-tooltip-separator">→</span>
+                                                  <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
                                                 </span>
-                                                {!readOnly && isLastSegment && segWidth > 40 && (
-                                                  <button
-                                                    className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                      setOpenTaskMenuId(task.id);
-                                                    }}
-                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                  >
-                                                    <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
-                                                  </button>
-                                                )}
-                                              </div>
+                                              ) : (
+                                                <span>
+                                                  <span className="gantt-tooltip-date">
+                                                    {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                                  </span>
+                                                  {(() => {
+                                                    const durationChange = getDurationChange();
+                                                    if (durationChange && durationChange.delta !== 0) {
+                                                      return (
+                                                        <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                          {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                                        </span>
+                                                      );
+                                                    }
+                                                    return null;
+                                                  })()}
+                                                </span>
+                                              )}
                                             </div>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="top" className="font-semibold">
-                                            <p>{task.name} - Period {segIdx + 1}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
-                                            </p>
-                                          </TooltipContent>
-                                        </Tooltip>
+                                          )}
+                                        </React.Fragment>
                                       );
                                     })}
                                     
