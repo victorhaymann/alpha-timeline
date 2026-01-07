@@ -17,11 +17,13 @@ import { AddTaskDialog } from './AddTaskDialog';
 import { 
   RefreshCw,
   Loader2,
-  Undo2
+  Undo2,
+  Wrench
 } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
+import { normalizeTaskDates, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib } from '@/lib/workingDays';
 
 // Maximum number of undo states to keep
 const MAX_UNDO_STACK_SIZE = 20;
@@ -53,11 +55,13 @@ export function TimelineEditor({
 }: TimelineEditorProps) {
   const { toast } = useToast();
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isFixingWeekends, setIsFixingWeekends] = useState(false);
   const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(null);
   const [addMeetingDialogOpen, setAddMeetingDialogOpen] = useState(false);
   const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
   const [isUndoing, setIsUndoing] = useState(false);
+  const hasRunWeekendFixRef = useRef(false);
   
   // Undo stack - stores previous task states
   const undoStackRef = useRef<UndoState[]>([]);
@@ -154,16 +158,29 @@ export function TimelineEditor({
     saveToUndoStack(updateDescription);
     
     try {
+      // Normalize dates if they're being updated
+      let normalizedUpdates = { ...updates };
+      if (updates.start_date && updates.end_date) {
+        const libMask = getLibMask();
+        const normalized = normalizeTaskDates(
+          new Date(updates.start_date),
+          new Date(updates.end_date),
+          libMask
+        );
+        normalizedUpdates.start_date = format(normalized.start, 'yyyy-MM-dd');
+        normalizedUpdates.end_date = format(normalized.end, 'yyyy-MM-dd');
+      }
+      
       const { error } = await supabase
         .from('tasks')
-        .update(updates)
+        .update(normalizedUpdates)
         .eq('id', taskId);
 
       if (error) throw error;
 
       // Update local state
       onTasksChange(
-        tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+        tasks.map(t => t.id === taskId ? { ...t, ...normalizedUpdates } : t)
       );
     } catch (error: any) {
       console.error('Error updating task:', error);
@@ -321,6 +338,12 @@ export function TimelineEditor({
         .filter(t => t.phase_id === selectedPhaseId)
         .reduce((max, t) => Math.max(max, t.order_index), -1);
 
+      // Normalize dates to exclude weekends
+      const libMask = getLibMask();
+      const startDate = new Date(taskData.start_date);
+      const endDate = new Date(taskData.end_date);
+      const normalized = normalizeTaskDates(startDate, endDate, libMask);
+      
       const { error } = await supabase
         .from('tasks')
         .insert({
@@ -329,8 +352,8 @@ export function TimelineEditor({
           name: taskData.name,
           task_type: taskData.task_type,
           client_visible: taskData.client_visible,
-          start_date: taskData.start_date,
-          end_date: taskData.end_date,
+          start_date: format(normalized.start, 'yyyy-MM-dd'),
+          end_date: format(normalized.end, 'yyyy-MM-dd'),
           order_index: maxOrder + 1,
           status: 'pending',
           weight_percent: 0,
@@ -694,6 +717,110 @@ export function TimelineEditor({
     }
   };
 
+  /**
+   * Convert project's legacy working days mask to the new library format.
+   * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
+   * New: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
+   */
+  const getLibMask = useCallback(() => {
+    const oldMask = project.working_days_mask ?? 31; // Default Mon-Fri
+    let newMask = 0;
+    if (oldMask & 1) newMask |= (1 << 1);   // Mon
+    if (oldMask & 2) newMask |= (1 << 2);   // Tue
+    if (oldMask & 4) newMask |= (1 << 3);   // Wed
+    if (oldMask & 8) newMask |= (1 << 4);   // Thu
+    if (oldMask & 16) newMask |= (1 << 5);  // Fri
+    if (oldMask & 32) newMask |= (1 << 6);  // Sat
+    if (oldMask & 64) newMask |= (1 << 0);  // Sun
+    return newMask;
+  }, [project.working_days_mask]);
+
+  // Fix tasks with weekend dates
+  const handleFixWeekends = useCallback(async () => {
+    setIsFixingWeekends(true);
+    
+    try {
+      const libMask = getLibMask();
+      const tasksToFix: { id: string; start: Date; end: Date }[] = [];
+      
+      for (const task of tasks) {
+        if (!task.start_date || !task.end_date) continue;
+        
+        const startDate = new Date(task.start_date);
+        const endDate = new Date(task.end_date);
+        
+        // Check if this task has any non-working days
+        if (hasNonWorkingDays(startDate, endDate, libMask)) {
+          const normalized = normalizeTaskDates(startDate, endDate, libMask);
+          if (normalized.changed) {
+            tasksToFix.push({
+              id: task.id,
+              start: normalized.start,
+              end: normalized.end,
+            });
+          }
+        }
+      }
+      
+      if (tasksToFix.length === 0) {
+        toast({
+          title: 'No changes needed',
+          description: 'All tasks are already on working days only.',
+        });
+        setIsFixingWeekends(false);
+        return;
+      }
+      
+      // Save to undo stack before making changes
+      saveToUndoStack(`Fix ${tasksToFix.length} weekend tasks`);
+      
+      // Update database
+      for (const fix of tasksToFix) {
+        await supabase
+          .from('tasks')
+          .update({
+            start_date: format(fix.start, 'yyyy-MM-dd'),
+            end_date: format(fix.end, 'yyyy-MM-dd'),
+          })
+          .eq('id', fix.id);
+      }
+      
+      toast({
+        title: 'Weekends fixed',
+        description: `Updated ${tasksToFix.length} task(s) to exclude weekends.`,
+      });
+      
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error fixing weekends:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fix weekend dates.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFixingWeekends(false);
+    }
+  }, [tasks, getLibMask, saveToUndoStack, onRefresh, toast]);
+
+  // Auto-fix weekends on first load
+  useEffect(() => {
+    if (hasRunWeekendFixRef.current || tasks.length === 0) return;
+    hasRunWeekendFixRef.current = true;
+    
+    // Check if any tasks need fixing
+    const libMask = getLibMask();
+    const needsFix = tasks.some(task => {
+      if (!task.start_date || !task.end_date) return false;
+      return hasNonWorkingDays(new Date(task.start_date), new Date(task.end_date), libMask);
+    });
+    
+    if (needsFix) {
+      // Auto-run the fix
+      handleFixWeekends();
+    }
+  }, [tasks, getLibMask, handleFixWeekends]);
+
   // If a render prop is provided, call it with the handler; otherwise render default button
   const regenerateButtonElement = renderRegenerateButton 
     ? renderRegenerateButton({ onClick: handleRegenerate, isLoading: isRegenerating })
@@ -712,6 +839,20 @@ export function TimelineEditor({
             <Undo2 className="w-4 h-4" />
           )}
           Undo
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleFixWeekends}
+          disabled={isFixingWeekends}
+          className="gap-2"
+          title="Fix any tasks that span weekends"
+        >
+          {isFixingWeekends ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Wrench className="w-4 h-4" />
+          )}
+          Fix Weekends
         </Button>
         <Button
           variant="outline"

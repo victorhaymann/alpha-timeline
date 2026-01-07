@@ -8,9 +8,16 @@
  * - Feedback settings (meetings, milestones, buffers)
  */
 
-import { addDays, differenceInCalendarDays, format, parse, isAfter, isBefore, max } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parse, isAfter, isBefore, max, getDay } from 'date-fns';
 import { FeedbackSettings } from '@/components/steps/FeedbackConfig';
 import { PhaseCategory } from '@/types/database';
+import {
+  isWorkingDay as isWorkingDayFromLib,
+  nextWorkingDay as nextWorkingDayFromLib,
+  addWorkingDays as addWorkingDaysFromLib,
+  countWorkingDays as countWorkingDaysFromLib,
+  DEFAULT_WORKING_DAYS_MASK,
+} from './workingDays';
 
 // Default phase weights (must sum to 100)
 export const DEFAULT_PHASE_WEIGHTS: Record<PhaseCategory, number> = {
@@ -102,30 +109,39 @@ export interface ScheduleOutput {
 }
 
 /**
+ * Convert our legacy mask format to the new library format.
+ * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
+ * New (JS getDay): Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+ * New mask: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
+ */
+function convertMaskToLibFormat(oldMask: number): number {
+  // Old format: Mon=1(bit0), Tue=2(bit1), Wed=4(bit2), Thu=8(bit3), Fri=16(bit4), Sat=32(bit5), Sun=64(bit6)
+  // New format: Sun=1(bit0), Mon=2(bit1), Tue=4(bit2), Wed=8(bit3), Thu=16(bit4), Fri=32(bit5), Sat=64(bit6)
+  let newMask = 0;
+  if (oldMask & 1) newMask |= (1 << 1);   // Mon
+  if (oldMask & 2) newMask |= (1 << 2);   // Tue
+  if (oldMask & 4) newMask |= (1 << 3);   // Wed
+  if (oldMask & 8) newMask |= (1 << 4);   // Thu
+  if (oldMask & 16) newMask |= (1 << 5);  // Fri
+  if (oldMask & 32) newMask |= (1 << 6);  // Sat
+  if (oldMask & 64) newMask |= (1 << 0);  // Sun
+  return newMask;
+}
+
+/**
  * Check if a given date is a working day based on the mask
  */
 function isWorkingDay(date: Date, mask: number): boolean {
-  const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  // Convert to our mask format: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
-  const dayBit = dayOfWeek === 0 ? 64 : (1 << (dayOfWeek - 1));
-  return (mask & dayBit) !== 0;
+  const libMask = convertMaskToLibFormat(mask);
+  return isWorkingDayFromLib(date, libMask);
 }
 
 /**
  * Count working days between two dates (inclusive)
  */
 function countWorkingDays(startDate: Date, endDate: Date, mask: number): number {
-  let count = 0;
-  let current = new Date(startDate);
-  
-  while (current <= endDate) {
-    if (isWorkingDay(current, mask)) {
-      count++;
-    }
-    current = addDays(current, 1);
-  }
-  
-  return count;
+  const libMask = convertMaskToLibFormat(mask);
+  return countWorkingDaysFromLib(startDate, endDate, libMask);
 }
 
 /**
@@ -133,29 +149,16 @@ function countWorkingDays(startDate: Date, endDate: Date, mask: number): number 
  */
 function addWorkingDays(startDate: Date, workingDays: number, mask: number): Date {
   if (workingDays <= 0) return new Date(startDate);
-  
-  let current = new Date(startDate);
-  let remaining = workingDays;
-  
-  while (remaining > 0) {
-    current = addDays(current, 1);
-    if (isWorkingDay(current, mask)) {
-      remaining--;
-    }
-  }
-  
-  return current;
+  const libMask = convertMaskToLibFormat(mask);
+  return addWorkingDaysFromLib(startDate, workingDays, libMask);
 }
 
 /**
  * Find the next working day on or after the given date
  */
 function nextWorkingDay(date: Date, mask: number): Date {
-  let current = new Date(date);
-  while (!isWorkingDay(current, mask)) {
-    current = addDays(current, 1);
-  }
-  return current;
+  const libMask = convertMaskToLibFormat(mask);
+  return nextWorkingDayFromLib(date, libMask);
 }
 
 /**
