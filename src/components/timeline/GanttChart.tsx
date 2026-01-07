@@ -2081,18 +2081,26 @@ export function GanttChart({
                                 
                                 return (
                                 <>
-                                <Popover open={openTaskMenuId === cycle.reworkTask!.id}>
-                                  {taskMenuPos && openTaskMenuId === cycle.reworkTask!.id && (
-                                    <PopoverAnchor
-                                      style={{
-                                        position: 'fixed',
-                                        left: taskMenuPos.x,
-                                        top: taskMenuPos.y,
-                                        width: 1,
-                                        height: 1,
-                                        pointerEvents: 'none',
-                                      }}
-                                    />
+                                <Popover 
+                                  open={openTaskMenuId === cycle.reworkTask!.id}
+                                  onOpenChange={(open) => {
+                                    setOpenTaskMenuId(open ? cycle.reworkTask!.id : null);
+                                    if (!open) setTaskMenuPos(null);
+                                  }}
+                                >
+                                  {openTaskMenuId === cycle.reworkTask!.id && taskMenuPos && (
+                                    <PopoverAnchor asChild>
+                                      <div
+                                        style={{
+                                          position: 'fixed',
+                                          left: taskMenuPos.x,
+                                          top: taskMenuPos.y,
+                                          width: 1,
+                                          height: 1,
+                                          pointerEvents: 'none',
+                                        }}
+                                      />
+                                    </PopoverAnchor>
                                   )}
                                   <Tooltip delayDuration={200}>
                                     <TooltipTrigger asChild>
@@ -2368,90 +2376,150 @@ export function GanttChart({
                                 
                                 return (
                                 <>
-                                <Tooltip delayDuration={200}>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
-                                        "gantt-review-bar",
-                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                        getDragClasses(cycle.reviewTask.id)
-                                      )}
-                                      style={{
-                                        left: reviewLeft + 2,
-                                        width: reviewWidth - 4,
-                                        backgroundColor: `${sectionColor}40`,
-                                        borderColor: sectionColor,
-                                        boxShadow: `0 2px 8px ${sectionColor}33`,
-                                        ...getDragStyles(cycle.reviewTask.id),
-                                      }}
-                                      onMouseEnter={(e) => {
-                                        if (readOnly || isDraggingAny) return;
-                                        if (closeTaskMenuTimeoutRef.current) {
-                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                          closeTaskMenuTimeoutRef.current = null;
-                                        }
-                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                        setOpenTaskMenuId(cycle.reviewTask!.id);
-                                      }}
-                                      onMouseMove={(e) => {
-                                        if (readOnly || openTaskMenuId !== cycle.reviewTask!.id) return;
-                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                      }}
-                                      onMouseLeave={() => {
-                                        if (readOnly) return;
-                                        if (closeTaskMenuTimeoutRef.current) {
-                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                        }
-                                        closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                          setOpenTaskMenuId((current) =>
-                                            current === cycle.reviewTask!.id ? null : current
-                                          );
-                                          setTaskMenuPos(null);
-                                        }, 120);
-                                      }}
-                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
-                                    >
-                                      {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
-                                      {!readOnly && (
-                                        <>
-                                          <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-start", isReviewDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                          />
-                                          <div
-                                            className={cn("gantt-resize-handle gantt-resize-handle-end", isReviewDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                          />
-                                        </>
-                                      )}
-                                      <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
-                                        <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide flex-1 text-center" style={{ color: sectionColor }}>
-                                          {reviewWidth > 80 ? 'Client Review' : ''}
-                                        </span>
-                                        {!readOnly && reviewWidth > 40 && (
-                                          <button
-                                            className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                              setOpenTaskMenuId(cycle.reviewTask!.id);
-                                            }}
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                          >
-                                            <MoreHorizontal className="w-4 h-4 drop-shadow-md" style={{ color: sectionColor }} />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </TooltipTrigger>
-                                  {!isReviewDragging && (
-                                    <TooltipContent side="top" className="font-semibold">
-                                      <p>{cycle.reviewTask.name}</p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {safeFormat(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${safeFormat(reviewEnd, 'MMM d')}` : ''}
-                                      </p>
-                                    </TooltipContent>
+                                <Popover 
+                                  open={openTaskMenuId === cycle.reviewTask!.id}
+                                  onOpenChange={(open) => {
+                                    setOpenTaskMenuId(open ? cycle.reviewTask!.id : null);
+                                    if (!open) setTaskMenuPos(null);
+                                  }}
+                                >
+                                  {openTaskMenuId === cycle.reviewTask!.id && taskMenuPos && (
+                                    <PopoverAnchor asChild>
+                                      <div
+                                        style={{
+                                          position: 'fixed',
+                                          left: taskMenuPos.x,
+                                          top: taskMenuPos.y,
+                                          width: 1,
+                                          height: 1,
+                                          pointerEvents: 'none',
+                                        }}
+                                      />
+                                    </PopoverAnchor>
                                   )}
-                                </Tooltip>
+
+                                  <Tooltip delayDuration={200}>
+                                    <TooltipTrigger asChild>
+                                      <div
+                                        className={cn(
+                                          "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
+                                          "gantt-review-bar",
+                                          "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                          getDragClasses(cycle.reviewTask.id)
+                                        )}
+                                        style={{
+                                          left: reviewLeft + 2,
+                                          width: reviewWidth - 4,
+                                          backgroundColor: `${sectionColor}40`,
+                                          borderColor: sectionColor,
+                                          boxShadow: `0 2px 8px ${sectionColor}33`,
+                                          ...getDragStyles(cycle.reviewTask.id),
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (readOnly || isDraggingAny) return;
+                                          if (closeTaskMenuTimeoutRef.current) {
+                                            window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                            closeTaskMenuTimeoutRef.current = null;
+                                          }
+                                          setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                          setOpenTaskMenuId(cycle.reviewTask!.id);
+                                        }}
+                                        onMouseMove={(e) => {
+                                          if (readOnly || openTaskMenuId !== cycle.reviewTask!.id) return;
+                                          setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                        }}
+                                        onMouseLeave={() => {
+                                          if (readOnly) return;
+                                          if (closeTaskMenuTimeoutRef.current) {
+                                            window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                          }
+                                          closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                            setOpenTaskMenuId((current) =>
+                                              current === cycle.reviewTask!.id ? null : current
+                                            );
+                                            setTaskMenuPos(null);
+                                          }, 120);
+                                        }}
+                                        onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
+                                      >
+                                        {/* Resize handles - purely visual, edge detection handled in handleDragStart */}
+                                        {!readOnly && (
+                                          <>
+                                            <div
+                                              className={cn("gantt-resize-handle gantt-resize-handle-start", isReviewDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
+                                            />
+                                            <div
+                                              className={cn("gantt-resize-handle gantt-resize-handle-end", isReviewDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
+                                            />
+                                          </>
+                                        )}
+                                        <div className="absolute inset-0 flex items-center justify-between px-2 overflow-hidden">
+                                          <span className="text-xs font-semibold truncate drop-shadow-sm tracking-wide flex-1 text-center" style={{ color: sectionColor }}>
+                                            {reviewWidth > 80 ? 'Client Review' : ''}
+                                          </span>
+                                          {!readOnly && reviewWidth > 40 && (
+                                            <button
+                                              className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setTaskMenuPos({ x: e.clientX, y: e.clientY });
+                                                setOpenTaskMenuId(cycle.reviewTask!.id);
+                                              }}
+                                              onMouseDown={(e) => e.stopPropagation()}
+                                            >
+                                              <MoreHorizontal className="w-4 h-4 drop-shadow-md" style={{ color: sectionColor }} />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </TooltipTrigger>
+                                    {!isReviewDragging && (
+                                      <TooltipContent side="top" className="font-semibold">
+                                        <p>{cycle.reviewTask.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {safeFormat(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${safeFormat(reviewEnd, 'MMM d')}` : ''}
+                                        </p>
+                                      </TooltipContent>
+                                    )}
+                                  </Tooltip>
+                                  
+                                  <PopoverContent
+                                    className="w-40 p-1 animate-enter"
+                                    side="bottom"
+                                    align="start"
+                                    sideOffset={8}
+                                    onMouseEnter={() => {
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                        closeTaskMenuTimeoutRef.current = null;
+                                      }
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (closeTaskMenuTimeoutRef.current) {
+                                        window.clearTimeout(closeTaskMenuTimeoutRef.current);
+                                      }
+                                      closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
+                                        setOpenTaskMenuId((current) => (current === cycle.reviewTask!.id ? null : current));
+                                        setTaskMenuPos(null);
+                                      }, 120);
+                                    }}
+                                  >
+                                    <div className="flex flex-col">
+                                      {onDeleteTask && (
+                                        <button
+                                          onClick={() => {
+                                            onDeleteTask(cycle.reviewTask!.id);
+                                            setOpenTaskMenuId(null);
+                                          }}
+                                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                          Delete Review
+                                        </button>
+                                      )}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                                 
                                 {/* Dynamic tooltip during drag */}
                                 {isReviewDragging && tooltipInfo && (
