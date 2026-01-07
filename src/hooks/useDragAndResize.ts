@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { addDays, differenceInDays, format } from 'date-fns';
-import { Task } from '@/types/database';
+import { Task, TaskSegment } from '@/types/database';
 
 export interface DragState {
   taskId: string;
+  segmentId?: string; // Optional: for segment-level drag
   type: 'move' | 'resize-start' | 'resize-end';
   startX: number;
   originalStart: Date;
@@ -12,6 +13,8 @@ export interface DragState {
 }
 
 export interface DragPreview {
+  taskId?: string;
+  segmentId?: string;
   start: Date;
   end: Date;
 }
@@ -19,6 +22,7 @@ export interface DragPreview {
 interface UseDragAndResizeOptions {
   columnWidth: number;
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
+  onSegmentUpdate?: (segmentId: string, updates: Partial<TaskSegment>, taskId: string) => void;
   readOnly?: boolean;
   /**
    * Optional working-day predicate. When provided, dragging/resizing will ignore weekends
@@ -37,24 +41,27 @@ interface UseDragAndResizeReturn {
   dragPreview: DragPreview | null;
   justDropped: string | null;
   isDraggingAny: boolean;
-  handleDragStart: (e: React.MouseEvent, task: Task, type: DragState['type']) => void;
-  getDragStyles: (taskId: string) => React.CSSProperties;
-  getDragClasses: (taskId: string) => string;
+  handleDragStart: (e: React.MouseEvent, task: Task, type: DragState['type'], segment?: TaskSegment) => void;
+  getDragStyles: (taskId: string, segmentId?: string) => React.CSSProperties;
+  getDragClasses: (taskId: string, segmentId?: string) => string;
   getResizeHandleClasses: (position: 'start' | 'end') => string;
   getDurationChange: () => { original: number; current: number; delta: number } | null;
-  getGhostPosition: () => { start: Date; end: Date } | null;
+  getGhostPosition: () => { start: Date; end: Date; segmentId?: string } | null;
   getDynamicTooltipInfo: () => {
     type: 'move' | 'resize-start' | 'resize-end';
     start: Date;
     end: Date;
     originalStart: Date;
     originalEnd: Date;
+    segmentId?: string;
   } | null;
+  getSegmentDragPreview: (segmentId: string) => DragPreview | null;
 }
 
 export function useDragAndResize({
   columnWidth,
   onTaskUpdate,
+  onSegmentUpdate,
   readOnly = false,
   isWorkingDay,
   columnsAreWeeks = false,
@@ -62,6 +69,7 @@ export function useDragAndResize({
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [pendingDrag, setPendingDrag] = useState<{
     task: Task;
+    segment?: TaskSegment;
     type: DragState['type'];
     startX: number;
     startY: number;
@@ -70,7 +78,7 @@ export function useDragAndResize({
     originalDuration: number;
   } | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
-  const [justDropped, setJustDropped] = useState<string | null>(null);
+  const [justDropped, setJustDropped] = useState<string | null>(null); // Can be taskId or segmentId
   const animationFrameRef = useRef<number | null>(null);
 
   const snapToWorkingDay = useCallback(
@@ -137,14 +145,19 @@ export function useDragAndResize({
   // Handle drag start with automatic edge detection
   // - resize-start / resize-end: start immediately
   // - move: wait for a small movement threshold so clicks can be used for menus
+  // - segment: optional TaskSegment for segment-level dragging
   const handleDragStart = useCallback(
-    (e: React.MouseEvent, task: Task, type: DragState['type']) => {
+    (e: React.MouseEvent, task: Task, type: DragState['type'], segment?: TaskSegment) => {
       if (readOnly) return;
-      if (!task.start_date || !task.end_date) return;
+      
+      // Use segment dates if provided, otherwise use task dates
+      const startDateStr = segment?.start_date || task.start_date;
+      const endDateStr = segment?.end_date || task.end_date;
+      if (!startDateStr || !endDateStr) return;
 
       // Auto-detect resize intent based on click position relative to task bar edges
       const EDGE_THRESHOLD = 12; // pixels from edge to trigger resize
-      const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base');
+      const taskBarElement = (e.target as HTMLElement).closest('.gantt-task-bar-base, .gantt-segment-bar');
 
       if (taskBarElement && type === 'move') {
         const rect = taskBarElement.getBoundingClientRect();
@@ -157,8 +170,8 @@ export function useDragAndResize({
         }
       }
 
-      const startDate = new Date(task.start_date);
-      const endDate = new Date(task.end_date);
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
       const originalDuration = countDurationDays(startDate, endDate);
 
       // Resizes should behave exactly as before (immediate drag start)
@@ -170,19 +183,26 @@ export function useDragAndResize({
 
         setDragging({
           taskId: task.id,
+          segmentId: segment?.id,
           type,
           startX: e.clientX,
           originalStart: startDate,
           originalEnd: endDate,
           originalDuration,
         });
-        setDragPreview({ start: startDate, end: endDate });
+        setDragPreview({ 
+          taskId: task.id,
+          segmentId: segment?.id,
+          start: startDate, 
+          end: endDate 
+        });
         return;
       }
 
       // Move: arm a pending drag, but do NOT preventDefault so a click can still open menus
       setPendingDrag({
         task,
+        segment,
         type,
         startX: e.clientX,
         startY: e.clientY,
@@ -215,13 +235,19 @@ export function useDragAndResize({
       document.body.classList.add('gantt-dragging-move');
       setDragging({
         taskId: pendingDrag.task.id,
+        segmentId: pendingDrag.segment?.id,
         type: 'move',
         startX: pendingDrag.startX,
         originalStart: pendingDrag.originalStart,
         originalEnd: pendingDrag.originalEnd,
         originalDuration: pendingDrag.originalDuration,
       });
-      setDragPreview({ start: pendingDrag.originalStart, end: pendingDrag.originalEnd });
+      setDragPreview({ 
+        taskId: pendingDrag.task.id,
+        segmentId: pendingDrag.segment?.id,
+        start: pendingDrag.originalStart, 
+        end: pendingDrag.originalEnd 
+      });
       setPendingDrag(null);
     };
 
@@ -255,6 +281,8 @@ export function useDragAndResize({
 
         if (dragging.type === 'move') {
           setDragPreview({
+            taskId: dragging.taskId,
+            segmentId: dragging.segmentId,
             start: shiftDateByColumns(dragging.originalStart, deltaColumns),
             end: shiftDateByColumns(dragging.originalEnd, deltaColumns),
           });
@@ -262,6 +290,8 @@ export function useDragAndResize({
           const newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
           if (newEnd >= dragging.originalStart) {
             setDragPreview({
+              taskId: dragging.taskId,
+              segmentId: dragging.segmentId,
               start: dragging.originalStart,
               end: newEnd,
             });
@@ -270,6 +300,8 @@ export function useDragAndResize({
           const newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
           if (newStart <= dragging.originalEnd) {
             setDragPreview({
+              taskId: dragging.taskId,
+              segmentId: dragging.segmentId,
               start: newStart,
               end: dragging.originalEnd,
             });
@@ -286,8 +318,9 @@ export function useDragAndResize({
     document.body.classList.remove('gantt-dragging-move', 'gantt-dragging-resize');
 
     if (dragging && dragPreview) {
-      // Trigger drop settle animation
-      setJustDropped(dragging.taskId);
+      // Trigger drop settle animation - use segmentId if available, otherwise taskId
+      const dropId = dragging.segmentId || dragging.taskId;
+      setJustDropped(dropId);
       setTimeout(() => setJustDropped(null), 500);
 
       // Only update if position changed
@@ -297,16 +330,24 @@ export function useDragAndResize({
         format(dragPreview.end, 'yyyy-MM-dd') !== format(dragging.originalEnd, 'yyyy-MM-dd');
 
       if (startChanged || endChanged) {
-        onTaskUpdate(dragging.taskId, {
-          start_date: format(dragPreview.start, 'yyyy-MM-dd'),
-          end_date: format(dragPreview.end, 'yyyy-MM-dd'),
-        });
+        // If dragging a segment, update segment; otherwise update task
+        if (dragging.segmentId && onSegmentUpdate) {
+          onSegmentUpdate(dragging.segmentId, {
+            start_date: format(dragPreview.start, 'yyyy-MM-dd'),
+            end_date: format(dragPreview.end, 'yyyy-MM-dd'),
+          }, dragging.taskId);
+        } else {
+          onTaskUpdate(dragging.taskId, {
+            start_date: format(dragPreview.start, 'yyyy-MM-dd'),
+            end_date: format(dragPreview.end, 'yyyy-MM-dd'),
+          });
+        }
       }
     }
 
     setDragging(null);
     setDragPreview(null);
-  }, [dragging, dragPreview, onTaskUpdate]);
+  }, [dragging, dragPreview, onTaskUpdate, onSegmentUpdate]);
 
   // Attach global mouse listeners when dragging
   useEffect(() => {
@@ -325,10 +366,14 @@ export function useDragAndResize({
   }, [dragging, handleDragMove, handleDragEnd]);
 
 
-  // Get animation styles for a task
-  const getDragStyles = useCallback((taskId: string): React.CSSProperties => {
-    const isBeingDragged = dragging?.taskId === taskId;
-    const wasJustDropped = justDropped === taskId;
+  // Get animation styles for a task or segment
+  const getDragStyles = useCallback((taskId: string, segmentId?: string): React.CSSProperties => {
+    const isBeingDragged = segmentId 
+      ? dragging?.segmentId === segmentId 
+      : (dragging?.taskId === taskId && !dragging?.segmentId);
+    const wasJustDropped = segmentId 
+      ? justDropped === segmentId 
+      : justDropped === taskId;
 
     if (isBeingDragged) {
       return {
@@ -357,6 +402,7 @@ export function useDragAndResize({
     return {
       start: dragging.originalStart,
       end: dragging.originalEnd,
+      segmentId: dragging.segmentId,
     };
   }, [dragging]);
 
@@ -369,18 +415,23 @@ export function useDragAndResize({
       end: dragPreview.end,
       originalStart: dragging.originalStart,
       originalEnd: dragging.originalEnd,
+      segmentId: dragging.segmentId,
     };
   }, [dragging, dragPreview]);
 
-  // Get animation classes for a task
-  const getDragClasses = useCallback((taskId: string): string => {
-    const isBeingDragged = dragging?.taskId === taskId;
-    const wasJustDropped = justDropped === taskId;
+  // Get animation classes for a task or segment
+  const getDragClasses = useCallback((taskId: string, segmentId?: string): string => {
+    const isBeingDragged = segmentId 
+      ? dragging?.segmentId === segmentId 
+      : (dragging?.taskId === taskId && !dragging?.segmentId);
+    const wasJustDropped = segmentId 
+      ? justDropped === segmentId 
+      : justDropped === taskId;
     const classes: string[] = [];
 
     if (isBeingDragged) {
       classes.push('gantt-task-dragging');
-      if (dragging.type === 'move') {
+      if (dragging?.type === 'move') {
         classes.push('animate-drag-lift');
       }
     }
@@ -415,6 +466,12 @@ export function useDragAndResize({
     return { original, current, delta };
   }, [dragging, dragPreview, countDurationDays]);
 
+  // Get segment drag preview for a specific segment
+  const getSegmentDragPreview = useCallback((segmentId: string): DragPreview | null => {
+    if (!dragPreview || dragPreview.segmentId !== segmentId) return null;
+    return dragPreview;
+  }, [dragPreview]);
+
   return {
     dragging,
     dragPreview,
@@ -427,5 +484,6 @@ export function useDragAndResize({
     getDurationChange,
     getGhostPosition,
     getDynamicTooltipInfo,
+    getSegmentDragPreview,
   };
 }

@@ -486,6 +486,13 @@ export function GanttChart({
 
   const chartWidth = groupedColumns.length * columnWidth;
 
+  // Wrapper for segment updates that syncs task dates after segment change
+  const handleSegmentUpdate = useCallback((segmentId: string, updates: Partial<TaskSegment>, taskId: string) => {
+    if (onUpdateSegment) {
+      onUpdateSegment(segmentId, updates);
+    }
+  }, [onUpdateSegment]);
+
   // Drag and drop hook
   const {
     dragging,
@@ -499,9 +506,11 @@ export function GanttChart({
     getResizeHandleClasses,
     getGhostPosition,
     getDynamicTooltipInfo,
+    getSegmentDragPreview,
   } = useDragAndResize({
     columnWidth,
     onTaskUpdate,
+    onSegmentUpdate: handleSegmentUpdate,
     readOnly,
     isWorkingDay,
     columnsAreWeeks: viewMode === 'project',
@@ -1834,8 +1843,9 @@ export function GanttChart({
                                       
                                       {/* Render each segment as a bar */}
                                       {taskSegments.map((seg, segIdx) => {
-                                        const segStart = safeParseDate(seg.start_date);
-                                        const segEnd = safeParseDate(seg.end_date);
+                                        const segmentPreview = getSegmentDragPreview(seg.id);
+                                        const segStart = segmentPreview ? segmentPreview.start : safeParseDate(seg.start_date);
+                                        const segEnd = segmentPreview ? segmentPreview.end : safeParseDate(seg.end_date);
                                         if (!segStart || !segEnd) return null;
                                         
                                         const segLeft = dateToX(segStart);
@@ -1848,18 +1858,18 @@ export function GanttChart({
                                             <TooltipTrigger asChild>
                                               <div
                                                 className={cn(
-                                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar",
+                                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
                                                   readOnly ? "cursor-default" : "cursor-pointer",
                                                   "gantt-task-bar-base",
                                                   "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                                  isFirstSegment && getDragClasses(cycle.baseTask.id)
+                                                  getDragClasses(cycle.baseTask.id, seg.id)
                                                 )}
                                                 style={{
                                                   left: segLeft + 2,
                                                   width: segWidth - 4,
                                                   background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                                                   boxShadow: `0 4px 12px ${sectionColor}66`,
-                                                  ...(isFirstSegment ? getDragStyles(cycle.baseTask.id) : {}),
+                                                  ...getDragStyles(cycle.baseTask.id, seg.id),
                                                 }}
                                                 onMouseEnter={(e) => {
                                                   if (readOnly || isDraggingAny) return;
@@ -1888,10 +1898,8 @@ export function GanttChart({
                                                 }}
                                                 onMouseDown={readOnly ? undefined : (e) => {
                                                   clickStartPosRef.current = { x: e.clientX, y: e.clientY };
-                                                  // For segments, we could enable segment-level dragging in the future
-                                                  if (isFirstSegment) {
-                                                    handleDragStart(e, cycle.baseTask, 'move');
-                                                  }
+                                                  // Enable segment-level dragging
+                                                  handleDragStart(e, cycle.baseTask, 'move', seg);
                                                 }}
                                                 onMouseUp={(e) => {
                                                   if (readOnly || !clickStartPosRef.current) return;
