@@ -31,6 +31,7 @@ const MAX_UNDO_STACK_SIZE = 20;
 
 interface UndoState {
   tasks: Task[];
+  segments: TaskSegment[];
   description: string;
 }
 
@@ -84,6 +85,7 @@ export function TimelineEditor({
   const saveToUndoStack = useCallback((description: string) => {
     const newState: UndoState = {
       tasks: JSON.parse(JSON.stringify(tasks)), // Deep clone
+      segments: JSON.parse(JSON.stringify(segments)), // Deep clone segments too
       description,
     };
     
@@ -92,7 +94,7 @@ export function TimelineEditor({
       newState,
     ];
     setUndoStackLength(undoStackRef.current.length);
-  }, [tasks]);
+  }, [tasks, segments]);
 
   // Undo the last change
   const handleUndo = useCallback(async () => {
@@ -120,8 +122,36 @@ export function TimelineEditor({
           .eq('id', task.id);
       }
       
+      // Restore segments to database
+      // First, get current segments for tasks in the previous state
+      const taskIds = previousState.tasks.map(t => t.id);
+      const previousSegmentTaskIds = [...new Set(previousState.segments.map(s => s.task_id))];
+      
+      // Delete segments that exist now but weren't in the previous state
+      for (const taskId of taskIds) {
+        const previousSegsForTask = previousState.segments.filter(s => s.task_id === taskId);
+        const previousSegIds = previousSegsForTask.map(s => s.id);
+        
+        // Delete all current segments for this task and re-insert the previous ones
+        await supabase.from('task_segments').delete().eq('task_id', taskId);
+        
+        // Re-insert previous segments
+        if (previousSegsForTask.length > 0) {
+          await supabase.from('task_segments').insert(
+            previousSegsForTask.map(seg => ({
+              id: seg.id,
+              task_id: seg.task_id,
+              start_date: seg.start_date,
+              end_date: seg.end_date,
+              order_index: seg.order_index,
+            }))
+          );
+        }
+      }
+      
       // Update local state
       onTasksChange(previousState.tasks);
+      onSegmentsChange(previousState.segments);
       
       toast({
         title: 'Undone',
@@ -138,7 +168,7 @@ export function TimelineEditor({
     } finally {
       setIsUndoing(false);
     }
-  }, [onTasksChange, onRefresh, toast]);
+  }, [onTasksChange, onSegmentsChange, onRefresh, toast]);
 
   // Keyboard shortcut for undo (Ctrl+Z / Cmd+Z)
   useEffect(() => {
@@ -480,13 +510,19 @@ export function TimelineEditor({
   // Handle delete task
   const handleDeleteTask = async (taskId: string) => {
     try {
-      // First delete any dependencies involving this task
+      // First delete any segments for this task
+      await supabase
+        .from('task_segments')
+        .delete()
+        .eq('task_id', taskId);
+
+      // Then delete any dependencies involving this task
       await supabase
         .from('dependencies')
         .delete()
         .or(`predecessor_task_id.eq.${taskId},successor_task_id.eq.${taskId}`);
 
-      // Then delete the task
+      // Finally delete the task
       const { error } = await supabase
         .from('tasks')
         .delete()
@@ -604,12 +640,24 @@ export function TimelineEditor({
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
+    // Save to undo stack before making changes
+    saveToUndoStack(`Add period ${position} "${task.name}"`);
+    
     try {
-      const taskSegments = segments.filter(s => s.task_id === taskId);
       const libMask = getLibMask();
+      
+      // Fetch current segments from DB to avoid race conditions
+      const { data: currentSegments } = await supabase
+        .from('task_segments')
+        .select('*')
+        .eq('task_id', taskId)
+        .order('order_index', { ascending: true });
+      
+      const taskSegments = currentSegments || [];
       
       let newStart: Date;
       let newEnd: Date;
+      let initialSegmentCreated = false;
       
       if (taskSegments.length === 0) {
         // No segments yet - create initial segment from task dates to preserve original task
@@ -620,10 +668,11 @@ export function TimelineEditor({
               task_id: taskId,
               start_date: task.start_date,
               end_date: task.end_date,
-              order_index: 0,
+              order_index: position === 'before' ? 1 : 0, // Position correctly based on where new segment goes
             });
           
           if (initialError) throw initialError;
+          initialSegmentCreated = true;
         }
         
         // Calculate new segment: 2 days gap, 2 days duration
@@ -651,34 +700,9 @@ export function TimelineEditor({
           const firstSegment = sortedSegments[0];
           newEnd = addDays(new Date(firstSegment.start_date), -2);
           newStart = addDays(newEnd, -1); // 2 days total
-        }
-      }
-      
-      // Snap to working days
-      const normalized = snapTaskToWorkingDays(newStart, newEnd, libMask);
-      
-      // Determine order index for the new segment
-      const existingSegments = segments.filter(s => s.task_id === taskId);
-      // Account for the initial segment we just created if there were no segments before
-      const segmentCountAfterInitial = taskSegments.length === 0 ? 1 : existingSegments.length;
-      const newOrderIndex = position === 'after' 
-        ? segmentCountAfterInitial 
-        : 0;
-      
-      // If adding before, increment all existing segment order_index
-      if (position === 'before') {
-        const segsToUpdate = taskSegments.length === 0 
-          ? [{ id: 'initial', order_index: 0 }] // We just created one
-          : existingSegments;
-        
-        // Re-fetch segments to get the initial one we just created
-        const { data: currentSegs } = await supabase
-          .from('task_segments')
-          .select('*')
-          .eq('task_id', taskId);
-        
-        if (currentSegs) {
-          for (const seg of currentSegs) {
+          
+          // Increment order_index for all existing segments BEFORE inserting
+          for (const seg of sortedSegments) {
             await supabase
               .from('task_segments')
               .update({ order_index: seg.order_index + 1 })
@@ -686,6 +710,14 @@ export function TimelineEditor({
           }
         }
       }
+      
+      // Snap to working days
+      const normalized = snapTaskToWorkingDays(newStart, newEnd, libMask);
+      
+      // Calculate new order index
+      const newOrderIndex = position === 'after' 
+        ? (initialSegmentCreated ? 1 : taskSegments.length)
+        : 0;
       
       const { error } = await supabase
         .from('task_segments')
@@ -698,8 +730,26 @@ export function TimelineEditor({
       
       if (error) throw error;
       
-      // DO NOT update task's main dates - keep them as they were
-      // The Gantt chart will render each segment separately
+      // Sync task's main dates to span all segments
+      const { data: allSegments } = await supabase
+        .from('task_segments')
+        .select('start_date, end_date')
+        .eq('task_id', taskId);
+      
+      if (allSegments && allSegments.length > 0) {
+        const allStarts = allSegments.map(s => new Date(s.start_date));
+        const allEnds = allSegments.map(s => new Date(s.end_date));
+        const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
+        const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
+        
+        await supabase
+          .from('tasks')
+          .update({
+            start_date: format(minStart, 'yyyy-MM-dd'),
+            end_date: format(maxEnd, 'yyyy-MM-dd'),
+          })
+          .eq('id', taskId);
+      }
       
       toast({
         title: 'Period added',

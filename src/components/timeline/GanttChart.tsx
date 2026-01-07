@@ -280,8 +280,11 @@ export function GanttChart({
   const viewEnd = dateRange?.to || validEndDate;
 
   // Check if day is a working day
+  // Convert the project's legacy mask format to check each day
+  // Old mask: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
   const isWorkingDay = useCallback((date: Date) => {
-    const dayOfWeek = date.getDay();
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+    // Map JS day (0-6) to the old mask bit position
     const dayBit = dayOfWeek === 0 ? 64 : (1 << (dayOfWeek - 1));
     return (workingDaysMask & dayBit) !== 0;
   }, [workingDaysMask]);
@@ -1802,7 +1805,13 @@ export function GanttChart({
                                           const nextStart = safeParseDate(nextSeg.start_date);
                                           if (!segEnd || !nextStart) return null;
                                           
-                                          const x1 = dateToX(segEnd) + getTaskWidth(segEnd, segEnd) - 2;
+                                          // Calculate segment bar position and width
+                                          const segStart = safeParseDate(seg.start_date);
+                                          const segLeft = segStart ? dateToX(segStart) : 0;
+                                          const segWidth = segStart ? getTaskWidth(segStart, segEnd) : 0;
+                                          
+                                          // Line starts at end of current segment bar
+                                          const x1 = segLeft + segWidth - 2;
                                           const x2 = dateToX(nextStart) + 2;
                                           const y = ROW_HEIGHT / 2;
                                           
@@ -2919,12 +2928,18 @@ export function GanttChart({
                                     {/* Connecting dashed lines between segments */}
                                     <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT }}>
                                       {taskSegments.slice(0, -1).map((seg, idx) => {
+                                        const segStart = safeParseDate(seg.start_date);
                                         const segEnd = safeParseDate(seg.end_date);
                                         const nextSeg = taskSegments[idx + 1];
                                         const nextStart = safeParseDate(nextSeg.start_date);
-                                        if (!segEnd || !nextStart) return null;
+                                        if (!segStart || !segEnd || !nextStart) return null;
                                         
-                                        const x1 = dateToX(segEnd) + getTaskWidth(segEnd, segEnd) - 2;
+                                        // Calculate segment bar position and width
+                                        const segLeft = dateToX(segStart);
+                                        const segWidth = getTaskWidth(segStart, segEnd);
+                                        
+                                        // Line starts at end of current segment bar
+                                        const x1 = segLeft + segWidth - 2;
                                         const x2 = dateToX(nextStart) + 2;
                                         const y = ROW_HEIGHT / 2;
                                         
