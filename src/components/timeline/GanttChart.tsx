@@ -431,6 +431,8 @@ export function GanttChart({
     getDropTargetPhaseClasses,
     getDropIndicatorStyle,
     getGhostInfo,
+    getDragPreviewStyle,
+    shouldShowInsertionGap,
   } = useVerticalReorder({
     rowHeight: ROW_HEIGHT,
     onReorder: onTaskReorder,
@@ -1154,21 +1156,29 @@ export function GanttChart({
                     const reworkDuration = reworkDaysDiff !== null ? reworkDaysDiff + 1 : null;
 
                     const isBeingDragged = verticalDrag?.taskId === cycle.baseTask.id;
+                    const showInsertionGap = shouldShowInsertionGap(cycleIndex, section.phase.id);
 
                     return (
-                      <div 
-                        key={cycle.id}
-                        className={cn(
-                          getVerticalDragClasses(cycle.baseTask.id),
-                          getSwapTargetClasses(cycle.baseTask.id, cycleIndex, section.phase.id)
+                      <div key={cycle.id}>
+                        {/* Insertion gap - visible empty slot where task will land */}
+                        {showInsertionGap && (
+                          <div 
+                            className="gantt-insertion-gap"
+                            style={{ height: ROW_HEIGHT * 2 }}
+                          />
                         )}
-                        style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex, section.phase.id)}
-                        onMouseEnter={() => {
-                          if (isVerticalDragging && verticalDrag?.taskId !== cycle.baseTask.id) {
-                            handlePhaseHover(section.phase.id, cycleIndex);
-                          }
-                        }}
-                      >
+                        <div 
+                          className={cn(
+                            getVerticalDragClasses(cycle.baseTask.id),
+                            getSwapTargetClasses(cycle.baseTask.id, cycleIndex, section.phase.id)
+                          )}
+                          style={getVerticalDragStyles(cycle.baseTask.id, cycleIndex, section.phase.id)}
+                          onMouseEnter={() => {
+                            if (isVerticalDragging && verticalDrag?.taskId !== cycle.baseTask.id) {
+                              handlePhaseHover(section.phase.id, cycleIndex);
+                            }
+                          }}
+                        >
                         {/* Row 1: Base task + Rework */}
                         <div 
                           className={cn(
@@ -1177,14 +1187,14 @@ export function GanttChart({
                           )}
                           style={{ height: ROW_HEIGHT }}
                         >
-                          {!readOnly && (
-                            <div 
-                              className="flex items-center gap-0.5 shrink-0"
-                              onMouseDown={(e) => handleVerticalDragStart(e, cycle.baseTask.id, section.phase.id, cycleIndex)}
-                            >
-                              <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
-                            </div>
-                          )}
+                        {!readOnly && (
+                          <div 
+                            className="flex items-center gap-0.5 shrink-0"
+                            onMouseDown={(e) => handleVerticalDragStart(e, cycle.baseTask.id, cycle.baseName, section.phase.id, cycleIndex)}
+                          >
+                            <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
+                          </div>
+                        )}
                           <div className="w-2.5 md:w-3.5 shrink-0" />
                           <span className="text-[10px] md:text-xs font-medium text-foreground truncate min-w-0">
                             {cycle.baseName}
@@ -1236,6 +1246,7 @@ export function GanttChart({
                             </div>
                           </div>
                         )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1272,7 +1283,7 @@ export function GanttChart({
                       >
                         {!readOnly && (
                           <div className="flex items-center gap-0.5 shrink-0">
-                            <div onMouseDown={(e) => handleVerticalDragStart(e, task.id, section.phase.id, overallIndex)}>
+                            <div onMouseDown={(e) => handleVerticalDragStart(e, task.id, task.name, section.phase.id, overallIndex)}>
                               <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
                             </div>
                             {onDeleteTask && (
@@ -2267,6 +2278,19 @@ export function GanttChart({
           </div>
         </div>
       </div>
+
+      {/* Floating drag preview - follows cursor */}
+      {isVerticalDragging && verticalDrag && getDragPreviewStyle() && (
+        <div 
+          className="gantt-drag-preview"
+          style={getDragPreviewStyle() || undefined}
+        >
+          <div className="flex items-center gap-2 px-3 h-full">
+            <GripVertical className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium text-foreground truncate">{verticalDrag.taskName}</span>
+          </div>
+        </div>
+      )}
     </div>
     </TooltipProvider>
   );

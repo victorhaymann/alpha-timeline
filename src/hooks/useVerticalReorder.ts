@@ -2,11 +2,13 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 
 export interface VerticalDragState {
   taskId: string;
+  taskName: string;
   phaseId: string;
   targetPhaseId: string;
   originalIndex: number;
   currentIndex: number;
   startY: number;
+  currentY: number; // Live cursor Y for floating preview
   rowHeight: number;
 }
 
@@ -22,6 +24,7 @@ interface UseVerticalReorderReturn {
   handleVerticalDragStart: (
     e: React.MouseEvent,
     taskId: string,
+    taskName: string,
     phaseId: string,
     currentIndex: number
   ) => void;
@@ -33,6 +36,8 @@ interface UseVerticalReorderReturn {
   getDropIndicatorIndex: () => number | null;
   getDropIndicatorStyle: (phaseId: string) => React.CSSProperties | null;
   getGhostInfo: () => { phaseId: string; originalIndex: number } | null;
+  getDragPreviewStyle: () => React.CSSProperties | null;
+  shouldShowInsertionGap: (actualIndex: number, phaseId: string) => boolean;
 }
 
 export function useVerticalReorder({
@@ -46,6 +51,7 @@ export function useVerticalReorder({
   const handleVerticalDragStart = useCallback((
     e: React.MouseEvent,
     taskId: string,
+    taskName: string,
     phaseId: string,
     currentIndex: number
   ) => {
@@ -58,11 +64,13 @@ export function useVerticalReorder({
 
     setVerticalDrag({
       taskId,
+      taskName,
       phaseId,
       targetPhaseId: phaseId,
       originalIndex: currentIndex,
       currentIndex,
       startY: e.clientY,
+      currentY: e.clientY,
       rowHeight,
     });
   }, [readOnly, rowHeight]);
@@ -90,9 +98,11 @@ export function useVerticalReorder({
       const indexDelta = Math.round(deltaY / verticalDrag.rowHeight);
       const newIndex = Math.max(0, verticalDrag.originalIndex + indexDelta);
 
-      if (newIndex !== verticalDrag.currentIndex) {
-        setVerticalDrag(prev => prev ? { ...prev, currentIndex: newIndex } : null);
-      }
+      setVerticalDrag(prev => prev ? { 
+        ...prev, 
+        currentIndex: newIndex,
+        currentY: e.clientY,
+      } : null);
     });
   }, [verticalDrag]);
 
@@ -128,9 +138,9 @@ export function useVerticalReorder({
 
   const getVerticalDragClasses = useCallback((taskId: string): string => {
     if (verticalDrag?.taskId === taskId) {
-      return 'gantt-vertical-dragging';
+      return 'gantt-vertical-dragging gantt-source-hidden';
     }
-    return '';
+    return 'gantt-reorderable-row';
   }, [verticalDrag]);
 
   const getVerticalDragStyles = useCallback((taskId: string, actualIndex: number, phaseId: string): React.CSSProperties => {
@@ -276,6 +286,32 @@ export function useVerticalReorder({
     };
   }, [verticalDrag]);
 
+  // Get floating drag preview style - follows cursor
+  const getDragPreviewStyle = useCallback((): React.CSSProperties | null => {
+    if (!verticalDrag) return null;
+    
+    return {
+      position: 'fixed' as const,
+      top: verticalDrag.currentY - rowHeight / 2,
+      left: 80,
+      width: 280,
+      height: rowHeight,
+      zIndex: 1000,
+      pointerEvents: 'none' as const,
+    };
+  }, [verticalDrag, rowHeight]);
+
+  // Determine if an insertion gap should be shown at this position
+  const shouldShowInsertionGap = useCallback((actualIndex: number, phaseId: string): boolean => {
+    if (!verticalDrag) return false;
+    if (verticalDrag.targetPhaseId !== phaseId) return false;
+    
+    // Show gap at the current drop target position
+    return actualIndex === verticalDrag.currentIndex && 
+           (verticalDrag.currentIndex !== verticalDrag.originalIndex || 
+            verticalDrag.targetPhaseId !== verticalDrag.phaseId);
+  }, [verticalDrag]);
+
   return {
     verticalDrag,
     isVerticalDragging: !!verticalDrag,
@@ -288,5 +324,7 @@ export function useVerticalReorder({
     getDropIndicatorIndex,
     getDropIndicatorStyle,
     getGhostInfo,
+    getDragPreviewStyle,
+    shouldShowInsertionGap,
   };
 }
