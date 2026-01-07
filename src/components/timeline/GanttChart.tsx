@@ -1881,14 +1881,21 @@ export function GanttChart({
                                         // Check if this is a review segment
                                         const isReviewSegment = seg.segment_type === 'review';
                                         
-                                        // Review segment: distinctive outline style with subtle fill
+                                        // Review segment: distinctive styling with diagonal stripes and thicker dashed border
                                         const segmentStyle = isReviewSegment
                                           ? {
                                               left: segLeft + 2,
                                               width: segWidth - 4,
-                                              backgroundColor: `${sectionColor}15`,
-                                              border: `2px dashed ${sectionColor}`,
-                                              boxShadow: `0 2px 8px ${sectionColor}20`,
+                                              backgroundColor: `${sectionColor}12`,
+                                              backgroundImage: `repeating-linear-gradient(
+                                                135deg,
+                                                transparent,
+                                                transparent 6px,
+                                                ${sectionColor}15 6px,
+                                                ${sectionColor}15 12px
+                                              )`,
+                                              border: `3px dashed ${sectionColor}`,
+                                              boxShadow: `inset 0 0 12px ${sectionColor}15`,
                                               ...getDragStyles(cycle.baseTask.id, seg.id),
                                             }
                                           : {
@@ -1967,20 +1974,33 @@ export function GanttChart({
                                                       />
                                                     </>
                                                   )}
+                                                  {/* Review badge indicator */}
+                                                  {isReviewSegment && segWidth > 50 && (
+                                                    <span 
+                                                      className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-background border-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10"
+                                                      style={{ borderColor: sectionColor, color: sectionColor }}
+                                                    >
+                                                      Review
+                                                    </span>
+                                                  )}
                                                   <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
                                                     <span className={cn(
                                                       "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
                                                       isReviewSegment ? "text-foreground" : "text-white"
                                                     )}>
-                                                      {segWidth > 60 ? (isReviewSegment ? 'Review' : (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`)) : ''}
+                                                      {segWidth > 60 ? (isReviewSegment ? '' : (isFirstSegment ? cycle.baseName : `P${segIdx + 1}`)) : ''}
                                                     </span>
-                                                    {!readOnly && isLastSegment && segWidth > 40 && (
+                                                    {!readOnly && segWidth > 40 && (
                                                       <button
-                                                        className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1 absolute right-1"
+                                                        className={cn(
+                                                          "opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded shrink-0 ml-1 absolute right-1",
+                                                          isReviewSegment ? "hover:bg-black/10" : "hover:bg-white/20"
+                                                        )}
                                                         onClick={(e) => {
                                                           e.stopPropagation();
                                                           setTaskMenuPos({ x: e.clientX, y: e.clientY });
                                                           setOpenTaskMenuId(cycle.baseTask.id);
+                                                          setHoveredSegmentId(seg.id);
                                                         }}
                                                         onMouseDown={(e) => e.stopPropagation()}
                                                       >
@@ -2119,17 +2139,20 @@ export function GanttChart({
                                                 {taskSegments.length}
                                               </Badge>
                                             </button>
-                                            {/* Convert segment type option - only show if hovered segment exists */}
-                                            {hoveredSegmentId && onConvertSegmentType && (() => {
-                                              const hoveredSeg = taskSegments.find(s => s.id === hoveredSegmentId);
-                                              if (!hoveredSeg) return null;
-                                              const isReview = hoveredSeg.segment_type === 'review';
+                                            {/* Convert segment type option - always show with fallback logic */}
+                                            {onConvertSegmentType && (() => {
+                                              // Priority: hovered segment > first segment in array
+                                              const targetSeg = hoveredSegmentId 
+                                                ? taskSegments.find(s => s.id === hoveredSegmentId)
+                                                : taskSegments[0];
+                                              if (!targetSeg) return null;
+                                              const isReview = targetSeg.segment_type === 'review';
                                               return (
                                                 <>
                                                   <div className="h-px bg-border my-1" />
                                                   <button
                                                     onClick={() => {
-                                                      onConvertSegmentType(hoveredSegmentId, isReview ? 'work' : 'review');
+                                                      onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
                                                       setOpenTaskMenuId(null);
                                                       setHoveredSegmentId(null);
                                                     }}
@@ -2353,17 +2376,22 @@ export function GanttChart({
                                           </Badge>
                                         )}
                                       </button>
-                                      {/* Convert to Review option - for single-segment tasks */}
-                                      {onConvertSegmentType && taskSegments.length === 1 && (() => {
-                                        const seg = taskSegments[0];
-                                        const isReview = seg.segment_type === 'review';
+                                      {/* Convert to Review option - always show with fallback logic */}
+                                      {onConvertSegmentType && taskSegments.length >= 1 && (() => {
+                                        // Priority: hovered segment > first segment
+                                        const targetSeg = hoveredSegmentId 
+                                          ? taskSegments.find(s => s.id === hoveredSegmentId)
+                                          : taskSegments[0];
+                                        if (!targetSeg) return null;
+                                        const isReview = targetSeg.segment_type === 'review';
                                         return (
                                           <>
                                             <div className="h-px bg-border my-1" />
                                             <button
                                               onClick={() => {
-                                                onConvertSegmentType(seg.id, isReview ? 'work' : 'review');
+                                                onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
                                                 setOpenTaskMenuId(null);
+                                                setHoveredSegmentId(null);
                                               }}
                                               className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
                                             >
