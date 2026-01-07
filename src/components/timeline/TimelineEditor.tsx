@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,7 @@ export function TimelineEditor({
   const projectStartDate = new Date(project.start_date);
   const projectEndDate = new Date(project.end_date);
 
+
   // Save current state to undo stack before making changes
   const saveToUndoStack = useCallback((description: string) => {
     const newState: UndoState = {
@@ -125,6 +126,23 @@ export function TimelineEditor({
       setIsUndoing(false);
     }
   }, [onTasksChange, onRefresh, toast]);
+
+  // Keyboard shortcut for undo (Ctrl+Z / Cmd+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        // Prevent default browser undo behavior
+        e.preventDefault();
+        
+        if (undoStackRef.current.length > 0 && !isUndoing) {
+          handleUndo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isUndoing, handleUndo]);
 
   // Handle task update (from Gantt drag/resize)
   const handleTaskUpdate = async (taskId: string, updates: Partial<Task>) => {
