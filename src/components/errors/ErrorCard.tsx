@@ -1,7 +1,7 @@
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useInRouterContext } from 'react-router-dom';
 
 interface ErrorCardProps {
   title?: string;
@@ -16,7 +16,19 @@ export function ErrorCard({
   showHomeButton = true,
   onRetry 
 }: ErrorCardProps) {
-  const navigate = useNavigate();
+  // Check if we're inside a Router context to avoid crashes when ErrorBoundary
+  // catches errors outside the Router (e.g., global ErrorBoundary wrapping BrowserRouter)
+  const isInRouter = useInRouterContext();
+  const navigate = isInRouter ? useNavigate() : null;
+
+  const handleGoHome = () => {
+    if (navigate) {
+      navigate('/projects');
+    } else {
+      // Fallback when outside Router context
+      window.location.assign('/projects');
+    }
+  };
 
   return (
     <div className="flex items-center justify-center min-h-[400px] p-4">
@@ -38,7 +50,7 @@ export function ErrorCard({
             </Button>
           )}
           {showHomeButton && (
-            <Button onClick={() => navigate('/projects')}>
+            <Button onClick={handleGoHome}>
               <Home className="mr-2 h-4 w-4" />
               Go to Projects
             </Button>

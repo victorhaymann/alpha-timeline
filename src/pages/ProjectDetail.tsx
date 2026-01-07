@@ -13,6 +13,7 @@ import { ExportPanel } from '@/components/exports/ExportPanel';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
 import { ErrorCard } from '@/components/errors/ErrorCard';
+import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -512,24 +513,35 @@ export default function ProjectDetail() {
         </div>
 
         <TabsContent value="timeline" className="space-y-4">
-          <TimelineEditor
-            project={project}
-            phases={phases}
-            tasks={tasks}
-            dependencies={dependencies}
-            segments={segments}
-            onTasksChange={handleTasksChange}
-            onSegmentsChange={setSegments}
-            onRefresh={fetchProjectData}
-            onTaskClick={handleTaskClick}
-            renderRegenerateButton={(props) => {
-              // Store the handler props to render in the tabs row
-              if (!regenerateHandler || regenerateHandler.isLoading !== props.isLoading) {
-                setTimeout(() => setRegenerateHandler(props), 0);
-              }
-              return null; // Don't render anything here
-            }}
-          />
+          <ErrorBoundary
+            fallback={
+              <ErrorCard
+                title="Unable to load timeline"
+                message="An error occurred while rendering the project timeline. Please try refreshing."
+                showHomeButton={false}
+                onRetry={() => window.location.reload()}
+              />
+            }
+          >
+            <TimelineEditor
+              project={project}
+              phases={phases}
+              tasks={tasks}
+              dependencies={dependencies}
+              segments={segments}
+              onTasksChange={handleTasksChange}
+              onSegmentsChange={setSegments}
+              onRefresh={fetchProjectData}
+              onTaskClick={handleTaskClick}
+              renderRegenerateButton={(props) => {
+                // Store the handler props to render in the tabs row
+                if (!regenerateHandler || regenerateHandler.isLoading !== props.isLoading) {
+                  setTimeout(() => setRegenerateHandler(props), 0);
+                }
+                return null; // Don't render anything here
+              }}
+            />
+          </ErrorBoundary>
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">
