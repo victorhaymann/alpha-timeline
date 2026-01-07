@@ -408,8 +408,11 @@ export function GanttChart({
     isDraggingAny,
     handleDragStart,
     getDragClasses,
+    getDragStyles,
     getDurationChange,
     getResizeHandleClasses,
+    getGhostPosition,
+    getDynamicTooltipInfo,
   } = useDragAndResize({
     columnWidth,
     onTaskUpdate,
@@ -1527,13 +1530,33 @@ export function GanttChart({
                                 })}
                               </div>
 
+                              {/* Ghost element at original position during drag */}
+                              {isBaseDragging && (() => {
+                                const ghost = getGhostPosition();
+                                if (!ghost) return null;
+                                const ghostLeft = dateToX(ghost.start);
+                                const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                return (
+                                  <div
+                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    style={{
+                                      left: ghostLeft + 2,
+                                      width: ghostWidth - 4,
+                                      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                    }}
+                                  />
+                                );
+                              })()}
+
                               {/* Base Task bar */}
                               {baseStart && baseEnd && baseWidth > 0 && (() => {
                                 const baseDuration = differenceInDays(baseEnd, baseStart) + 1;
                                 const isBaseResizing = isBaseDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                                 const baseDurationChanged = isBaseResizing && dragging?.originalDuration && baseDuration !== dragging.originalDuration;
+                                const tooltipInfo = isBaseDragging ? getDynamicTooltipInfo() : null;
                                 
                                 return (
+                                <>
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1548,6 +1571,7 @@ export function GanttChart({
                                         width: baseWidth - 4,
                                         background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                                         boxShadow: `0 4px 12px ${sectionColor}66`,
+                                        ...getDragStyles(cycle.baseTask.id),
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.baseTask, 'move')}
                                     >
@@ -1574,40 +1598,85 @@ export function GanttChart({
                                           {baseWidth > 60 ? cycle.baseName : ''}
                                         </span>
                                       </div>
-                                      {/* Duration indicator during resize */}
-                                      {baseDurationChanged && (
-                                        <div className="gantt-duration-indicator">
-                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
-                                          <span className="mx-1.5 text-amber-500">→</span>
-                                          <span className="font-bold">{baseDuration}d</span>
-                                          <span className={cn(
-                                            "gantt-duration-indicator-change",
-                                            baseDuration > dragging.originalDuration ? "positive" : "negative"
-                                          )}>
-                                            {baseDuration > dragging.originalDuration ? '+' : ''}{baseDuration - dragging.originalDuration}
-                                          </span>
-                                        </div>
-                                      )}
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="font-semibold">
-                                    <p>{cycle.baseTask.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
-                                    </p>
-                                  </TooltipContent>
+                                  {!isBaseDragging && (
+                                    <TooltipContent side="top" className="font-semibold">
+                                      <p>{cycle.baseTask.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {safeFormat(baseStart, 'MMM d')} → {safeFormat(baseEnd, 'MMM d')}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
                                 </Tooltip>
+                                
+                                {/* Dynamic tooltip during drag - fixed position above bar */}
+                                {isBaseDragging && tooltipInfo && (
+                                  <div 
+                                    className="gantt-dynamic-tooltip"
+                                    style={{ 
+                                      left: baseLeft + baseWidth / 2,
+                                      top: '50%',
+                                      transform: 'translate(-50%, -200%)',
+                                    }}
+                                  >
+                                    <div className="gantt-dynamic-tooltip-arrow" />
+                                    {tooltipInfo.type === 'move' ? (
+                                      <span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                        <span className="gantt-tooltip-separator">→</span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        <span className="gantt-tooltip-date">
+                                          {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                        </span>
+                                        {(() => {
+                                          const durationChange = getDurationChange();
+                                          if (durationChange && durationChange.delta !== 0) {
+                                            return (
+                                              <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                              </span>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                </>
                               );
+                              })()}
+
+                              {/* Ghost element for rework during drag */}
+                              {isReworkDragging && cycle.reworkTask && (() => {
+                                const ghost = getGhostPosition();
+                                if (!ghost) return null;
+                                const ghostLeft = dateToX(ghost.start);
+                                const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                return (
+                                  <div
+                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    style={{
+                                      left: ghostLeft + 2,
+                                      width: ghostWidth - 4,
+                                      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                    }}
+                                  />
+                                );
                               })()}
 
                               {/* Rework Task bar (on same row) */}
                               {cycle.reworkTask && reworkStart && reworkEnd && reworkWidth > 0 && (() => {
                                 const reworkDaysDiff = safeDifferenceInDays(reworkEnd, reworkStart);
                                 const reworkDuration = reworkDaysDiff !== null ? reworkDaysDiff + 1 : 0;
-                                const isReworkResizing = isReworkDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
-                                const reworkDurationChanged = isReworkResizing && dragging?.originalDuration && reworkDuration !== dragging.originalDuration;
+                                const tooltipInfo = isReworkDragging ? getDynamicTooltipInfo() : null;
                                 
                                 return (
+                                <>
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1622,6 +1691,7 @@ export function GanttChart({
                                         width: reworkWidth - 4,
                                         background: `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                                         boxShadow: `0 4px 12px ${sectionColor}66`,
+                                        ...getDragStyles(cycle.reworkTask.id),
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reworkTask!, 'move')}
                                     >
@@ -1648,29 +1718,56 @@ export function GanttChart({
                                           {reworkWidth > 50 ? 'Rework' : ''}
                                         </span>
                                       </div>
-                                      {/* Duration indicator during resize */}
-                                      {reworkDurationChanged && (
-                                        <div className="gantt-duration-indicator">
-                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
-                                          <span className="mx-1.5 text-amber-500">→</span>
-                                          <span className="font-bold">{reworkDuration}d</span>
-                                          <span className={cn(
-                                            "gantt-duration-indicator-change",
-                                            reworkDuration > dragging.originalDuration ? "positive" : "negative"
-                                          )}>
-                                            {reworkDuration > dragging.originalDuration ? '+' : ''}{reworkDuration - dragging.originalDuration}
-                                          </span>
-                                        </div>
-                                      )}
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="font-semibold">
-                                    <p>{cycle.reworkTask.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {safeFormat(reworkStart, 'MMM d')} → {safeFormat(reworkEnd, 'MMM d')}
-                                    </p>
-                                  </TooltipContent>
+                                  {!isReworkDragging && (
+                                    <TooltipContent side="top" className="font-semibold">
+                                      <p>{cycle.reworkTask.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {safeFormat(reworkStart, 'MMM d')} → {safeFormat(reworkEnd, 'MMM d')}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
                                 </Tooltip>
+                                
+                                {/* Dynamic tooltip during drag */}
+                                {isReworkDragging && tooltipInfo && (
+                                  <div 
+                                    className="gantt-dynamic-tooltip"
+                                    style={{ 
+                                      left: reworkLeft + reworkWidth / 2,
+                                      top: '50%',
+                                      transform: 'translate(-50%, -200%)',
+                                    }}
+                                  >
+                                    <div className="gantt-dynamic-tooltip-arrow" />
+                                    {tooltipInfo.type === 'move' ? (
+                                      <span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                        <span className="gantt-tooltip-separator">→</span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        <span className="gantt-tooltip-date">
+                                          {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                        </span>
+                                        {(() => {
+                                          const durationChange = getDurationChange();
+                                          if (durationChange && durationChange.delta !== 0) {
+                                            return (
+                                              <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                              </span>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                </>
                               );
                               })()}
 
@@ -1745,14 +1842,32 @@ export function GanttChart({
                                 })}
                               </div>
 
+                              {/* Ghost element for review during drag */}
+                              {isReviewDragging && cycle.reviewTask && (() => {
+                                const ghost = getGhostPosition();
+                                if (!ghost) return null;
+                                const ghostLeft = dateToX(ghost.start);
+                                const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                return (
+                                  <div
+                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    style={{
+                                      left: ghostLeft + 2,
+                                      width: ghostWidth - 4,
+                                      background: `${sectionColor}20`,
+                                    }}
+                                  />
+                                );
+                              })()}
+
                               {/* Review task bar with dashed border (draggable) */}
                               {cycle.reviewTask && reviewStart && reviewEnd && reviewWidth > 0 && (() => {
                                 const reviewDaysDiff = safeDifferenceInDays(reviewEnd, reviewStart);
                                 const reviewDuration = reviewDaysDiff !== null ? reviewDaysDiff + 1 : 0;
-                                const isReviewResizing = isReviewDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
-                                const reviewDurationChanged = isReviewResizing && dragging?.originalDuration && reviewDuration !== dragging.originalDuration;
+                                const tooltipInfo = isReviewDragging ? getDynamicTooltipInfo() : null;
                                 
                                 return (
+                                <>
                                 <Tooltip delayDuration={200}>
                                   <TooltipTrigger asChild>
                                     <div
@@ -1768,6 +1883,7 @@ export function GanttChart({
                                         backgroundColor: `${sectionColor}40`,
                                         borderColor: sectionColor,
                                         boxShadow: `0 2px 8px ${sectionColor}33`,
+                                        ...getDragStyles(cycle.reviewTask.id),
                                       }}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, cycle.reviewTask!, 'move')}
                                     >
@@ -1794,29 +1910,56 @@ export function GanttChart({
                                           {reviewWidth > 80 ? 'Client Review' : ''}
                                         </span>
                                       </div>
-                                      {/* Duration indicator during resize */}
-                                      {reviewDurationChanged && (
-                                        <div className="gantt-duration-indicator">
-                                          <span className="text-muted-foreground line-through opacity-70">{dragging.originalDuration}d</span>
-                                          <span className="mx-1.5 text-amber-500">→</span>
-                                          <span className="font-bold">{reviewDuration}d</span>
-                                          <span className={cn(
-                                            "gantt-duration-indicator-change",
-                                            reviewDuration > dragging.originalDuration ? "positive" : "negative"
-                                          )}>
-                                            {reviewDuration > dragging.originalDuration ? '+' : ''}{reviewDuration - dragging.originalDuration}
-                                          </span>
-                                        </div>
-                                      )}
                                     </div>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="font-semibold">
-                                    <p>{cycle.reviewTask.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {safeFormat(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${safeFormat(reviewEnd, 'MMM d')}` : ''}
-                                    </p>
-                                  </TooltipContent>
+                                  {!isReviewDragging && (
+                                    <TooltipContent side="top" className="font-semibold">
+                                      <p>{cycle.reviewTask.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {safeFormat(reviewStart, 'MMM d')}{reviewEnd && reviewEnd > reviewStart ? ` → ${safeFormat(reviewEnd, 'MMM d')}` : ''}
+                                      </p>
+                                    </TooltipContent>
+                                  )}
                                 </Tooltip>
+                                
+                                {/* Dynamic tooltip during drag */}
+                                {isReviewDragging && tooltipInfo && (
+                                  <div 
+                                    className="gantt-dynamic-tooltip"
+                                    style={{ 
+                                      left: reviewLeft + reviewWidth / 2,
+                                      top: '50%',
+                                      transform: 'translate(-50%, -200%)',
+                                    }}
+                                  >
+                                    <div className="gantt-dynamic-tooltip-arrow" />
+                                    {tooltipInfo.type === 'move' ? (
+                                      <span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                        <span className="gantt-tooltip-separator">→</span>
+                                        <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        <span className="gantt-tooltip-date">
+                                          {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                        </span>
+                                        {(() => {
+                                          const durationChange = getDurationChange();
+                                          if (durationChange && durationChange.delta !== 0) {
+                                            return (
+                                              <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                              </span>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                                </>
                               );
                               })()}
                             </div>
@@ -1921,8 +2064,32 @@ export function GanttChart({
                                   )}
                                 </TooltipContent>
                               </Tooltip>
-                            ) : !isOutsideView && clippedWidth > 0 && (
-                              // Regular task bar
+                            ) : !isOutsideView && clippedWidth > 0 && (() => {
+                              // Regular task bar with ghost and dynamic tooltip
+                              const tooltipInfo = isCurrentlyDragging ? getDynamicTooltipInfo() : null;
+                              
+                              return (
+                              <>
+                              {/* Ghost element at original position */}
+                              {isCurrentlyDragging && (() => {
+                                const ghost = getGhostPosition();
+                                if (!ghost) return null;
+                                const ghostLeft = dateToX(ghost.start);
+                                const ghostWidth = getTaskWidth(ghost.start, ghost.end);
+                                return (
+                                  <div
+                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    style={{
+                                      left: ghostLeft + 2,
+                                      width: ghostWidth - 4,
+                                      background: isFeedback 
+                                        ? `${sectionColor}30` 
+                                        : `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                    }}
+                                  />
+                                );
+                              })()}
+
                               <Tooltip delayDuration={200}>
                                 <TooltipTrigger asChild>
                                   <div
@@ -1941,6 +2108,7 @@ export function GanttChart({
                                         : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
                                       borderColor: isFeedback ? sectionColor : undefined,
                                       boxShadow: `0 4px 12px ${sectionColor}66`,
+                                      ...getDragStyles(task.id),
                                     }}
                                     onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                                   >
@@ -1969,24 +2137,9 @@ export function GanttChart({
                                         }}
                                       />
                                     )}
-
-                                    {/* Duration indicator during resize */}
-                                    {durationChanged && (
-                                      <div className="gantt-duration-indicator">
-                                        <span className="text-muted-foreground line-through opacity-70">{originalDuration}d</span>
-                                        <span className="mx-1.5 text-amber-500">→</span>
-                                        <span className="font-bold">{currentDuration}d</span>
-                                        <span className={cn(
-                                          "gantt-duration-indicator-change",
-                                          currentDuration! > originalDuration! ? "positive" : "negative"
-                                        )}>
-                                          {currentDuration! > originalDuration! ? '+' : ''}{currentDuration! - originalDuration!}
-                                        </span>
-                                      </div>
-                                    )}
                                   </div>
                                 </TooltipTrigger>
-                                {viewMode === 'project' && (
+                                {!isCurrentlyDragging && viewMode === 'project' && (
                                   <TooltipContent side="top" className="font-semibold">
                                     <p>{task.name}</p>
                                     <p className="text-xs text-muted-foreground">
@@ -1995,7 +2148,47 @@ export function GanttChart({
                                   </TooltipContent>
                                 )}
                               </Tooltip>
-                            )}
+                              
+                              {/* Dynamic tooltip during drag */}
+                              {isCurrentlyDragging && tooltipInfo && (
+                                <div 
+                                  className="gantt-dynamic-tooltip"
+                                  style={{ 
+                                    left: clippedLeft + clippedWidth / 2,
+                                    top: '50%',
+                                    transform: 'translate(-50%, -200%)',
+                                  }}
+                                >
+                                  <div className="gantt-dynamic-tooltip-arrow" />
+                                  {tooltipInfo.type === 'move' ? (
+                                    <span>
+                                      <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
+                                      <span className="gantt-tooltip-separator">→</span>
+                                      <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      <span className="gantt-tooltip-date">
+                                        {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
+                                      </span>
+                                      {(() => {
+                                        const durationChange = getDurationChange();
+                                        if (durationChange && durationChange.delta !== 0) {
+                                          return (
+                                            <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                              {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                            </span>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              </>
+                            );
+                            })()}
                           </div>
                         );
                       })}

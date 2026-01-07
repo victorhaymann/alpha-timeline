@@ -134,13 +134,22 @@ export default {
         },
         // Drag and drop animations
         "drag-lift": {
-          "0%": { transform: "translateY(-50%) scale(1)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
-          "100%": { transform: "translateY(-50%) scale(1.02)", boxShadow: "0 12px 28px hsl(24 95% 53% / 0.5)" },
+          "0%": { 
+            transform: "translateY(-50%) scale(1)", 
+            boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)",
+            filter: "brightness(1)"
+          },
+          "100%": { 
+            transform: "translateY(-50%) scale(1.03)", 
+            boxShadow: "0 16px 32px hsl(24 95% 53% / 0.6), 0 4px 8px rgba(0,0,0,0.15)",
+            filter: "brightness(1.08)"
+          },
         },
         "drop-settle": {
-          "0%": { transform: "translateY(-50%) scale(1.02)", boxShadow: "0 12px 28px hsl(24 95% 53% / 0.5)" },
-          "40%": { transform: "translateY(-50%) scale(0.98)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
-          "70%": { transform: "translateY(-50%) scale(1.01)", boxShadow: "0 6px 16px hsl(24 95% 53% / 0.45)" },
+          "0%": { transform: "translateY(-50%) scale(1.03)", boxShadow: "0 16px 32px hsl(24 95% 53% / 0.6)" },
+          "30%": { transform: "translateY(-50%) scale(0.97)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.35)" },
+          "50%": { transform: "translateY(-50%) scale(1.01)", boxShadow: "0 6px 16px hsl(24 95% 53% / 0.45)" },
+          "70%": { transform: "translateY(-50%) scale(0.995)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
           "100%": { transform: "translateY(-50%) scale(1)", boxShadow: "0 4px 12px hsl(24 95% 53% / 0.4)" },
         },
         "rubber-band": {

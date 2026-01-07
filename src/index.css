@@ -334,17 +334,64 @@
     cursor: ew-resize !important;
   }
 
-  /* Task bar during drag */
+  /* Task bar during drag - enhanced active state */
   .gantt-task-dragging {
-    filter: brightness(1.1);
-    box-shadow: 0 12px 28px hsl(24 95% 53% / 0.5) !important;
+    filter: brightness(1.08);
+    box-shadow: 0 16px 32px hsl(24 95% 53% / 0.5), 
+                0 4px 8px rgba(0,0,0,0.15) !important;
+    transform-origin: center;
+    z-index: 100;
   }
 
-  /* Ghost shadow at original position */
+  /* Ghost shadow at original position - shows where task was */
   .gantt-task-ghost {
-    opacity: 0.2;
+    opacity: 0.25;
     pointer-events: none;
-    filter: grayscale(0.5);
+    filter: grayscale(0.3);
+    border: 2px dashed hsl(var(--gantt-text-muted));
+    animation: ghost-fade 0.3s ease-out forwards;
+  }
+
+  /* Dynamic date tooltip that follows the task */
+  .gantt-dynamic-tooltip {
+    @apply absolute px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap pointer-events-none;
+    background: hsl(var(--gantt-surface-elevated));
+    color: hsl(var(--gantt-text));
+    box-shadow: 0 8px 24px hsl(0 0% 0% / 0.4), 0 2px 8px hsl(0 0% 0% / 0.2);
+    border: 1px solid hsl(var(--gantt-border));
+    z-index: 110;
+    animation: tooltip-pop 0.15s ease-out forwards;
+  }
+  
+  .gantt-dynamic-tooltip-arrow {
+    @apply absolute w-2 h-2 rotate-45;
+    background: hsl(var(--gantt-surface-elevated));
+    border-bottom: 1px solid hsl(var(--gantt-border));
+    border-right: 1px solid hsl(var(--gantt-border));
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+  }
+
+  .gantt-tooltip-date {
+    color: hsl(var(--gantt-text));
+  }
+  
+  .gantt-tooltip-separator {
+    @apply mx-1.5;
+    color: hsl(38 92% 50%);
+  }
+  
+  .gantt-tooltip-delta {
+    @apply ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold;
+  }
+  .gantt-tooltip-delta.positive {
+    background: hsl(142 71% 45% / 0.2);
+    color: hsl(142 71% 55%);
+  }
+  .gantt-tooltip-delta.negative {
+    background: hsl(0 84% 60% / 0.2);
+    color: hsl(0 84% 65%);
   }
 
   /* Resize handles */
