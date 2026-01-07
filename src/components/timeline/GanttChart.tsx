@@ -1326,6 +1326,29 @@ export function GanttChart({
                                 </span>
                               </>
                             )}
+                            {baseStartDate && (
+                              <InlineDatePicker
+                                date={baseStartDate}
+                                onDateChange={(newDate) => {
+                                  onTaskUpdate(cycle.baseTask.id, { start_date: format(newDate, 'yyyy-MM-dd') });
+                                }}
+                                disabled={readOnly}
+                                className="text-[11px]"
+                              />
+                            )}
+                            {baseStartDate && baseEndDate && (
+                              <span className="opacity-50">→</span>
+                            )}
+                            {baseEndDate && (
+                              <InlineDatePicker
+                                date={baseEndDate}
+                                onDateChange={(newDate) => {
+                                  onTaskUpdate(cycle.baseTask.id, { end_date: format(newDate, 'yyyy-MM-dd') });
+                                }}
+                                disabled={readOnly}
+                                className="text-[11px]"
+                              />
+                            )}
                           </div>
                           <button
                             onClick={() => onAddReviewRound(cycle.baseTask.id)}
@@ -1337,35 +1360,58 @@ export function GanttChart({
                         </div>
 
                         {/* Row 2: Review meeting */}
-                        {cycle.reviewTask && (
+                        {cycle.reviewTask && (() => {
+                          const reviewStartDate = safeParseDate(cycle.reviewTask.start_date);
+                          const reviewEndDate = safeParseDate(cycle.reviewTask.end_date);
+                          return (
                           <div 
                             className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 pl-6 md:pl-8 group hover:bg-muted/30 transition-colors border-l-2 border-dashed ml-3 md:ml-4"
                             style={{ height: ROW_HEIGHT, borderColor: sectionColor }}
                           >
+                            {!readOnly && onDeleteTask && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteTask(cycle.reviewTask!.id);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all shrink-0"
+                                title="Delete review"
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </button>
+                            )}
                             <Users className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />
                             <span className="text-[10px] md:text-xs font-medium text-muted-foreground truncate flex-1 min-w-0">
                               ↳ {cycle.reviewTask.name}
                             </span>
                             <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
-                              {cycle.reviewTask.start_date && (() => {
-                                const reviewDate = safeParseDate(cycle.reviewTask.start_date);
-                                return reviewDate ? (
+                              {reviewStartDate && (
+                                <InlineDatePicker
+                                  date={reviewStartDate}
+                                  onDateChange={(newDate) => {
+                                    onTaskUpdate(cycle.reviewTask!.id, { start_date: format(newDate, 'yyyy-MM-dd') });
+                                  }}
+                                  disabled={readOnly}
+                                  className="text-[11px]"
+                                />
+                              )}
+                              {reviewStartDate && reviewEndDate && reviewEndDate > reviewStartDate && (
+                                <>
+                                  <span className="opacity-50">→</span>
                                   <InlineDatePicker
-                                    date={reviewDate}
+                                    date={reviewEndDate}
                                     onDateChange={(newDate) => {
-                                      onTaskUpdate(cycle.reviewTask!.id, {
-                                        start_date: format(newDate, 'yyyy-MM-dd'),
-                                        end_date: format(newDate, 'yyyy-MM-dd'),
-                                      });
+                                      onTaskUpdate(cycle.reviewTask!.id, { end_date: format(newDate, 'yyyy-MM-dd') });
                                     }}
                                     disabled={readOnly}
                                     className="text-[11px]"
                                   />
-                                ) : null;
-                              })()}
+                                </>
+                              )}
                             </div>
                           </div>
-                        )}
+                          );
+                        })()}
                         </div>
                       </div>
                     );
