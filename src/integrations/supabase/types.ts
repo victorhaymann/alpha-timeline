@@ -368,6 +368,7 @@ export type Database = {
       }
       meeting_notes: {
         Row: {
+          client_hidden: boolean | null
           created_at: string
           created_by: string
           general_notes: string | null
@@ -378,6 +379,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_hidden?: boolean | null
           created_at?: string
           created_by: string
           general_notes?: string | null
@@ -388,6 +390,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_hidden?: boolean | null
           created_at?: string
           created_by?: string
           general_notes?: string | null

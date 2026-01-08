@@ -47,6 +47,8 @@ interface TimelineEditorProps {
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
   renderRegenerateButton?: (props: { onClick: () => void; isLoading: boolean }) => React.ReactNode;
+  hiddenMeetingDates?: Set<string>;
+  onToggleMeetingVisibility?: (date: string, hidden: boolean) => void;
 }
 
 export function TimelineEditor({
@@ -59,6 +61,8 @@ export function TimelineEditor({
   onSegmentsChange,
   onRefresh,
   renderRegenerateButton,
+  hiddenMeetingDates,
+  onToggleMeetingVisibility,
 }: TimelineEditorProps) {
   const { toast } = useToast();
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -1108,6 +1112,8 @@ export function TimelineEditor({
         onUpdateSegment={handleUpdateSegment}
         onConvertSegmentType={handleConvertSegmentType}
         onDeleteSegment={handleDeleteSegment}
+        hiddenMeetingDates={hiddenMeetingDates}
+        onToggleMeetingVisibility={onToggleMeetingVisibility}
       />
 
       <AddTaskDialog

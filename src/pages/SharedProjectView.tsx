@@ -274,6 +274,7 @@ export default function SharedProjectView() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [segments, setSegments] = useState<TaskSegment[]>([]);
+  const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   
@@ -633,6 +634,31 @@ export default function SharedProjectView() {
       addDebugStep(`Quotations: ${quotationsRes.data?.length || 0}, Invoices: ${invoicesRes.data?.length || 0}`);
       setQuotations((quotationsRes.data as ProjectDocument[]) || []);
       setInvoices((invoicesRes.data as ProjectDocument[]) || []);
+
+      // Fetch hidden meeting dates
+      addDebugStep('Fetching hidden meetings...');
+      const hiddenMeetingsRes = await withTimeout(
+        supabase
+          .from('meeting_notes')
+          .select('meeting_date')
+          .eq('project_id', shareInfo.project_id)
+          .eq('client_hidden', true),
+        REQUEST_TIMEOUT_MS,
+        'Fetch hidden meetings'
+      );
+
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
+
+      if (hiddenMeetingsRes.error) {
+        addDebugStep(`Hidden meetings fetch warning: ${hiddenMeetingsRes.error.message}`);
+        // Non-fatal - continue with no hidden meetings
+      } else {
+        addDebugStep(`Hidden meetings: ${hiddenMeetingsRes.data?.length || 0}`);
+        setHiddenMeetingDates(new Set((hiddenMeetingsRes.data || []).map(m => m.meeting_date)));
+      }
 
       addDebugStep('All data loaded successfully');
       setLoading(false);
@@ -1185,7 +1211,11 @@ export default function SharedProjectView() {
                   projectStartDate={new Date(project.start_date)}
                   projectEndDate={new Date(project.end_date)}
                   phases={phases}
-                  tasks={tasks}
+                  tasks={tasks.map(task => ({
+                    ...task,
+                    // Filter out hidden meeting dates from recurring_dates for client views
+                    recurring_dates: task.recurring_dates?.filter(date => !hiddenMeetingDates.has(date))
+                  }))}
                   segments={segments}
                   workingDaysMask={project.working_days_mask || 31}
                   checkinTime={project.checkin_time}

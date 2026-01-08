@@ -41,6 +41,7 @@ export default function ClientProjectView() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [dependencies, setDependencies] = useState<Dependency[]>([]);
   const [segments, setSegments] = useState<TaskSegment[]>([]);
+  const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
@@ -134,6 +135,15 @@ export default function ClientProjectView() {
         .order('created_at', { ascending: false });
 
       setQuotations((quotationsData as ProjectDocument[]) || []);
+
+      // Fetch hidden meeting dates
+      const { data: hiddenMeetingsData } = await supabase
+        .from('meeting_notes')
+        .select('meeting_date')
+        .eq('project_id', id)
+        .eq('client_hidden', true);
+
+      setHiddenMeetingDates(new Set((hiddenMeetingsData || []).map(m => m.meeting_date)));
     } catch (error) {
       console.error('Error fetching project:', error);
       navigate('/portal');
@@ -296,7 +306,10 @@ export default function ClientProjectView() {
             projectStartDate={new Date(project.start_date)}
             projectEndDate={new Date(project.end_date)}
             phases={phases}
-            tasks={tasks}
+            tasks={tasks.map(task => ({
+              ...task,
+              recurring_dates: task.recurring_dates?.filter(date => !hiddenMeetingDates.has(date))
+            }))}
             segments={segments}
             workingDaysMask={project.working_days_mask || 31}
             checkinTime={project.checkin_time}
