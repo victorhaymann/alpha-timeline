@@ -910,6 +910,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_shared_hidden_meeting_dates: {
+        Args: { _token: string }
+        Returns: {
+          meeting_date: string
+        }[]
+      }
       has_client_access: {
         Args: { _client_id: string; _user_id: string }
         Returns: boolean
