@@ -306,15 +306,13 @@ export default function ClientProjectView() {
             projectStartDate={new Date(project.start_date)}
             projectEndDate={new Date(project.end_date)}
             phases={phases}
-            tasks={tasks.map(task => ({
-              ...task,
-              recurring_dates: task.recurring_dates?.filter(date => !hiddenMeetingDates.has(date))
-            }))}
+            tasks={tasks}
             segments={segments}
             workingDaysMask={project.working_days_mask || 31}
             checkinTime={project.checkin_time}
             checkinDuration={project.checkin_duration}
             checkinTimezone={project.checkin_timezone}
+            hiddenMeetingDates={hiddenMeetingDates}
             onTaskUpdate={() => {}}
             onTaskReorder={() => {}}
             onAddTask={() => {}}
