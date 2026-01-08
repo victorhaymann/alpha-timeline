@@ -17,11 +17,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
-import { format, addDays, isBefore, isAfter, startOfDay } from 'date-fns';
+import { format, addDays, startOfDay } from 'date-fns';
 import { CalendarIcon, Plus, Trash2, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { snapTaskToWorkingDays } from '@/lib/workingDays';
-import { clampToProjectBounds } from '@/lib/dateValidation';
+import { normalizeSegmentDates } from '@/lib/segmentUtils';
 
 interface TaskSegmentDialogProps {
   open: boolean;
@@ -32,6 +31,7 @@ interface TaskSegmentDialogProps {
   onSegmentsChange: (segments: TaskSegment[]) => void;
   projectStartDate: Date;
   projectEndDate: Date;
+  onSaveStart?: (description: string) => void; // For undo integration
 }
 
 export function TaskSegmentDialog({
@@ -43,6 +43,7 @@ export function TaskSegmentDialog({
   onSegmentsChange,
   projectStartDate,
   projectEndDate,
+  onSaveStart,
 }: TaskSegmentDialogProps) {
   const { toast } = useToast();
   const [localSegments, setLocalSegments] = useState<TaskSegment[]>([]);
@@ -73,25 +74,20 @@ export function TaskSegmentDialog({
     const lastEndDate = lastSegment ? new Date(lastSegment.end_date) : new Date(task.end_date || new Date());
     
     // Default: start 3 days after last segment ends, duration 2 days
-    let newStart = addDays(lastEndDate, 3);
-    let newEnd = addDays(newStart, 2);
+    const newStart = addDays(lastEndDate, 3);
+    const newEnd = addDays(newStart, 2);
     
-    // Clamp to project boundaries
-    newStart = clampToProjectBounds(newStart, projectStartDate, projectEndDate);
-    newEnd = clampToProjectBounds(newEnd, projectStartDate, projectEndDate);
-    
-    // Snap to working days
-    const normalized = snapTaskToWorkingDays(newStart, newEnd, workingDaysMask);
-    
-    // Re-clamp after snapping (in case snapping pushed beyond project bounds)
-    const clampedStart = clampToProjectBounds(normalized.start, projectStartDate, projectEndDate);
-    const clampedEnd = clampToProjectBounds(normalized.end, projectStartDate, projectEndDate);
+    // Use centralized normalization (clamp + snap + re-clamp)
+    const normalized = normalizeSegmentDates(newStart, newEnd, {
+      projectStartDate,
+      projectEndDate,
+      workingDaysMask,
+    });
 
     const newSegment: TaskSegment = {
       id: `temp-${Date.now()}`,
       task_id: task.id,
-      start_date: format(clampedStart, 'yyyy-MM-dd'),
-      end_date: format(clampedEnd, 'yyyy-MM-dd'),
+      ...normalized,
       order_index: localSegments.length,
       segment_type: 'work',
       created_at: new Date().toISOString(),
@@ -104,34 +100,19 @@ export function TaskSegmentDialog({
     const updated = [...localSegments];
     const segment = updated[index];
     
-    // Clamp input date to project boundaries first
-    const clampedInputDate = clampToProjectBounds(date, projectStartDate, projectEndDate);
+    // Determine new start/end based on which field changed
+    const currentStart = field === 'start_date' ? date : new Date(segment.start_date);
+    const currentEnd = field === 'end_date' ? date : new Date(segment.end_date);
     
-    if (field === 'start_date') {
-      const endDate = new Date(segment.end_date);
-      if (isAfter(clampedInputDate, endDate)) {
-        // If start is after end, move end too
-        const normalized = snapTaskToWorkingDays(clampedInputDate, clampedInputDate, workingDaysMask);
-        segment.start_date = format(clampToProjectBounds(normalized.start, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-        segment.end_date = format(clampToProjectBounds(normalized.end, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-      } else {
-        const normalized = snapTaskToWorkingDays(clampedInputDate, endDate, workingDaysMask);
-        segment.start_date = format(clampToProjectBounds(normalized.start, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-        segment.end_date = format(clampToProjectBounds(normalized.end, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-      }
-    } else {
-      const startDate = new Date(segment.start_date);
-      if (isBefore(clampedInputDate, startDate)) {
-        // If end is before start, move start too
-        const normalized = snapTaskToWorkingDays(clampedInputDate, clampedInputDate, workingDaysMask);
-        segment.start_date = format(clampToProjectBounds(normalized.start, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-        segment.end_date = format(clampToProjectBounds(normalized.end, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-      } else {
-        const normalized = snapTaskToWorkingDays(startDate, clampedInputDate, workingDaysMask);
-        segment.start_date = format(clampToProjectBounds(normalized.start, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-        segment.end_date = format(clampToProjectBounds(normalized.end, projectStartDate, projectEndDate), 'yyyy-MM-dd');
-      }
-    }
+    // Use centralized normalization (handles start > end, clamping, snapping)
+    const normalized = normalizeSegmentDates(currentStart, currentEnd, {
+      projectStartDate,
+      projectEndDate,
+      workingDaysMask,
+    });
+    
+    segment.start_date = normalized.start_date;
+    segment.end_date = normalized.end_date;
     
     setLocalSegments(updated);
   };
@@ -153,19 +134,19 @@ export function TaskSegmentDialog({
   };
 
   const handleSave = async () => {
+    // Trigger undo save before making changes
+    onSaveStart?.(`Edit periods for "${task.name}"`);
+    
     setSaving(true);
     
     try {
-      // Delete existing segments with error check
+      // Delete existing segments
       const { error: deleteError } = await supabase
         .from('task_segments')
         .delete()
         .eq('task_id', task.id);
 
-      if (deleteError) {
-        console.error('Error deleting existing segments:', deleteError);
-        throw deleteError;
-      }
+      if (deleteError) throw deleteError;
 
       // Insert new segments
       const segmentsToInsert = localSegments.map((seg, index) => ({
@@ -181,25 +162,10 @@ export function TaskSegmentDialog({
         .insert(segmentsToInsert)
         .select();
 
-      if (insertError) {
-        console.error('Error inserting segments:', insertError);
-        throw insertError;
-      }
+      if (insertError) throw insertError;
 
-      // Update task's main dates to span all segments
-      const allStarts = localSegments.map(s => new Date(s.start_date));
-      const allEnds = localSegments.map(s => new Date(s.end_date));
-      const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
-      const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
-
-      await supabase
-        .from('tasks')
-        .update({
-          start_date: format(minStart, 'yyyy-MM-dd'),
-          end_date: format(maxEnd, 'yyyy-MM-dd'),
-        })
-        .eq('id', task.id);
-
+      // Parent task dates are synced automatically by database trigger
+      
       onSegmentsChange(insertedSegments as TaskSegment[]);
       
       toast({
