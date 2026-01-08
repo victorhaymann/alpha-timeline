@@ -183,6 +183,22 @@ export function snapTaskToWorkingDays(
 }
 
 /**
+ * Check if a task's start OR end date falls on a non-working day.
+ * Use this for determining if a task needs weekend fixing.
+ * 
+ * NOTE: This is different from hasNonWorkingDays() which checks the ENTIRE range.
+ * A task can span weekends (has weekends in the middle) without needing fixing
+ * if both endpoints are on working days.
+ */
+export function hasEndpointsOnNonWorkingDays(
+  startDate: Date,
+  endDate: Date,
+  mask: number = DEFAULT_WORKING_DAYS_MASK
+): boolean {
+  return !isWorkingDay(startDate, mask) || !isWorkingDay(endDate, mask);
+}
+
+/**
  * Check if a date range contains any non-working days
  */
 export function hasNonWorkingDays(

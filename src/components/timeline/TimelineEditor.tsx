@@ -24,7 +24,7 @@ import {
 import { format, parse, addDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
-import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat } from '@/lib/workingDays';
+import { snapTaskToWorkingDays, hasEndpointsOnNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat } from '@/lib/workingDays';
 import { normalizeSegmentDates } from '@/lib/segmentUtils';
 
 // Maximum number of undo states to keep
@@ -391,7 +391,7 @@ export function TimelineEditor({
       const libMask = getLibMask();
       const startDate = new Date(taskData.start_date);
       const endDate = new Date(taskData.end_date);
-      const normalized = normalizeTaskDates(startDate, endDate, libMask);
+      const normalized = snapTaskToWorkingDays(startDate, endDate, libMask);
       
       const { error } = await supabase
         .from('tasks')
@@ -934,9 +934,9 @@ export function TimelineEditor({
         const startDate = new Date(task.start_date);
         const endDate = new Date(task.end_date);
         
-        // Check if this task has any non-working days
-        if (hasNonWorkingDays(startDate, endDate, libMask)) {
-          const normalized = normalizeTaskDates(startDate, endDate, libMask);
+        // Check if start or end falls on a non-working day (not just spans weekends)
+        if (hasEndpointsOnNonWorkingDays(startDate, endDate, libMask)) {
+          const normalized = snapTaskToWorkingDays(startDate, endDate, libMask);
           if (normalized.changed) {
             tasksToFix.push({
               id: task.id,
@@ -997,7 +997,7 @@ export function TimelineEditor({
     const libMask = getLibMask();
     const needsFix = tasks.some(task => {
       if (!task.start_date || !task.end_date) return false;
-      return hasNonWorkingDays(new Date(task.start_date), new Date(task.end_date), libMask);
+      return hasEndpointsOnNonWorkingDays(new Date(task.start_date), new Date(task.end_date), libMask);
     });
     
     if (needsFix) {
