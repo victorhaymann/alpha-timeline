@@ -1243,6 +1243,8 @@ export function TimelineEditor({
             onSegmentsChange([...otherSegments, ...newSegments]);
             onRefresh();
           }}
+          projectStartDate={projectStartDate}
+          projectEndDate={projectEndDate}
         />
       )}
     </div>
