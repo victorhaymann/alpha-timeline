@@ -1197,8 +1197,18 @@ export function GanttChart({
                       {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
                         const isCurrentlyDragging = dragging?.taskId === task.id;
                         const isJustDropped = justDropped === task.id;
-                        const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : safeParseDate(task.start_date);
-                        const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : safeParseDate(task.end_date);
+                        
+                        // Use segment-derived dates when segments exist (single source of truth)
+                        const taskSegments = segments.filter(s => s.task_id === task.id).sort((a, b) => a.order_index - b.order_index);
+                        const effectiveStartStr = taskSegments.length > 0 
+                          ? taskSegments.reduce((min, s) => s.start_date < min ? s.start_date : min, taskSegments[0].start_date)
+                          : task.start_date;
+                        const effectiveEndStr = taskSegments.length > 0
+                          ? taskSegments.reduce((max, s) => s.end_date > max ? s.end_date : max, taskSegments[0].end_date)
+                          : task.end_date;
+                        
+                        const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : safeParseDate(effectiveStartStr);
+                        const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : safeParseDate(effectiveEndStr);
 
                         const currentDaysDiff = safeDifferenceInDays(displayEnd, displayStart);
                         const currentDuration = currentDaysDiff !== null ? currentDaysDiff + 1 : null;
@@ -1293,7 +1303,7 @@ export function GanttChart({
                             ) : !isOutsideView && clippedWidth > 0 && (() => {
                               // Regular task bar with ghost and dynamic tooltip
                               const tooltipInfo = isCurrentlyDragging ? getDynamicTooltipInfo() : null;
-                              const taskSegments = segments.filter(s => s.task_id === task.id).sort((a, b) => a.order_index - b.order_index);
+                              // taskSegments already computed above for date derivation
                               const hasMultipleSegments = taskSegments.length > 1;
                               
                               // If multiple segments, render each segment as a separate bar with connecting lines
