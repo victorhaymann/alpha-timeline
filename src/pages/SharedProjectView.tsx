@@ -635,16 +635,12 @@ export default function SharedProjectView() {
       setQuotations((quotationsRes.data as ProjectDocument[]) || []);
       setInvoices((invoicesRes.data as ProjectDocument[]) || []);
 
-      // Fetch hidden meeting dates
-      addDebugStep('Fetching hidden meetings...');
+      // Fetch hidden meeting dates via secure RPC (works for anonymous users)
+      addDebugStep('Fetching hidden meetings via RPC...');
       const hiddenMeetingsRes = await withTimeout(
-        supabase
-          .from('meeting_notes')
-          .select('meeting_date')
-          .eq('project_id', shareInfo.project_id)
-          .eq('client_hidden', true),
+        supabase.rpc('get_shared_hidden_meeting_dates', { _token: token }),
         REQUEST_TIMEOUT_MS,
-        'Fetch hidden meetings'
+        'Fetch hidden meetings RPC'
       );
 
       if (thisRequestId !== requestIdRef.current) {
@@ -653,11 +649,16 @@ export default function SharedProjectView() {
       }
 
       if (hiddenMeetingsRes.error) {
-        addDebugStep(`Hidden meetings fetch warning: ${hiddenMeetingsRes.error.message}`);
+        addDebugStep(`Hidden meetings RPC warning: ${hiddenMeetingsRes.error.message}`);
         // Non-fatal - continue with no hidden meetings
       } else {
-        addDebugStep(`Hidden meetings: ${hiddenMeetingsRes.data?.length || 0}`);
-        setHiddenMeetingDates(new Set((hiddenMeetingsRes.data || []).map(m => m.meeting_date)));
+        const hiddenDates = (hiddenMeetingsRes.data || []).map(m => {
+          // Normalize to YYYY-MM-DD string
+          const d = m.meeting_date;
+          return typeof d === 'string' ? d.split('T')[0] : d;
+        });
+        addDebugStep(`Hidden meetings via RPC: ${hiddenDates.length}`);
+        setHiddenMeetingDates(new Set(hiddenDates));
       }
 
       addDebugStep('All data loaded successfully');
