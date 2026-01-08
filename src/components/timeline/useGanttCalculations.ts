@@ -14,7 +14,8 @@ import {
   MonthGroup, 
   WeekGroup,
   MIN_REASONABLE_YEAR,
-  MAX_REASONABLE_YEAR
+  MAX_REASONABLE_YEAR,
+  MIN_COLUMN_WIDTH,
 } from './ganttTypes';
 
 interface UseGanttCalculationsOptions {
@@ -22,8 +23,9 @@ interface UseGanttCalculationsOptions {
   viewEnd: Date;
   workingDaysMask: number;
   viewMode: ViewMode;
-  columnWidth: number;
+  containerWidth: number;
   projectStartDate: Date;
+  isMobile?: boolean;
 }
 
 // Validate date is a valid Date object
@@ -97,8 +99,9 @@ export function useGanttCalculations({
   viewEnd,
   workingDaysMask,
   viewMode,
-  columnWidth,
+  containerWidth,
   projectStartDate,
+  isMobile = false,
 }: UseGanttCalculationsOptions) {
   // Check if day is a working day
   const isWorkingDay = useCallback((date: Date) => {
@@ -164,6 +167,18 @@ export function useGanttCalculations({
       weekNumber: getWeek(day),
     }));
   }, [workingDays, viewMode]);
+
+  // Calculate columnWidth based on actual column count
+  const columnWidth = useMemo(() => {
+    const columnCount = groupedColumns.length || 1;
+    const calculatedWidth = containerWidth / columnCount;
+    
+    // Set minimum widths based on view mode - smaller on mobile
+    const minWidths = isMobile 
+      ? { week: 28, month: 40, project: 12 }
+      : { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
+    return Math.max(calculatedWidth, minWidths[viewMode]);
+  }, [containerWidth, groupedColumns.length, viewMode, isMobile]);
 
   // Create a map of unique week numbers to determine alternating pattern
   const weekAlternatingMap = useMemo(() => {
@@ -398,6 +413,7 @@ export function useGanttCalculations({
   return {
     workingDays,
     groupedColumns,
+    columnWidth,
     weekAlternatingMap,
     monthGroups,
     weekGroups,
