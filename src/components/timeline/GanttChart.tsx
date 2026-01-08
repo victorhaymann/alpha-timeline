@@ -252,6 +252,7 @@ export function GanttChart({
     xToDate,
     getTaskWidth,
     isWorkingDay,
+    getWorkingDaysDuration,
   } = useGanttCalculations({
     viewStart,
     viewEnd,
@@ -911,8 +912,8 @@ export function GanttChart({
                     
                     const startDate = safeParseDate(effectiveStartStr);
                     const endDate = safeParseDate(effectiveEndStr);
-                    const daysDiff = safeDifferenceInDays(endDate, startDate);
-                    const duration = daysDiff !== null ? daysDiff + 1 : null;
+                    // Use working days for duration to match Gantt chart grid
+                    const duration = (startDate && endDate) ? getWorkingDaysDuration(startDate, endDate) : null;
 
                     const isBeingDragged = verticalDrag?.taskId === task.id;
 
