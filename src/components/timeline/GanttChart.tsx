@@ -25,7 +25,6 @@ import {
   Users, 
   GripVertical,
   Plus,
-  RotateCcw,
   RefreshCw,
   CalendarIcon,
   ChevronDown,
@@ -69,7 +68,7 @@ interface GanttChartProps {
   onTaskUpdate: (taskId: string, updates: Partial<Task>) => void;
   onTaskReorder: (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
-  onAddReviewRound?: (taskId: string) => void; // Deprecated - kept for backward compatibility
+  // onAddReviewRound removed - using inline segments instead
   onDeleteTask?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
@@ -179,7 +178,7 @@ export function GanttChart({
   onTaskUpdate,
   onTaskReorder,
   onAddTask,
-  onAddReviewRound, // Deprecated
+  // onAddReviewRound removed
   onDeleteTask,
   onAddMeeting,
   onDeleteMeeting,
@@ -222,10 +221,6 @@ export function GanttChart({
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskName, setEditingTaskName] = useState<string>('');
-  const [editingCycleContext, setEditingCycleContext] = useState<{
-    reviewTaskId: string | null;
-    reworkTaskId: string | null;
-  } | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   
   // Task menu popover state (mouse-positioned)
@@ -235,51 +230,26 @@ export function GanttChart({
   const closeTaskMenuTimeoutRef = useRef<number | null>(null);
   const clickStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Handle starting task name edit
-  const handleStartEdit = useCallback((
-    taskId: string, 
-    currentName: string,
-    cycleContext?: { reviewTaskId: string | null; reworkTaskId: string | null }
-  ) => {
+  // Handle starting task name edit (simplified - no cascade context needed)
+  const handleStartEdit = useCallback((taskId: string, currentName: string) => {
     if (readOnly) return;
     setEditingTaskId(taskId);
     setEditingTaskName(currentName);
-    setEditingCycleContext(cycleContext || null);
   }, [readOnly]);
 
-  // Handle saving task name edit
+  // Handle saving task name edit (simplified - no cascade rename)
   const handleSaveEdit = useCallback(() => {
     if (editingTaskId && editingTaskName.trim()) {
-      const newName = editingTaskName.trim();
-      
-      // Update the base task
-      onTaskUpdate(editingTaskId, { name: newName });
-      
-      // If this was a cycle base task, cascade the rename to related tasks
-      if (editingCycleContext) {
-        const { reviewTaskId, reworkTaskId } = editingCycleContext;
-        
-        // Update review task name: "OldName Review" -> "NewName Review"
-        if (reviewTaskId) {
-          onTaskUpdate(reviewTaskId, { name: `${newName} Review` });
-        }
-        
-        // Update rework task name: "OldName Rework" -> "NewName Rework"
-        if (reworkTaskId) {
-          onTaskUpdate(reworkTaskId, { name: `${newName} Rework` });
-        }
-      }
+      onTaskUpdate(editingTaskId, { name: editingTaskName.trim() });
     }
     setEditingTaskId(null);
     setEditingTaskName('');
-    setEditingCycleContext(null);
-  }, [editingTaskId, editingTaskName, editingCycleContext, onTaskUpdate]);
+  }, [editingTaskId, editingTaskName, onTaskUpdate]);
 
   // Handle cancelling task name edit
   const handleCancelEdit = useCallback(() => {
     setEditingTaskId(null);
     setEditingTaskName('');
-    setEditingCycleContext(null);
   }, []);
 
   // Focus input when editing starts
@@ -829,13 +799,7 @@ export function GanttChart({
     return n.includes('client check-in') || n.includes('client checkin') || n.includes('weekly call') || n.includes('bi-weekly call');
   }, []);
 
-  // Helper to check if a task is a feedback/review meeting (should have dashed border)
-  const isFeedbackTask = useCallback((task: Task) => {
-    const n = task.name.toLowerCase();
-    return task.is_feedback_meeting || 
-      (task.task_type === 'meeting' && n.includes('review')) ||
-      n.endsWith(' review');
-  }, []);
+  // Legacy isFeedbackTask helper removed - now using inline segments for reviews
 
   // Legacy review cycle grouping removed - now using inline segments instead
   // Tasks with review segments are displayed as a single row with connected segments
@@ -1358,15 +1322,7 @@ export function GanttChart({
                           )}
                         </div>
 
-                        {onAddReviewRound && (
-                          <button
-                            onClick={() => onAddReviewRound(task.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-muted rounded shrink-0 transition-all"
-                            title="Add review round"
-                          >
-                            <RotateCcw className="w-3 h-3 text-muted-foreground" />
-                          </button>
-                        )}
+                        {/* Legacy review round button removed - using inline segments */}
                       </div>
                     );
                   })}
@@ -1555,8 +1511,8 @@ export function GanttChart({
                         const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
                         const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
                         
-                        // Check if this is a feedback task (should have dashed border)
-                        const isFeedback = isFeedbackTask(task);
+                        // Check if this is a feedback meeting (should have dashed border)
+                        const isFeedback = task.is_feedback_meeting || task.task_type === 'meeting';
 
                         if (!displayStart || !displayEnd) return (
                           <div key={task.id} style={{ height: ROW_HEIGHT }}>

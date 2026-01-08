@@ -24,7 +24,7 @@ import {
 import { format, parse, addDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
-import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib } from '@/lib/workingDays';
+import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat } from '@/lib/workingDays';
 
 // Maximum number of undo states to keep
 const MAX_UNDO_STACK_SIZE = 20;
@@ -234,20 +234,10 @@ export function TimelineEditor({
 
   /**
    * Convert project's legacy working days mask to the new library format.
-   * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
-   * New: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
    */
   const getLibMask = useCallback(() => {
     const oldMask = project.working_days_mask ?? 31; // Default Mon-Fri
-    let newMask = 0;
-    if (oldMask & 1) newMask |= (1 << 1);   // Mon
-    if (oldMask & 2) newMask |= (1 << 2);   // Tue
-    if (oldMask & 4) newMask |= (1 << 3);   // Wed
-    if (oldMask & 8) newMask |= (1 << 4);   // Thu
-    if (oldMask & 16) newMask |= (1 << 5);  // Fri
-    if (oldMask & 32) newMask |= (1 << 6);  // Sat
-    if (oldMask & 64) newMask |= (1 << 0);  // Sun
-    return newMask;
+    return convertLegacyMaskToLibFormat(oldMask);
   }, [project.working_days_mask]);
 
   // Handle task reorder (within phase or cross-phase)
@@ -438,92 +428,7 @@ export function TimelineEditor({
     }
   };
 
-  // Handle add review round
-  const handleAddReviewRound = async (taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    try {
-      // Find the phase for this task
-      const phase = phases.find(p => p.id === task.phase_id);
-      if (!phase) return;
-
-      // Create a review meeting after this task
-      const reviewName = `${task.name} Review`;
-      const maxOrder = tasks
-        .filter(t => t.phase_id === task.phase_id)
-        .reduce((max, t) => Math.max(max, t.order_index), -1);
-
-      const reviewEndDate = task.end_date || format(new Date(), 'yyyy-MM-dd');
-
-      // Insert review meeting
-      const { data: reviewTask, error: reviewError } = await supabase
-        .from('tasks')
-        .insert({
-          phase_id: task.phase_id,
-          project_id: project.id,
-          name: reviewName,
-          task_type: 'meeting',
-          client_visible: true,
-          start_date: reviewEndDate,
-          end_date: reviewEndDate,
-          order_index: maxOrder + 1,
-          status: 'pending',
-          weight_percent: 0,
-          review_rounds: 0,
-          percentage_allocation: 0,
-          is_feedback_meeting: true,
-        })
-        .select()
-        .single();
-
-      if (reviewError) throw reviewError;
-
-      // Optionally add rework buffer
-      const { error: bufferError } = await supabase
-        .from('tasks')
-        .insert({
-          phase_id: task.phase_id,
-          project_id: project.id,
-          name: `${task.name} Rework`,
-          task_type: 'task',
-          client_visible: true,
-          start_date: reviewEndDate,
-          end_date: reviewEndDate,
-          order_index: maxOrder + 2,
-          status: 'pending',
-          weight_percent: 2,
-          review_rounds: 0,
-          percentage_allocation: 0,
-        });
-
-      if (bufferError) throw bufferError;
-
-      // Create dependency: review depends on original task
-      if (reviewTask) {
-        await supabase
-          .from('dependencies')
-          .insert({
-            predecessor_task_id: taskId,
-            successor_task_id: reviewTask.id,
-          });
-      }
-
-      toast({
-        title: 'Review round added',
-        description: `Added review meeting and rework buffer for ${task.name}.`,
-      });
-
-      onRefresh();
-    } catch (error: any) {
-      console.error('Error adding review round:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add review round.',
-        variant: 'destructive',
-      });
-    }
-  };
+  // Legacy handleAddReviewRound removed - now using inline task segments instead
 
   // Handle delete task
   const handleDeleteTask = async (taskId: string) => {
@@ -1271,7 +1176,6 @@ export function TimelineEditor({
         onTaskUpdate={handleTaskUpdate}
         onTaskReorder={handleTaskReorder}
         onAddTask={handleAddTask}
-        onAddReviewRound={handleAddReviewRound}
         onDeleteTask={handleDeleteTask}
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}

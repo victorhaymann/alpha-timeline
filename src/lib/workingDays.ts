@@ -7,6 +7,24 @@ import { addDays, differenceInCalendarDays, getDay } from 'date-fns';
 export const DEFAULT_WORKING_DAYS_MASK = 0b0111110; // Mon-Fri
 
 /**
+ * Convert legacy mask format to the new library format.
+ * Old: Mon=1, Tue=2, Wed=4, Thu=8, Fri=16, Sat=32, Sun=64
+ * New (JS getDay): Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+ * New mask: bit 0 = Sunday, bit 1 = Monday, ..., bit 6 = Saturday
+ */
+export function convertLegacyMaskToLibFormat(oldMask: number): number {
+  let newMask = 0;
+  if (oldMask & 1) newMask |= (1 << 1);   // Mon
+  if (oldMask & 2) newMask |= (1 << 2);   // Tue
+  if (oldMask & 4) newMask |= (1 << 3);   // Wed
+  if (oldMask & 8) newMask |= (1 << 4);   // Thu
+  if (oldMask & 16) newMask |= (1 << 5);  // Fri
+  if (oldMask & 32) newMask |= (1 << 6);  // Sat
+  if (oldMask & 64) newMask |= (1 << 0);  // Sun
+  return newMask;
+}
+
+/**
  * Check if a date is a working day based on the mask
  */
 export function isWorkingDay(date: Date, mask: number = DEFAULT_WORKING_DAYS_MASK): boolean {

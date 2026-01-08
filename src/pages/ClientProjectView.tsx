@@ -305,7 +305,6 @@ export default function ClientProjectView() {
             onTaskUpdate={() => {}}
             onTaskReorder={() => {}}
             onAddTask={() => {}}
-            onAddReviewRound={() => {}}
             readOnly={true}
           />
         </TabsContent>
