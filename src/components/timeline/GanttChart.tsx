@@ -898,8 +898,19 @@ export function GanttChart({
 
                   {/* All tasks rendered as single rows (with inline segments for reviews) */}
                   {!isCollapsed && section.type === 'phase' && section.tasks.map((task, taskIndex) => {
-                    const startDate = safeParseDate(task.start_date);
-                    const endDate = safeParseDate(task.end_date);
+                    // Get segments for this task to derive effective dates
+                    const taskSegments = segments.filter(s => s.task_id === task.id).sort((a, b) => a.order_index - b.order_index);
+                    
+                    // Use segment-derived dates if segments exist, otherwise fallback to task dates
+                    const effectiveStartStr = taskSegments.length > 0 
+                      ? taskSegments.reduce((min, s) => s.start_date < min ? s.start_date : min, taskSegments[0].start_date)
+                      : task.start_date;
+                    const effectiveEndStr = taskSegments.length > 0
+                      ? taskSegments.reduce((max, s) => s.end_date > max ? s.end_date : max, taskSegments[0].end_date)
+                      : task.end_date;
+                    
+                    const startDate = safeParseDate(effectiveStartStr);
+                    const endDate = safeParseDate(effectiveEndStr);
                     const daysDiff = safeDifferenceInDays(endDate, startDate);
                     const duration = daysDiff !== null ? daysDiff + 1 : null;
 
@@ -982,7 +993,15 @@ export function GanttChart({
                             <InlineDatePicker
                               date={startDate}
                               onDateChange={(newDate) => {
-                                onTaskUpdate(task.id, { start_date: format(newDate, 'yyyy-MM-dd') });
+                                const newDateStr = format(newDate, 'yyyy-MM-dd');
+                                if (taskSegments.length > 0 && onUpdateSegment) {
+                                  // Update earliest segment's start date
+                                  const earliestSeg = taskSegments.reduce((min, s) => 
+                                    s.start_date < min.start_date ? s : min, taskSegments[0]);
+                                  onUpdateSegment(earliestSeg.id, { start_date: newDateStr });
+                                } else {
+                                  onTaskUpdate(task.id, { start_date: newDateStr });
+                                }
                               }}
                               disabled={readOnly}
                               className="text-[11px]"
@@ -995,7 +1014,15 @@ export function GanttChart({
                             <InlineDatePicker
                               date={endDate}
                               onDateChange={(newDate) => {
-                                onTaskUpdate(task.id, { end_date: format(newDate, 'yyyy-MM-dd') });
+                                const newDateStr = format(newDate, 'yyyy-MM-dd');
+                                if (taskSegments.length > 0 && onUpdateSegment) {
+                                  // Update latest segment's end date
+                                  const latestSeg = taskSegments.reduce((max, s) => 
+                                    s.end_date > max.end_date ? s : max, taskSegments[0]);
+                                  onUpdateSegment(latestSeg.id, { end_date: newDateStr });
+                                } else {
+                                  onTaskUpdate(task.id, { end_date: newDateStr });
+                                }
                               }}
                               disabled={readOnly}
                               className="text-[11px]"
