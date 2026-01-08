@@ -762,6 +762,74 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
 
+  // Handle delete segment directly
+  const handleDeleteSegment = useCallback(async (segmentId: string, taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    const taskSegments = segments.filter(s => s.task_id === taskId);
+    
+    // Don't allow deleting the last segment
+    if (taskSegments.length <= 1) {
+      toast({
+        title: 'Cannot delete',
+        description: 'A task must have at least one period. Delete the task instead.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Save to undo stack
+    saveToUndoStack(`Delete period from "${task?.name || 'task'}"`);
+    
+    try {
+      // Delete the segment from database
+      const { error } = await supabase
+        .from('task_segments')
+        .delete()
+        .eq('id', segmentId);
+      
+      if (error) throw error;
+      
+      // Update local state
+      const remainingSegments = segments.filter(s => s.id !== segmentId);
+      onSegmentsChange(remainingSegments);
+      
+      // Sync parent task dates
+      const taskRemainingSegments = remainingSegments.filter(s => s.task_id === taskId);
+      if (taskRemainingSegments.length > 0) {
+        const allStarts = taskRemainingSegments.map(s => new Date(s.start_date));
+        const allEnds = taskRemainingSegments.map(s => new Date(s.end_date));
+        const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
+        const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
+        
+        await supabase
+          .from('tasks')
+          .update({
+            start_date: format(minStart, 'yyyy-MM-dd'),
+            end_date: format(maxEnd, 'yyyy-MM-dd'),
+          })
+          .eq('id', taskId);
+        
+        // Update local task state
+        const updatedTasks = tasks.map(t => 
+          t.id === taskId ? { ...t, start_date: format(minStart, 'yyyy-MM-dd'), end_date: format(maxEnd, 'yyyy-MM-dd') } : t
+        );
+        onTasksChange(updatedTasks);
+      }
+      
+      toast({
+        title: 'Period deleted',
+        description: 'The period has been removed.',
+      });
+    } catch (error: any) {
+      console.error('Error deleting segment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete period.',
+        variant: 'destructive',
+      });
+    }
+  }, [segments, tasks, saveToUndoStack, onSegmentsChange, onTasksChange, toast]);
+
   // Handle add segment to task
   const handleAddSegment = async (taskId: string, position: 'before' | 'after', segmentType: SegmentType = 'work') => {
     const task = tasks.find(t => t.id === taskId);
@@ -1214,6 +1282,7 @@ export function TimelineEditor({
         }}
         onUpdateSegment={handleUpdateSegment}
         onConvertSegmentType={handleConvertSegmentType}
+        onDeleteSegment={handleDeleteSegment}
       />
 
       <AddTaskDialog

@@ -77,6 +77,7 @@ interface GanttChartProps {
   onEditSegments?: (task: Task) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
   onConvertSegmentType?: (segmentId: string, newType: SegmentType) => void;
+  onDeleteSegment?: (segmentId: string, taskId: string) => void;
   readOnly?: boolean;
 }
 
@@ -186,6 +187,7 @@ export function GanttChart({
   onEditSegments,
   onUpdateSegment,
   onConvertSegmentType,
+  onDeleteSegment,
   readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -3425,6 +3427,20 @@ export function GanttChart({
                                           </button>
                                           {/* Convert segment type option - always available */}
                                           {renderConvertOption(task, taskSegments)}
+                                          {/* Delete Period option - only if multiple segments */}
+                                          {onDeleteSegment && taskSegments.length > 1 && hoveredSegmentId && (
+                                            <button
+                                              onClick={() => {
+                                                onDeleteSegment(hoveredSegmentId, task.id);
+                                                setOpenTaskMenuId(null);
+                                                setHoveredSegmentId(null);
+                                              }}
+                                              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                              Delete Period
+                                            </button>
+                                          )}
                                           {onDeleteTask && (
                                             <>
                                               <div className="h-px bg-border my-1" />

@@ -140,11 +140,16 @@ export function TaskSegmentDialog({
     setSaving(true);
     
     try {
-      // Delete existing segments
-      await supabase
+      // Delete existing segments with error check
+      const { error: deleteError } = await supabase
         .from('task_segments')
         .delete()
         .eq('task_id', task.id);
+
+      if (deleteError) {
+        console.error('Error deleting existing segments:', deleteError);
+        throw deleteError;
+      }
 
       // Insert new segments
       const segmentsToInsert = localSegments.map((seg, index) => ({
@@ -155,12 +160,15 @@ export function TaskSegmentDialog({
         segment_type: seg.segment_type || 'work',
       }));
 
-      const { data: insertedSegments, error } = await supabase
+      const { data: insertedSegments, error: insertError } = await supabase
         .from('task_segments')
         .insert(segmentsToInsert)
         .select();
 
-      if (error) throw error;
+      if (insertError) {
+        console.error('Error inserting segments:', insertError);
+        throw insertError;
+      }
 
       // Update task's main dates to span all segments
       const allStarts = localSegments.map(s => new Date(s.start_date));
