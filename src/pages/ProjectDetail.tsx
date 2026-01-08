@@ -75,6 +75,9 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   
+  // Hidden meeting dates for client view
+  const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
+  
   // Task detail dialog state
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedTaskPhase, setSelectedTaskPhase] = useState<Phase | null>(null);
@@ -195,12 +198,69 @@ export default function ProjectDetail() {
     setInvoices((invoicesRes.data as ProjectDocument[]) || []);
   }, [id]);
 
+  const fetchHiddenMeetings = useCallback(async () => {
+    if (!id) return;
+    
+    const { data } = await supabase
+      .from('meeting_notes')
+      .select('meeting_date')
+      .eq('project_id', id)
+      .eq('client_hidden', true);
+    
+    setHiddenMeetingDates(new Set((data || []).map(m => m.meeting_date)));
+  }, [id]);
+
+  const handleToggleMeetingVisibility = useCallback(async (dateStr: string, hidden: boolean) => {
+    if (!id) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('meeting_notes')
+      .upsert({
+        project_id: id,
+        meeting_date: dateStr,
+        client_hidden: hidden,
+        created_by: user.id,
+      }, { onConflict: 'project_id,meeting_date' });
+
+    if (error) {
+      console.error('Error toggling meeting visibility:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update meeting visibility.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Update local state
+    setHiddenMeetingDates(prev => {
+      const next = new Set(prev);
+      if (hidden) {
+        next.add(dateStr);
+      } else {
+        next.delete(dateStr);
+      }
+      return next;
+    });
+
+    toast({
+      title: hidden ? 'Hidden from clients' : 'Visible to clients',
+      description: hidden 
+        ? 'This meeting will not appear in shared views.' 
+        : 'This meeting is now visible in shared views.',
+    });
+  }, [id, toast]);
+
   const hasTriggeredConfetti = useRef(false);
 
   useEffect(() => {
     fetchProjectData();
     fetchDocuments();
-  }, [fetchProjectData, fetchDocuments]);
+    fetchHiddenMeetings();
+  }, [fetchProjectData, fetchDocuments, fetchHiddenMeetings]);
 
   // Trigger confetti when project is completed
   useEffect(() => {
@@ -546,6 +606,8 @@ export default function ProjectDetail() {
               onSegmentsChange={setSegments}
               onRefresh={fetchProjectData}
               onTaskClick={handleTaskClick}
+              hiddenMeetingDates={hiddenMeetingDates}
+              onToggleMeetingVisibility={handleToggleMeetingVisibility}
               renderRegenerateButton={(props) => {
                 // Store the handler props to render in the tabs row
                 if (!regenerateHandler || regenerateHandler.isLoading !== props.isLoading) {

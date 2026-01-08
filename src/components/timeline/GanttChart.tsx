@@ -90,6 +90,8 @@ interface GanttChartProps {
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
   onConvertSegmentType?: (segmentId: string, newType: SegmentType) => void;
   onDeleteSegment?: (segmentId: string, taskId: string) => void;
+  hiddenMeetingDates?: Set<string>;
+  onToggleMeetingVisibility?: (date: string, hidden: boolean) => void;
   readOnly?: boolean;
 }
 
@@ -123,6 +125,8 @@ export function GanttChart({
   onUpdateSegment,
   onConvertSegmentType,
   onDeleteSegment,
+  hiddenMeetingDates,
+  onToggleMeetingVisibility,
   readOnly = false,
 }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1171,6 +1175,8 @@ export function GanttChart({
                             // Find the actual task ID for this meeting date
                             const taskId = checkinTasksByDate.get(dateStr);
                             
+                            const isHidden = hiddenMeetingDates?.has(dateStr) ?? false;
+                            
                             return (
                               <MeetingHoverCard
                                 key={dateStr}
@@ -1187,6 +1193,8 @@ export function GanttChart({
                                 projectId={projectId}
                                 readOnly={readOnly}
                                 onDelete={taskId && onDeleteMeeting ? () => onDeleteMeeting(taskId) : undefined}
+                                isHiddenFromClient={isHidden}
+                                onToggleClientVisibility={onToggleMeetingVisibility ? (hidden) => onToggleMeetingVisibility(dateStr, hidden) : undefined}
                               />
                             );
                           })}

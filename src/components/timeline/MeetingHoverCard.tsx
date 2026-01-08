@@ -17,8 +17,9 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Users, Clock, CheckCircle2, PlayCircle, FileText, Loader2, NotebookPen, Trash2 } from 'lucide-react';
+import { Users, Clock, CheckCircle2, PlayCircle, FileText, Loader2, NotebookPen, Trash2, Eye, EyeOff } from 'lucide-react';
 import { format, startOfDay, isBefore, isAfter, isSameDay } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface MeetingHoverCardProps {
   meetingDate: Date;
@@ -34,6 +35,8 @@ interface MeetingHoverCardProps {
   projectId: string;
   onDelete?: () => void;
   readOnly?: boolean;
+  isHiddenFromClient?: boolean;
+  onToggleClientVisibility?: (hidden: boolean) => void;
 }
 
 interface TaskNote {
@@ -58,6 +61,8 @@ export function MeetingHoverCard({
   projectId,
   onDelete,
   readOnly = false,
+  isHiddenFromClient = false,
+  onToggleClientVisibility,
 }: MeetingHoverCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -280,9 +285,18 @@ export function MeetingHoverCard({
       <HoverCard openDelay={100} closeDelay={50}>
         <HoverCardTrigger asChild>
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-foreground/80 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm diamond-shimmer"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 w-4 h-4 rotate-45 rounded-sm hover:scale-125 transition-transform cursor-pointer shadow-sm",
+              isHiddenFromClient 
+                ? "bg-foreground/30" 
+                : "bg-foreground/80 diamond-shimmer"
+            )}
             style={{ left: left + columnWidth / 2 - 8 }}
-          />
+          >
+            {isHiddenFromClient && (
+              <EyeOff className="absolute -top-4 left-1/2 -translate-x-1/2 -rotate-45 w-3 h-3 text-amber-500" />
+            )}
+          </div>
         </HoverCardTrigger>
         <HoverCardContent 
           className="w-72 p-0 overflow-hidden"
@@ -292,6 +306,25 @@ export function MeetingHoverCard({
           {/* Header */}
           <div className="bg-muted/50 px-4 py-3 border-b border-border relative">
             <div className="absolute top-2 right-2 flex items-center gap-1">
+              {!readOnly && onToggleClientVisibility && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-7 w-7",
+                    isHiddenFromClient 
+                      ? "text-amber-500 hover:text-amber-600 hover:bg-amber-500/10" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-background"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleClientVisibility(!isHiddenFromClient);
+                  }}
+                  title={isHiddenFromClient ? "Show to clients" : "Hide from clients"}
+                >
+                  {isHiddenFromClient ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              )}
               {!readOnly && onDelete && (
                 <Button
                   variant="ghost"
