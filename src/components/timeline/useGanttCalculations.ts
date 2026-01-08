@@ -5,7 +5,8 @@ import {
   eachDayOfInterval,
   isSameDay,
   getWeek,
-  differenceInDays
+  differenceInDays,
+  addDays
 } from 'date-fns';
 import { 
   ViewMode, 
@@ -378,6 +379,22 @@ export function useGanttCalculations({
     return Math.max(columnWidth, (endColIndex - startColIndex + 1) * columnWidth);
   }, [groupedColumns, columnWidth, viewMode]);
 
+  // Count working days between two dates (inclusive)
+  const getWorkingDaysDuration = useCallback((start: Date, end: Date): number => {
+    let count = 0;
+    let current = startOfDay(start);
+    const endDay = startOfDay(end);
+    
+    while (current <= endDay) {
+      if (isWorkingDay(current)) {
+        count++;
+      }
+      current = addDays(current, 1);
+    }
+    
+    return count;
+  }, [isWorkingDay]);
+
   return {
     workingDays,
     groupedColumns,
@@ -388,5 +405,6 @@ export function useGanttCalculations({
     xToDate,
     getTaskWidth,
     isWorkingDay,
+    getWorkingDaysDuration,
   };
 }
