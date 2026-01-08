@@ -1194,7 +1194,6 @@ export default function SharedProjectView() {
                   onTaskUpdate={() => {}}
                   onTaskReorder={() => {}}
                   onAddTask={() => {}}
-                  onAddReviewRound={() => {}}
                   readOnly
                 />
               </ErrorBoundary>
