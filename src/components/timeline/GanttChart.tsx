@@ -527,6 +527,11 @@ export function GanttChart({
       }
     }
 
+    // For client views (readOnly), filter out hidden meeting dates completely
+    if (readOnly && hiddenMeetingDates && hiddenMeetingDates.size > 0) {
+      recurring_dates = recurring_dates.filter(date => !hiddenMeetingDates.has(date));
+    }
+
     return {
       ...first,
       id: 'consolidated-weekly-call',
@@ -535,7 +540,7 @@ export function GanttChart({
       end_date: last.end_date || last.start_date,
       recurring_dates,
     } satisfies Task;
-  }, [checkinTasks, projectEndDate, isWorkingDay]);
+  }, [checkinTasks, projectEndDate, isWorkingDay, readOnly, hiddenMeetingDates]);
 
   // Group tasks by phase (excluding check-ins)
   const tasksByPhase = useMemo(() => {
