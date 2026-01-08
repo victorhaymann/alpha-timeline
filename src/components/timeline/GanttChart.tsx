@@ -231,20 +231,11 @@ export function GanttChart({
     return () => resizeObserver.disconnect();
   }, [taskColumnWidth, isMobile]);
 
-  // Calculate responsive column width - fills available space
-  const preCalculatedColumnWidth = useMemo(() => {
-    // This is a pre-calculation to pass to the hook
-    // The hook will use this to determine column widths
-    const minWidths = isMobile 
-      ? { week: MIN_COLUMN_WIDTH_MOBILE, month: 40, project: 12 }
-      : { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
-    return minWidths[viewMode];
-  }, [viewMode, isMobile]);
-
   // Use the extracted calculations hook
   const {
     workingDays,
     groupedColumns,
+    columnWidth,
     weekAlternatingMap,
     monthGroups,
     weekGroups,
@@ -258,21 +249,10 @@ export function GanttChart({
     viewEnd,
     workingDaysMask,
     viewMode,
-    columnWidth: Math.max(containerWidth / Math.max(1, Math.ceil((viewEnd.getTime() - viewStart.getTime()) / (1000 * 60 * 60 * 24 * 7))), preCalculatedColumnWidth),
+    containerWidth,
     projectStartDate: validStartDate,
+    isMobile,
   });
-
-  // Final column width based on actual columns
-  const columnWidth = useMemo(() => {
-    const columnCount = groupedColumns.length || 1;
-    const calculatedWidth = containerWidth / columnCount;
-    
-    // Set minimum widths based on view mode - smaller on mobile
-    const minWidths = isMobile 
-      ? { week: MIN_COLUMN_WIDTH_MOBILE, month: 40, project: 12 }
-      : { week: MIN_COLUMN_WIDTH, month: 60, project: 16 };
-    return Math.max(calculatedWidth, minWidths[viewMode]);
-  }, [containerWidth, groupedColumns.length, viewMode, isMobile]);
 
   const chartWidth = groupedColumns.length * columnWidth;
 
