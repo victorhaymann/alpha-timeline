@@ -32,7 +32,7 @@ import {
   MessageSquare,
   Clock
 } from 'lucide-react';
-import { format, addMonths, parse } from 'date-fns';
+import { format, addMonths, addDays, parse } from 'date-fns';
 
 const WEEKDAYS = [
   { key: 0, label: 'Mon', bit: 1 },
@@ -380,8 +380,67 @@ export default function NewProject() {
         createdTasks = insertedTasks || [];
       }
 
-      // 7. Create dependencies (original + generated from schedule engine)
-      // Map step IDs to task IDs
+      // 7. Create inline review segments for selected milestone steps
+      // Instead of separate "Task Review" rows, we now create work + review segments on the same task
+      const segmentsToCreate: {
+        task_id: string;
+        start_date: string;
+        end_date: string;
+        segment_type: 'work' | 'review';
+        order_index: number;
+      }[] = [];
+
+      if (feedbackSettings.milestoneAtSelectedSteps && feedbackSettings.milestoneStepNames.length > 0) {
+        tasksToCreate.forEach((taskDef, idx) => {
+          const taskId = createdTasks[idx]?.id;
+          if (!taskId) return;
+          
+          // Check if this task should have an inline review segment
+          if (feedbackSettings.milestoneStepNames.includes(taskDef.name)) {
+            const startDate = parse(taskDef.start_date, 'yyyy-MM-dd', new Date());
+            const endDate = parse(taskDef.end_date, 'yyyy-MM-dd', new Date());
+            const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            
+            // Allocate ~80% for work, ~20% for review (min 1 day each)
+            const workDays = Math.max(1, Math.floor(totalDays * 0.8));
+            const reviewDays = Math.max(1, totalDays - workDays);
+            
+            const workEnd = addDays(startDate, workDays - 1);
+            const reviewStart = addDays(workEnd, 1);
+            const reviewEnd = addDays(reviewStart, reviewDays - 1);
+            
+            // Work segment
+            segmentsToCreate.push({
+              task_id: taskId,
+              start_date: format(startDate, 'yyyy-MM-dd'),
+              end_date: format(workEnd, 'yyyy-MM-dd'),
+              segment_type: 'work',
+              order_index: 0,
+            });
+            
+            // Review segment  
+            segmentsToCreate.push({
+              task_id: taskId,
+              start_date: format(reviewStart, 'yyyy-MM-dd'),
+              end_date: format(reviewEnd, 'yyyy-MM-dd'),
+              segment_type: 'review',
+              order_index: 1,
+            });
+          }
+        });
+      }
+
+      if (segmentsToCreate.length > 0) {
+        const { error: segmentsError } = await supabase
+          .from('task_segments')
+          .insert(segmentsToCreate);
+
+        if (segmentsError) {
+          console.warn('Failed to create review segments:', segmentsError);
+        }
+      }
+
+      // 8. Create dependencies (original user dependencies only - generated review/rework dependencies removed)
       const stepIdToTaskId = new Map<string, string>();
       tasksToCreate.forEach((task, idx) => {
         if (task._stepId && createdTasks[idx]) {
@@ -389,35 +448,7 @@ export default function NewProject() {
         }
       });
 
-      // Include both original user dependencies and generated dependencies
-      const allDependencies = [...dependencies];
-      
-      // Add dependencies for generated tasks (reviews depend on their parent, buffers depend on reviews)
-      scheduleOutput.scheduledTasks.forEach(task => {
-        if (task.isGenerated) {
-          if (task.generatedType === 'step-review') {
-            const parentStepId = task._stepId.replace('review-', '');
-            if (stepIdToTaskId.has(parentStepId)) {
-              allDependencies.push({
-                id: `gen-${task._stepId}`,
-                predecessorId: parentStepId,
-                successorId: task._stepId,
-              });
-            }
-          } else if (task.generatedType === 'rework-buffer') {
-            const reviewId = task._stepId.replace('buffer-', '');
-            if (stepIdToTaskId.has(reviewId)) {
-              allDependencies.push({
-                id: `gen-${task._stepId}`,
-                predecessorId: reviewId,
-                successorId: task._stepId,
-              });
-            }
-          }
-        }
-      });
-
-      const dependenciesToCreate = allDependencies
+      const dependenciesToCreate = dependencies
         .map(dep => ({
           predecessor_task_id: stepIdToTaskId.get(dep.predecessorId),
           successor_task_id: stepIdToTaskId.get(dep.successorId),

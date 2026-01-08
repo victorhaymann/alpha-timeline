@@ -236,59 +236,8 @@ function generatePhaseMilestones(
   }));
 }
 
-/**
- * Generate step-end review meetings
- */
-function generateStepReviews(
-  tasks: ScheduleTask[],
-  settings: FeedbackSettings
-): ScheduleTask[] {
-  if (!settings.milestoneAtSelectedSteps) return [];
-  
-  const reviews: ScheduleTask[] = [];
-  
-  tasks.forEach(task => {
-    if (settings.milestoneStepNames.includes(task.name)) {
-      reviews.push({
-        _stepId: `review-${task._stepId}`,
-        name: `${task.name} Review`,
-        phaseCategory: task.phaseCategory,
-        taskType: 'meeting',
-        weightPercent: 0,
-        reviewRounds: 0,
-        clientVisible: true,
-        isGenerated: true,
-        generatedType: 'step-review',
-      });
-    }
-  });
-  
-  return reviews;
-}
-
-/**
- * Generate rework buffer blocks after review meetings
- */
-function generateReworkBuffers(
-  reviewMeetings: ScheduleTask[],
-  settings: FeedbackSettings
-): ScheduleTask[] {
-  if (!settings.reworkBufferEnabled) return [];
-  
-  return reviewMeetings
-    .filter(m => m.generatedType === 'step-review')
-    .map(meeting => ({
-      _stepId: `buffer-${meeting._stepId}`,
-      name: `${meeting.name.replace(' Review', '')} Rework`,
-      phaseCategory: meeting.phaseCategory,
-      taskType: 'task' as const,
-      weightPercent: 2, // Small weight for rework
-      reviewRounds: 0,
-      clientVisible: false,
-      isGenerated: true,
-      generatedType: 'rework-buffer' as const,
-    }));
-}
+// Legacy review/rework generation removed - now using inline task segments instead
+// See NewProject.tsx for segment creation logic
 
 /**
  * Build dependency graph and compute topological order
@@ -371,17 +320,14 @@ export function computeSchedule(input: ScheduleInput): ScheduleOutput {
   // 3. Collect all phases used
   const usedPhases = [...new Set(inputTasks.map(t => t.phaseCategory))] as PhaseCategory[];
   
-  // 4. Generate additional tasks from feedback settings
+  // 4. Generate additional tasks from feedback settings (check-ins and milestones only)
+  // Note: Step reviews are now handled as inline segments in NewProject.tsx
   const checkInMeetings = generateCheckInMeetings(projectStartDate, projectEndDate, feedbackSettings, workingDaysMask);
   const phaseMilestones = generatePhaseMilestones(usedPhases, feedbackSettings);
-  const stepReviews = generateStepReviews(inputTasks, feedbackSettings);
-  const reworkBuffers = generateReworkBuffers(stepReviews, feedbackSettings);
   
-  // 5. Combine all tasks
+  // 5. Combine all tasks (no longer includes step reviews or rework buffers)
   let allTasks = [
     ...inputTasks,
-    ...stepReviews,
-    ...reworkBuffers,
     ...phaseMilestones,
   ];
   
@@ -403,24 +349,6 @@ export function computeSchedule(input: ScheduleInput): ScheduleOutput {
   
   // 6. Build extended dependencies
   const extendedDependencies: ScheduleDependency[] = [...inputDependencies];
-  
-  // Step reviews depend on their parent step
-  stepReviews.forEach(review => {
-    const parentStepId = review._stepId.replace('review-', '');
-    extendedDependencies.push({
-      predecessorId: parentStepId,
-      successorId: review._stepId,
-    });
-  });
-  
-  // Rework buffers depend on their review
-  reworkBuffers.forEach(buffer => {
-    const reviewId = buffer._stepId.replace('buffer-', '');
-    extendedDependencies.push({
-      predecessorId: reviewId,
-      successorId: buffer._stepId,
-    });
-  });
   
   // Picture Lock depends on Editorial, and grading/mix depend on it
   if (hasEditorial) {
