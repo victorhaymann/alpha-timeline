@@ -25,6 +25,7 @@ import { format, parse, addDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
 import { normalizeTaskDates, snapTaskToWorkingDays, hasNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat } from '@/lib/workingDays';
+import { normalizeSegmentDates } from '@/lib/segmentUtils';
 
 // Maximum number of undo states to keep
 const MAX_UNDO_STACK_SIZE = 20;
@@ -558,68 +559,41 @@ export function TimelineEditor({
     }
   };
 
-  // Handle update segment (from Gantt drag/resize)
+  // Handle update segment (from Gantt drag/resize) - UNIFIED via normalizeSegmentDates
   const handleUpdateSegment = useCallback(async (segmentId: string, updates: { start_date?: string; end_date?: string }) => {
-    // Find the segment being updated
     const segment = segments.find(s => s.id === segmentId);
     if (!segment) return;
     
     const task = tasks.find(t => t.id === segment.task_id);
-    const updateDescription = task 
-      ? `Update period for "${task.name}"` 
-      : 'Update period';
-    saveToUndoStack(updateDescription);
+    saveToUndoStack(task ? `Update period for "${task.name}"` : 'Update period');
     
     try {
-      // Normalize dates if they're being updated
-      let normalizedUpdates = { ...updates };
-      if (updates.start_date && updates.end_date) {
-        const libMask = getLibMask();
-        const normalized = snapTaskToWorkingDays(
-          new Date(updates.start_date),
-          new Date(updates.end_date),
-          libMask
-        );
-        normalizedUpdates.start_date = format(normalized.start, 'yyyy-MM-dd');
-        normalizedUpdates.end_date = format(normalized.end, 'yyyy-MM-dd');
-      }
+      // Merge updates with current segment dates
+      const currentStart = new Date(updates.start_date || segment.start_date);
+      const currentEnd = new Date(updates.end_date || segment.end_date);
       
-      // Update the segment in the database
+      // Use centralized normalization (clamp + snap + re-clamp)
+      const normalized = normalizeSegmentDates(currentStart, currentEnd, {
+        projectStartDate,
+        projectEndDate,
+        workingDaysMask: project.working_days_mask ?? 31,
+      });
+      
+      // Update segment in database
       const { error } = await supabase
         .from('task_segments')
-        .update(normalizedUpdates)
+        .update(normalized)
         .eq('id', segmentId);
 
       if (error) throw error;
       
-      // Update local state for segments
+      // Update local segment state
       const updatedSegments = segments.map(s => 
-        s.id === segmentId ? { ...s, ...normalizedUpdates } : s
+        s.id === segmentId ? { ...s, ...normalized } : s
       );
       onSegmentsChange(updatedSegments);
       
-      // Sync parent task's start_date and end_date to span all its segments
-      const taskId = segment.task_id;
-      const taskSegments = updatedSegments.filter(s => s.task_id === taskId);
-      
-      if (taskSegments.length > 0) {
-        const minStart = taskSegments.reduce((min, s) => 
-          s.start_date < min ? s.start_date : min, taskSegments[0].start_date);
-        const maxEnd = taskSegments.reduce((max, s) => 
-          s.end_date > max ? s.end_date : max, taskSegments[0].end_date);
-        
-        // Update parent task in database
-        await supabase.from('tasks').update({
-          start_date: minStart,
-          end_date: maxEnd
-        }).eq('id', taskId);
-        
-        // Update local state for tasks
-        const updatedTasks = tasks.map(t => 
-          t.id === taskId ? { ...t, start_date: minStart, end_date: maxEnd } : t
-        );
-        onTasksChange(updatedTasks);
-      }
+      // Parent task dates are synced automatically by database trigger
     } catch (error: any) {
       console.error('Error updating segment:', error);
       toast({
@@ -628,7 +602,7 @@ export function TimelineEditor({
         variant: 'destructive',
       });
     }
-  }, [segments, tasks, saveToUndoStack, getLibMask, onSegmentsChange, onTasksChange, toast]);
+  }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
   // Handle convert segment type (work <-> review)
   const handleConvertSegmentType = useCallback(async (segmentId: string, newType: SegmentType) => {
@@ -667,12 +641,11 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
 
-  // Handle delete segment directly
+  // Handle delete segment directly - parent task dates synced by DB trigger
   const handleDeleteSegment = useCallback(async (segmentId: string, taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     const taskSegments = segments.filter(s => s.task_id === taskId);
     
-    // Don't allow deleting the last segment
     if (taskSegments.length <= 1) {
       toast({
         title: 'Cannot delete',
@@ -682,11 +655,9 @@ export function TimelineEditor({
       return;
     }
     
-    // Save to undo stack
     saveToUndoStack(`Delete period from "${task?.name || 'task'}"`);
     
     try {
-      // Delete the segment from database
       const { error } = await supabase
         .from('task_segments')
         .delete()
@@ -694,32 +665,8 @@ export function TimelineEditor({
       
       if (error) throw error;
       
-      // Update local state
-      const remainingSegments = segments.filter(s => s.id !== segmentId);
-      onSegmentsChange(remainingSegments);
-      
-      // Sync parent task dates
-      const taskRemainingSegments = remainingSegments.filter(s => s.task_id === taskId);
-      if (taskRemainingSegments.length > 0) {
-        const allStarts = taskRemainingSegments.map(s => new Date(s.start_date));
-        const allEnds = taskRemainingSegments.map(s => new Date(s.end_date));
-        const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
-        const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
-        
-        await supabase
-          .from('tasks')
-          .update({
-            start_date: format(minStart, 'yyyy-MM-dd'),
-            end_date: format(maxEnd, 'yyyy-MM-dd'),
-          })
-          .eq('id', taskId);
-        
-        // Update local task state
-        const updatedTasks = tasks.map(t => 
-          t.id === taskId ? { ...t, start_date: format(minStart, 'yyyy-MM-dd'), end_date: format(maxEnd, 'yyyy-MM-dd') } : t
-        );
-        onTasksChange(updatedTasks);
-      }
+      // Update local state - parent task dates synced by DB trigger
+      onSegmentsChange(segments.filter(s => s.id !== segmentId));
       
       toast({
         title: 'Period deleted',
@@ -733,20 +680,17 @@ export function TimelineEditor({
         variant: 'destructive',
       });
     }
-  }, [segments, tasks, saveToUndoStack, onSegmentsChange, onTasksChange, toast]);
+  }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
 
-  // Handle add segment to task
+  // Handle add segment to task - UNIFIED via normalizeSegmentDates
   const handleAddSegment = async (taskId: string, position: 'before' | 'after', segmentType: SegmentType = 'work') => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
-    // Save to undo stack before making changes
     const typeLabel = segmentType === 'review' ? 'client review' : 'period';
     saveToUndoStack(`Add ${typeLabel} ${position} "${task.name}"`);
     
     try {
-      const libMask = getLibMask();
-      
       // Fetch current segments from DB to avoid race conditions
       const { data: currentSegments } = await supabase
         .from('task_segments')
@@ -761,7 +705,7 @@ export function TimelineEditor({
       let initialSegmentCreated = false;
       
       if (taskSegments.length === 0) {
-        // No segments yet - create initial segment from task dates to preserve original task
+        // No segments yet - create initial segment from task dates
         if (task.start_date && task.end_date) {
           const { error: initialError } = await supabase
             .from('task_segments')
@@ -769,41 +713,36 @@ export function TimelineEditor({
               task_id: taskId,
               start_date: task.start_date,
               end_date: task.end_date,
-              order_index: position === 'before' ? 1 : 0, // Position correctly based on where new segment goes
-              segment_type: 'work', // Original task is always a work segment
+              order_index: position === 'before' ? 1 : 0,
+              segment_type: 'work',
             });
           
           if (initialError) throw initialError;
           initialSegmentCreated = true;
         }
         
-        // Calculate new segment: 2 days gap, 2 days duration
         const taskEndDate = task.end_date ? new Date(task.end_date) : new Date();
         const taskStartDate = task.start_date ? new Date(task.start_date) : new Date();
         
         if (position === 'after') {
-          // Start 2 days after the task ends
           newStart = addDays(taskEndDate, 2);
-          newEnd = addDays(newStart, 1); // 2 days total (inclusive)
+          newEnd = addDays(newStart, 1);
         } else {
-          // End 2 days before the task starts
           newEnd = addDays(taskStartDate, -2);
-          newStart = addDays(newEnd, -1); // 2 days total (inclusive)
+          newStart = addDays(newEnd, -1);
         }
       } else {
-        // Has segments - add relative to first/last segment
         const sortedSegments = [...taskSegments].sort((a, b) => a.order_index - b.order_index);
         
         if (position === 'after') {
           const lastSegment = sortedSegments[sortedSegments.length - 1];
           newStart = addDays(new Date(lastSegment.end_date), 2);
-          newEnd = addDays(newStart, 1); // 2 days total
+          newEnd = addDays(newStart, 1);
         } else {
           const firstSegment = sortedSegments[0];
           newEnd = addDays(new Date(firstSegment.start_date), -2);
-          newStart = addDays(newEnd, -1); // 2 days total
+          newStart = addDays(newEnd, -1);
           
-          // Increment order_index for all existing segments BEFORE inserting
           for (const seg of sortedSegments) {
             await supabase
               .from('task_segments')
@@ -813,10 +752,13 @@ export function TimelineEditor({
         }
       }
       
-      // Snap to working days
-      const normalized = snapTaskToWorkingDays(newStart, newEnd, libMask);
+      // Use centralized normalization (clamp + snap + re-clamp)
+      const normalized = normalizeSegmentDates(newStart, newEnd, {
+        projectStartDate,
+        projectEndDate,
+        workingDaysMask: project.working_days_mask ?? 31,
+      });
       
-      // Calculate new order index
       const newOrderIndex = position === 'after' 
         ? (initialSegmentCreated ? 1 : taskSegments.length)
         : 0;
@@ -825,38 +767,17 @@ export function TimelineEditor({
         .from('task_segments')
         .insert({
           task_id: taskId,
-          start_date: format(normalized.start, 'yyyy-MM-dd'),
-          end_date: format(normalized.end, 'yyyy-MM-dd'),
+          ...normalized,
           order_index: newOrderIndex,
           segment_type: segmentType,
         });
       
       if (error) throw error;
       
-      // Sync task's main dates to span all segments
-      const { data: allSegments } = await supabase
-        .from('task_segments')
-        .select('start_date, end_date')
-        .eq('task_id', taskId);
+      // Parent task dates synced automatically by database trigger
       
-      if (allSegments && allSegments.length > 0) {
-        const allStarts = allSegments.map(s => new Date(s.start_date));
-        const allEnds = allSegments.map(s => new Date(s.end_date));
-        const minStart = new Date(Math.min(...allStarts.map(d => d.getTime())));
-        const maxEnd = new Date(Math.max(...allEnds.map(d => d.getTime())));
-        
-        await supabase
-          .from('tasks')
-          .update({
-            start_date: format(minStart, 'yyyy-MM-dd'),
-            end_date: format(maxEnd, 'yyyy-MM-dd'),
-          })
-          .eq('id', taskId);
-      }
-      
-      const typeLabel = segmentType === 'review' ? 'Client review' : 'Period';
       toast({
-        title: `${typeLabel} added`,
+        title: `${segmentType === 'review' ? 'Client review' : 'Period'} added`,
         description: `New ${segmentType === 'review' ? 'client review' : '2-day period'} added ${position} existing work.`,
       });
       
@@ -1237,7 +1158,7 @@ export function TimelineEditor({
           onOpenChange={setSegmentDialogOpen}
           task={selectedTaskForSegments}
           segments={segments.filter(s => s.task_id === selectedTaskForSegments.id)}
-          workingDaysMask={project.working_days_mask}
+          workingDaysMask={project.working_days_mask ?? 31}
           onSegmentsChange={(newSegments) => {
             const otherSegments = segments.filter(s => s.task_id !== selectedTaskForSegments.id);
             onSegmentsChange([...otherSegments, ...newSegments]);
@@ -1245,6 +1166,7 @@ export function TimelineEditor({
           }}
           projectStartDate={projectStartDate}
           projectEndDate={projectEndDate}
+          onSaveStart={saveToUndoStack}
         />
       )}
     </div>
