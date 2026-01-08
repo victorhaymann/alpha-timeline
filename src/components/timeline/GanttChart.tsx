@@ -358,6 +358,8 @@ export function GanttChart({
     readOnly,
     isWorkingDay,
     columnsAreWeeks: viewMode === 'project',
+    projectStartDate: validStartDate,
+    projectEndDate: validEndDate,
   });
 
   // Vertical reorder hook
@@ -986,6 +988,8 @@ export function GanttChart({
                               }}
                               disabled={readOnly}
                               className="text-[11px]"
+                              minDate={validStartDate}
+                              maxDate={validEndDate}
                             />
                           )}
                           {startDate && endDate && (
@@ -1007,6 +1011,8 @@ export function GanttChart({
                               }}
                               disabled={readOnly}
                               className="text-[11px]"
+                              minDate={validStartDate}
+                              maxDate={validEndDate}
                             />
                           )}
                         </div>

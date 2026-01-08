@@ -15,6 +15,8 @@ interface InlineDatePickerProps {
   formatStr?: string;
   className?: string;
   disabled?: boolean;
+  minDate?: Date;
+  maxDate?: Date;
 }
 
 export function InlineDatePicker({
@@ -23,6 +25,8 @@ export function InlineDatePicker({
   formatStr = 'MMM d',
   className,
   disabled = false,
+  minDate,
+  maxDate,
 }: InlineDatePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -34,6 +38,15 @@ export function InlineDatePicker({
       setOpen(false);
     }
   };
+
+  // Disable dates outside project boundaries
+  const disabledDays = [];
+  if (minDate) {
+    disabledDays.push({ before: minDate });
+  }
+  if (maxDate) {
+    disabledDays.push({ after: maxDate });
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -61,6 +74,7 @@ export function InlineDatePicker({
           onSelect={handleSelect}
           initialFocus
           className="p-3 pointer-events-auto"
+          disabled={disabledDays.length > 0 ? disabledDays : undefined}
         />
       </PopoverContent>
     </Popover>

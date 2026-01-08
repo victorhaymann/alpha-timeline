@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { addDays, differenceInDays, format } from 'date-fns';
+import { addDays, differenceInDays, format, isBefore, isAfter, startOfDay } from 'date-fns';
 import { Task, TaskSegment } from '@/types/database';
+import { clampToProjectBounds } from '@/lib/dateValidation';
 
 export interface DragState {
   taskId: string;
@@ -34,6 +35,11 @@ interface UseDragAndResizeOptions {
    * and then snap to a working day.
    */
   columnsAreWeeks?: boolean;
+  /**
+   * Project boundaries to clamp dates to
+   */
+  projectStartDate?: Date;
+  projectEndDate?: Date;
 }
 
 interface UseDragAndResizeReturn {
@@ -65,6 +71,8 @@ export function useDragAndResize({
   readOnly = false,
   isWorkingDay,
   columnsAreWeeks = false,
+  projectStartDate,
+  projectEndDate,
 }: UseDragAndResizeOptions): UseDragAndResizeReturn {
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [pendingDrag, setPendingDrag] = useState<{
@@ -140,6 +148,15 @@ export function useDragAndResize({
       return Math.max(1, count);
     },
     [isWorkingDay]
+  );
+
+  // Clamp a date to project bounds (if defined)
+  const clampToProject = useCallback(
+    (date: Date): Date => {
+      if (!projectStartDate || !projectEndDate) return date;
+      return clampToProjectBounds(date, projectStartDate, projectEndDate);
+    },
+    [projectStartDate, projectEndDate]
   );
 
   // Handle drag start with automatic edge detection
@@ -280,14 +297,24 @@ export function useDragAndResize({
         const deltaColumns = Math.round(deltaX / columnWidth);
 
         if (dragging.type === 'move') {
+          let newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
+          let newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
+          
+          // Clamp to project bounds
+          newStart = clampToProject(newStart);
+          newEnd = clampToProject(newEnd);
+          
           setDragPreview({
             taskId: dragging.taskId,
             segmentId: dragging.segmentId,
-            start: shiftDateByColumns(dragging.originalStart, deltaColumns),
-            end: shiftDateByColumns(dragging.originalEnd, deltaColumns),
+            start: newStart,
+            end: newEnd,
           });
         } else if (dragging.type === 'resize-end') {
-          const newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
+          let newEnd = shiftDateByColumns(dragging.originalEnd, deltaColumns);
+          // Clamp to project bounds
+          newEnd = clampToProject(newEnd);
+          
           if (newEnd >= dragging.originalStart) {
             setDragPreview({
               taskId: dragging.taskId,
@@ -297,7 +324,10 @@ export function useDragAndResize({
             });
           }
         } else if (dragging.type === 'resize-start') {
-          const newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
+          let newStart = shiftDateByColumns(dragging.originalStart, deltaColumns);
+          // Clamp to project bounds
+          newStart = clampToProject(newStart);
+          
           if (newStart <= dragging.originalEnd) {
             setDragPreview({
               taskId: dragging.taskId,
@@ -309,7 +339,7 @@ export function useDragAndResize({
         }
       });
     },
-    [dragging, columnWidth, shiftDateByColumns]
+    [dragging, columnWidth, shiftDateByColumns, clampToProject]
   );
 
   // Handle drag end
