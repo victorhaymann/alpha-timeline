@@ -30,7 +30,9 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Folder,
 } from 'lucide-react';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -277,6 +279,7 @@ export default function SharedProjectView() {
   const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
+  const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
   
   // PDF Preview state
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
@@ -634,6 +637,20 @@ export default function SharedProjectView() {
       addDebugStep(`Quotations: ${quotationsRes.data?.length || 0}, Invoices: ${invoicesRes.data?.length || 0}`);
       setQuotations((quotationsRes.data as ProjectDocument[]) || []);
       setInvoices((invoicesRes.data as ProjectDocument[]) || []);
+
+      // Fetch client documents (brand assets)
+      addDebugStep('Fetching client documents...');
+      const clientDocsRes: { data: ClientDocType[] | null; error: { message: string } | null } = await withTimeout(
+        (supabase as any).from('client_documents').select('*').eq('project_id', shareInfo.project_id).order('category').order('created_at', { ascending: false }),
+        REQUEST_TIMEOUT_MS,
+        'Fetch client documents'
+      );
+      if (clientDocsRes.error) {
+        addDebugStep(`Client documents warning: ${clientDocsRes.error.message}`);
+      } else {
+        addDebugStep(`Client documents: ${clientDocsRes.data?.length || 0}`);
+        setClientDocuments(clientDocsRes.data || []);
+      }
 
       // Fetch hidden meeting dates via secure RPC (works for anonymous users)
       addDebugStep('Fetching hidden meetings via RPC...');
@@ -1194,6 +1211,10 @@ export default function SharedProjectView() {
               <BookOpen className="w-3.5 h-3.5" />
               Resources
             </TabsTrigger>
+            <TabsTrigger value="client-documents" className="gap-1.5">
+              <Folder className="w-3.5 h-3.5" />
+              Client Documents
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeline">
@@ -1364,6 +1385,15 @@ export default function SharedProjectView() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="client-documents">
+            <ClientDocumentsPanel
+              projectId={project.id}
+              documents={clientDocuments}
+              readOnly={true}
+              onRefresh={() => {}}
+            />
           </TabsContent>
         </Tabs>
 

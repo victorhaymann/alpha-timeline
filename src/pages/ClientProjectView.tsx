@@ -18,7 +18,9 @@ import {
   BookOpen,
   Layers,
   Users,
+  Folder,
 } from 'lucide-react';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { GanttChart } from '@/components/timeline/GanttChart';
@@ -43,6 +45,7 @@ export default function ClientProjectView() {
   const [segments, setSegments] = useState<TaskSegment[]>([]);
   const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
+  const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
 
@@ -135,6 +138,16 @@ export default function ClientProjectView() {
         .order('created_at', { ascending: false });
 
       setQuotations((quotationsData as ProjectDocument[]) || []);
+
+      // Fetch client documents
+      const { data: clientDocsData } = await (supabase as any)
+        .from('client_documents')
+        .select('*')
+        .eq('project_id', id)
+        .order('category')
+        .order('created_at', { ascending: false });
+
+      setClientDocuments((clientDocsData as ClientDocType[]) || []);
 
       // Fetch hidden meeting dates
       const { data: hiddenMeetingsData } = await supabase
@@ -298,6 +311,10 @@ export default function ClientProjectView() {
             <BookOpen className="w-3.5 h-3.5" />
             Resources
           </TabsTrigger>
+          <TabsTrigger value="client-documents" className="gap-1.5">
+            <Folder className="w-3.5 h-3.5" />
+            Client Documents
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4">
@@ -355,6 +372,15 @@ export default function ClientProjectView() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="client-documents">
+          <ClientDocumentsPanel
+            projectId={project.id}
+            documents={clientDocuments}
+            readOnly={false}
+            onRefresh={() => fetchData()}
+          />
         </TabsContent>
       </Tabs>
     </div>
