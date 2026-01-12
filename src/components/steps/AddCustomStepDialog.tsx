@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,11 @@ export function AddCustomStepDialog({
   const [phase, setPhase] = useState<PhaseCategory>(defaultPhase);
   const [clientVisible, setClientVisible] = useState(true);
   const [relativeWeight, setRelativeWeight] = useState<'low' | 'medium' | 'high'>('medium');
+
+  // Sync phase state when defaultPhase prop changes (dialog is reused across phases)
+  useEffect(() => {
+    setPhase(defaultPhase);
+  }, [defaultPhase]);
 
   const WEIGHT_MAP = { low: 5, medium: 10, high: 15 };
 
