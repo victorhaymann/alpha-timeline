@@ -1,21 +1,13 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import {
   BookOpen,
@@ -30,7 +22,6 @@ import {
   Eye,
   File,
   Loader2,
-  X,
 } from 'lucide-react';
 
 // Document category configuration
@@ -62,7 +53,7 @@ interface ClientDocumentsPanelProps {
   documents: ClientDocument[];
   readOnly?: boolean;
   onRefresh: () => void;
-  shareToken?: string; // For anonymous access via share link
+  shareToken?: string;
 }
 
 export function ClientDocumentsPanel({
@@ -70,38 +61,16 @@ export function ClientDocumentsPanel({
   documents,
   readOnly = false,
   onRefresh,
-  shareToken,
 }: ClientDocumentsPanelProps) {
   const [uploading, setUploading] = useState<CategoryId | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
-  const [dragOverCategory, setDragOverCategory] = useState<CategoryId | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const getDocumentsByCategory = (categoryId: string) => {
     return documents.filter(doc => doc.category === categoryId);
-  };
-
-  const formatFileSize = (bytes: number | null): string => {
-    if (!bytes) return 'Unknown size';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  const getFileIcon = (mimeType: string | null, name: string) => {
-    if (!mimeType) {
-      // Infer from extension
-      const ext = name.split('.').pop()?.toLowerCase();
-      if (['png', 'jpg', 'jpeg', 'svg'].includes(ext || '')) return Image;
-      if (['otf', 'ttf', 'woff', 'woff2'].includes(ext || '')) return Type;
-      if (ext === 'pdf') return File;
-    }
-    if (mimeType?.startsWith('image/')) return Image;
-    if (mimeType?.includes('font')) return Type;
-    return File;
   };
 
   const isPreviewable = (mimeType: string | null, name: string): boolean => {
@@ -115,7 +84,6 @@ export function ClientDocumentsPanel({
     if (!files || files.length === 0) return;
 
     setUploading(category);
-    setDragOverCategory(null);
 
     try {
       for (const file of Array.from(files)) {
@@ -123,7 +91,6 @@ export function ClientDocumentsPanel({
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${projectId}/${category}/${fileName}`;
 
-        // Upload to storage
         const { error: uploadError } = await supabase.storage
           .from('client-documents')
           .upload(filePath, file);
@@ -134,11 +101,8 @@ export function ClientDocumentsPanel({
           continue;
         }
 
-        // Get current user
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Insert record into client_documents table
-        // Using 'as any' because table was just created and types haven't regenerated
         const { error: dbError } = await (supabase as any)
           .from('client_documents')
           .insert({
@@ -153,7 +117,6 @@ export function ClientDocumentsPanel({
 
         if (dbError) {
           console.error('DB error:', dbError);
-          // Try to clean up the uploaded file
           await supabase.storage.from('client-documents').remove([filePath]);
           toast.error(`Failed to save ${file.name}: ${dbError.message}`);
           continue;
@@ -168,7 +131,6 @@ export function ClientDocumentsPanel({
       toast.error('Failed to upload file(s)');
     } finally {
       setUploading(null);
-      // Reset file input
       const input = fileInputRefs.current[category];
       if (input) input.value = '';
     }
@@ -180,18 +142,14 @@ export function ClientDocumentsPanel({
     setDeleting(doc.id);
 
     try {
-      // Delete from storage
       const { error: storageError } = await supabase.storage
         .from('client-documents')
         .remove([doc.file_path]);
 
       if (storageError) {
         console.error('Storage delete error:', storageError);
-        // Continue anyway to delete the DB record
       }
 
-      // Delete from database
-      // Using 'as any' because table was just created and types haven't regenerated
       const { error: dbError } = await (supabase as any)
         .from('client_documents')
         .delete()
@@ -220,7 +178,7 @@ export function ClientDocumentsPanel({
     try {
       const { data, error } = await supabase.storage
         .from('client-documents')
-        .createSignedUrl(doc.file_path, 3600); // 1 hour
+        .createSignedUrl(doc.file_path, 3600);
 
       if (error) {
         console.error('Preview URL error:', error);
@@ -243,7 +201,7 @@ export function ClientDocumentsPanel({
     try {
       const { data, error } = await supabase.storage
         .from('client-documents')
-        .createSignedUrl(doc.file_path, 60); // 1 minute
+        .createSignedUrl(doc.file_path, 60);
 
       if (error) {
         console.error('Download URL error:', error);
@@ -251,7 +209,6 @@ export function ClientDocumentsPanel({
         return;
       }
 
-      // Create a temporary link and click it
       const link = document.createElement('a');
       link.href = data.signedUrl;
       link.download = doc.name;
@@ -269,200 +226,147 @@ export function ClientDocumentsPanel({
     setPreviewUrl(null);
   };
 
-  // Drag and drop handlers
-  const handleDragOver = (e: React.DragEvent, categoryId: CategoryId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!readOnly) {
-      setDragOverCategory(categoryId);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverCategory(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, categoryId: CategoryId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverCategory(null);
-    
-    if (readOnly) return;
-    
-    const files = e.dataTransfer.files;
-    if (files && files.length > 0) {
-      handleFileSelect(categoryId, files);
-    }
-  };
-
   return (
-    <div className="space-y-4">
-      <Accordion type="multiple" className="space-y-2" defaultValue={['brandbook', 'logos']}>
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {DOCUMENT_CATEGORIES.map((category) => {
           const categoryDocs = getDocumentsByCategory(category.id);
           const Icon = category.icon;
+          const isUploading = uploading === category.id;
 
           return (
-            <AccordionItem 
-              key={category.id} 
-              value={category.id}
-              className="border rounded-lg overflow-hidden"
-            >
-              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-                <div className="flex items-center gap-3">
-                  <Icon className="w-5 h-5 text-muted-foreground" />
-                  <span className="font-medium">{category.label}</span>
-                  <Badge variant="secondary" className="ml-2">
-                    {categoryDocs.length}
-                  </Badge>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4 pb-4">
-                <p className="text-sm text-muted-foreground mb-4">
-                  {category.description}
-                </p>
+            <Card key={category.id} className={categoryDocs.length === 0 ? "border-dashed" : ""}>
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={(el) => { fileInputRefs.current[category.id] = el; }}
+                accept={category.accept}
+                multiple
+                className="hidden"
+                onChange={(e) => handleFileSelect(category.id, e.target.files)}
+              />
 
-                {/* Upload button + Drag-and-drop zone (only in edit mode) */}
-                {!readOnly && (
-                  <>
-                    <input
-                      type="file"
-                      ref={(el) => { fileInputRefs.current[category.id] = el; }}
-                      accept={category.accept}
-                      multiple
-                      className="hidden"
-                      onChange={(e) => handleFileSelect(category.id, e.target.files)}
-                    />
-                    
-                    {/* Upload Button */}
-                    <div className="mb-4 flex items-center gap-2">
-                      <Button
+              {categoryDocs.length === 0 ? (
+                /* Empty state */
+                <CardContent className="flex flex-col items-center justify-center py-10">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                    <Icon className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <h3 className="font-semibold text-sm mb-1">{category.label}</h3>
+                  <p className="text-xs text-muted-foreground text-center mb-4 max-w-[180px]">
+                    {category.description}
+                  </p>
+                  {!readOnly && (
+                    <Button 
+                      size="sm" 
+                      onClick={() => fileInputRefs.current[category.id]?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Import
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </CardContent>
+              ) : (
+                /* Has documents */
+                <>
+                  <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                      {category.label}
+                    </CardTitle>
+                    {!readOnly && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
                         onClick={() => fileInputRefs.current[category.id]?.click()}
-                        disabled={uploading === category.id}
-                        size="sm"
+                        disabled={isUploading}
+                        className="h-7 text-xs"
                       >
-                        {uploading === category.id ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Uploading...
-                          </>
+                        {isUploading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (
                           <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            Upload {category.label}
+                            <Upload className="w-3 h-3 mr-1" />
+                            Import
                           </>
                         )}
                       </Button>
-                      <span className="text-xs text-muted-foreground">
-                        {category.accept}
-                      </span>
-                    </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="pt-0 px-4 pb-4">
+                    <div className="space-y-1">
+                      {categoryDocs.map((doc) => {
+                        const canPreview = isPreviewable(doc.mime_type, doc.name);
+                        const isDeleting = deleting === doc.id;
 
-                    {/* Drag-and-drop zone */}
-                    <div
-                      className={cn(
-                        "mb-4 border-2 border-dashed rounded-lg p-6 transition-colors cursor-pointer",
-                        dragOverCategory === category.id
-                          ? "border-primary bg-primary/5"
-                          : "border-muted-foreground/25 hover:border-muted-foreground/50"
-                      )}
-                      onDragOver={(e) => handleDragOver(e, category.id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, category.id)}
-                      onClick={() => fileInputRefs.current[category.id]?.click()}
-                    >
-                      <div className="flex flex-col items-center justify-center gap-2 text-center">
-                        {dragOverCategory === category.id ? (
-                          <>
-                            <Upload className="w-8 h-8 text-primary" />
-                            <p className="text-sm font-medium text-primary">Drop files here</p>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-8 h-8 text-muted-foreground" />
-                            <p className="text-sm text-muted-foreground">
-                              Drag & drop files here, or click to browse
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Document list */}
-                {categoryDocs.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-                    <Icon className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No {category.label.toLowerCase()} uploaded yet</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-2">
-                    {categoryDocs.map((doc) => {
-                      const FileIcon = getFileIcon(doc.mime_type, doc.name);
-                      const canPreview = isPreviewable(doc.mime_type, doc.name);
-
-                      return (
-                        <Card key={doc.id} className="overflow-hidden">
-                          <CardContent className="p-3 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                              <FileIcon className="w-5 h-5 text-muted-foreground" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{doc.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatFileSize(doc.file_size)}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1">
+                        return (
+                          <div 
+                            key={doc.id} 
+                            className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50 group"
+                          >
+                            <File className="w-4 h-4 text-muted-foreground shrink-0" />
+                            <span className="flex-1 text-sm truncate" title={doc.name}>
+                              {doc.name}
+                            </span>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                               {canPreview && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7"
                                   onClick={() => handlePreview(doc)}
                                   title="Preview"
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <Eye className="w-3.5 h-3.5" />
                                 </Button>
                               )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7"
                                 onClick={() => handleDownload(doc)}
                                 title="Download"
                               >
-                                <Download className="w-4 h-4" />
+                                <Download className="w-3.5 h-3.5" />
                               </Button>
                               {!readOnly && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
                                   onClick={() => handleDelete(doc)}
-                                  disabled={deleting === doc.id}
+                                  disabled={isDeleting}
                                   title="Delete"
-                                  className="text-destructive hover:text-destructive"
                                 >
-                                  {deleting === doc.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  {isDeleting ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   )}
                                 </Button>
                               )}
                             </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </AccordionContent>
-            </AccordionItem>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </>
+              )}
+            </Card>
           );
         })}
-      </Accordion>
+      </div>
 
       {/* Preview Dialog */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => !open && closePreview()}>
@@ -473,37 +377,34 @@ export function ClientDocumentsPanel({
                 {previewDoc?.name}
               </DialogTitle>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => previewDoc && handleDownload(previewDoc)}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download
-                </Button>
+                {previewDoc && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownload(previewDoc)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                )}
               </div>
             </div>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden bg-muted/30">
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-muted/30">
             {loadingPreview ? (
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-              </div>
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             ) : previewUrl ? (
-              previewDoc?.mime_type?.startsWith('image/') || 
-              ['png', 'jpg', 'jpeg', 'svg'].includes(previewDoc?.name.split('.').pop()?.toLowerCase() || '') ? (
-                <div className="flex items-center justify-center h-full p-4">
-                  <img
-                    src={previewUrl}
-                    alt={previewDoc?.name}
-                    className="max-w-full max-h-full object-contain"
-                  />
-                </div>
-              ) : (
+              previewDoc?.name.toLowerCase().endsWith('.pdf') ? (
                 <iframe
                   src={previewUrl}
-                  className="w-full h-full border-0"
+                  className="w-full h-full border-0 rounded"
                   title={previewDoc?.name}
+                />
+              ) : (
+                <img
+                  src={previewUrl}
+                  alt={previewDoc?.name}
+                  className="max-w-full max-h-full object-contain rounded"
                 />
               )
             ) : null}
@@ -513,5 +414,3 @@ export function ClientDocumentsPanel({
     </div>
   );
 }
-
-export default ClientDocumentsPanel;
