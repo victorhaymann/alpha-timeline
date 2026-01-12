@@ -281,6 +281,25 @@ export default function SharedProjectView() {
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
   
+  // Refresh function for client documents (used after upload)
+  const refreshClientDocuments = useCallback(async () => {
+    if (!share?.project_id) return;
+    try {
+      const { data, error } = await (supabase as any)
+        .from('client_documents')
+        .select('*')
+        .eq('project_id', share.project_id)
+        .order('category')
+        .order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        setClientDocuments(data);
+      }
+    } catch (err) {
+      console.error('Error refreshing client documents:', err);
+    }
+  }, [share?.project_id]);
+  
   // PDF Preview state
   const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -1391,8 +1410,8 @@ export default function SharedProjectView() {
             <ClientDocumentsPanel
               projectId={project.id}
               documents={clientDocuments}
-              readOnly={true}
-              onRefresh={() => {}}
+              readOnly={false}
+              onRefresh={refreshClientDocuments}
             />
           </TabsContent>
         </Tabs>
