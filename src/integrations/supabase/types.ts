@@ -410,6 +410,42 @@ export type Database = {
           },
         ]
       }
+      learning_resources: {
+        Row: {
+          created_at: string | null
+          created_by: string
+          description: string
+          icon_type: string | null
+          id: string
+          sort_order: number | null
+          title: string
+          updated_at: string | null
+          url: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by: string
+          description: string
+          icon_type?: string | null
+          id?: string
+          sort_order?: number | null
+          title: string
+          updated_at?: string | null
+          url?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string
+          description?: string
+          icon_type?: string | null
+          id?: string
+          sort_order?: number | null
+          title?: string
+          updated_at?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       meeting_notes: {
         Row: {
           client_hidden: boolean | null

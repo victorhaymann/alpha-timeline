@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
+import { LearningResourcesPanel } from '@/components/resources/LearningResourcesPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { GanttChart } from '@/components/timeline/GanttChart';
@@ -359,36 +360,7 @@ export default function ClientProjectView() {
             onRefresh={() => fetchData()}
           />
           
-          <Card>
-            <CardHeader>
-              <CardTitle>Learning Resources</CardTitle>
-              <CardDescription>
-                Helpful guides and materials to support your project workflow.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <div className="block p-4 rounded-lg border border-border bg-muted/30">
-                  <BookOpen className="w-8 h-8 text-muted-foreground mb-3" />
-                  <h4 className="font-semibold mb-1 text-muted-foreground">Getting Started Guide</h4>
-                  <p className="text-sm text-muted-foreground">Learn the basics of timeline management and project setup.</p>
-                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
-                </div>
-                <div className="block p-4 rounded-lg border border-border bg-muted/30">
-                  <Layers className="w-8 h-8 text-muted-foreground mb-3" />
-                  <h4 className="font-semibold mb-1 text-muted-foreground">Phase Management</h4>
-                  <p className="text-sm text-muted-foreground">Understanding phase weights and task distribution.</p>
-                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
-                </div>
-                <div className="block p-4 rounded-lg border border-border bg-muted/30">
-                  <Users className="w-8 h-8 text-muted-foreground mb-3" />
-                  <h4 className="font-semibold mb-1 text-muted-foreground">Client Collaboration</h4>
-                  <p className="text-sm text-muted-foreground">Share projects and manage client feedback effectively.</p>
-                  <Badge variant="outline" className="mt-3 text-xs">Coming Soon</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <LearningResourcesPanel readOnly={true} />
         </TabsContent>
 
         <TabsContent value="client-documents">
