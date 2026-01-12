@@ -71,6 +71,7 @@ interface ClientDocumentsPanelProps {
   documents: ClientDocument[];
   resourceLinks?: ResourceLink[];
   readOnly?: boolean;
+  canUpload?: boolean; // Allow uploads even when readOnly (for clients via share link)
   onRefresh: () => void;
   onRefreshLinks?: () => void;
   shareToken?: string;
@@ -81,6 +82,7 @@ export function ClientDocumentsPanel({
   documents,
   resourceLinks = [],
   readOnly = false,
+  canUpload = true, // Default to true - uploads allowed unless explicitly disabled
   onRefresh,
   onRefreshLinks,
 }: ClientDocumentsPanelProps) {
@@ -352,7 +354,7 @@ export function ClientDocumentsPanel({
                   <p className="text-xs text-muted-foreground text-center mb-4 max-w-[180px]">
                     {category.description}
                   </p>
-                  {!readOnly && (
+                  {canUpload && (
                     <Button 
                       size="sm" 
                       onClick={() => fileInputRefs.current[category.id]?.click()}
@@ -380,7 +382,7 @@ export function ClientDocumentsPanel({
                       <Icon className="w-4 h-4 text-muted-foreground" />
                       {category.label}
                     </CardTitle>
-                    {!readOnly && (
+                    {canUpload && (
                       <Button 
                         size="sm" 
                         variant="outline"
