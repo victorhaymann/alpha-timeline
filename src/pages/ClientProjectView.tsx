@@ -20,7 +20,8 @@ import {
   Users,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { GanttChart } from '@/components/timeline/GanttChart';
@@ -352,6 +353,13 @@ export default function ClientProjectView() {
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">
+          <ResourceLinksPanel
+            projectId={project.id}
+            resourceLinks={resourceLinks}
+            readOnly={true}
+            onRefresh={() => fetchData()}
+          />
+          
           <Card>
             <CardHeader>
               <CardTitle>Learning Resources</CardTitle>
@@ -388,7 +396,6 @@ export default function ClientProjectView() {
           <ClientDocumentsPanel
             projectId={project.id}
             documents={clientDocuments}
-            resourceLinks={resourceLinks}
             readOnly={true}
             onRefresh={() => fetchData()}
           />
