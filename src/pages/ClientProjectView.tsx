@@ -20,7 +20,7 @@ import {
   Users,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { GanttChart } from '@/components/timeline/GanttChart';
@@ -46,6 +46,7 @@ export default function ClientProjectView() {
   const [hiddenMeetingDates, setHiddenMeetingDates] = useState<Set<string>>(new Set());
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
 
@@ -148,6 +149,15 @@ export default function ClientProjectView() {
         .order('created_at', { ascending: false });
 
       setClientDocuments((clientDocsData as ClientDocType[]) || []);
+
+      // Fetch resource links
+      const { data: resourceLinksData } = await (supabase as any)
+        .from('project_resource_links')
+        .select('*')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false });
+
+      setResourceLinks((resourceLinksData as ResourceLink[]) || []);
 
       // Fetch hidden meeting dates
       const { data: hiddenMeetingsData } = await supabase
@@ -378,7 +388,8 @@ export default function ClientProjectView() {
           <ClientDocumentsPanel
             projectId={project.id}
             documents={clientDocuments}
-            readOnly={false}
+            resourceLinks={resourceLinks}
+            readOnly={true}
             onRefresh={() => fetchData()}
           />
         </TabsContent>

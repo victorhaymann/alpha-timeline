@@ -32,7 +32,7 @@ import {
   Copy,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -280,6 +280,7 @@ export default function SharedProjectView() {
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>([]);
   
   // Refresh function for client documents (used after upload)
   const refreshClientDocuments = useCallback(async () => {
@@ -1410,7 +1411,8 @@ export default function SharedProjectView() {
             <ClientDocumentsPanel
               projectId={project.id}
               documents={clientDocuments}
-              readOnly={false}
+              resourceLinks={resourceLinks}
+              readOnly={true}
               onRefresh={refreshClientDocuments}
             />
           </TabsContent>

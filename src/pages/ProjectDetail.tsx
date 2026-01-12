@@ -45,7 +45,7 @@ import {
   Pencil,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import confetti from 'canvas-confetti';
@@ -75,6 +75,7 @@ export default function ProjectDetail() {
   const [quotations, setQuotations] = useState<ProjectDocument[]>([]);
   const [invoices, setInvoices] = useState<ProjectDocument[]>([]);
   const [clientDocuments, setClientDocuments] = useState<ClientDocType[]>([]);
+  const [resourceLinks, setResourceLinks] = useState<ResourceLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   
@@ -192,15 +193,17 @@ export default function ProjectDetail() {
   const fetchDocuments = useCallback(async () => {
     if (!id) return;
 
-    const [quotationsRes, invoicesRes, clientDocsRes] = await Promise.all([
+    const [quotationsRes, invoicesRes, clientDocsRes, resourceLinksRes] = await Promise.all([
       supabase.from('quotations').select('*').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('invoices').select('*').eq('project_id', id).order('created_at', { ascending: false }),
       (supabase as any).from('client_documents').select('*').eq('project_id', id).order('category').order('created_at', { ascending: false }),
+      (supabase as any).from('project_resource_links').select('*').eq('project_id', id).order('created_at', { ascending: false }),
     ]);
 
     setQuotations((quotationsRes.data as ProjectDocument[]) || []);
     setInvoices((invoicesRes.data as ProjectDocument[]) || []);
     setClientDocuments((clientDocsRes.data as ClientDocType[]) || []);
+    setResourceLinks((resourceLinksRes.data as ResourceLink[]) || []);
   }, [id]);
 
   const fetchHiddenMeetings = useCallback(async () => {
@@ -688,8 +691,10 @@ export default function ProjectDetail() {
           <ClientDocumentsPanel
             projectId={id!}
             documents={clientDocuments}
+            resourceLinks={resourceLinks}
             readOnly={false}
             onRefresh={fetchDocuments}
+            onRefreshLinks={fetchDocuments}
           />
         </TabsContent>
       </Tabs>

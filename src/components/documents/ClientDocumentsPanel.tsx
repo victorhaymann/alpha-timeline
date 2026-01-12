@@ -1,37 +1,45 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { toast } from 'sonner';
 import {
   BookOpen,
   Image,
   Type,
   Palette,
-  Layout,
-  Camera,
+  FileText,
+  Sparkles,
   Upload,
-  Download,
-  Trash2,
-  Eye,
-  File,
   Loader2,
+  Download,
+  Eye,
+  Trash2,
+  Plus,
+  Link as LinkIcon,
+  ExternalLink,
+  File,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-// Document category configuration
+// Document categories - updated Templates -> Client Brief, Photography -> Artistic Direction
 const DOCUMENT_CATEGORIES = [
   { id: 'brandbook', label: 'Brandbook', icon: BookOpen, accept: '.pdf,.pptx', description: 'Brand guidelines and style guides' },
   { id: 'logos', label: 'Logos', icon: Image, accept: '.png,.jpg,.jpeg,.svg,.pdf', description: 'Logo files in various formats' },
   { id: 'fonts', label: 'Fonts', icon: Type, accept: '.otf,.ttf,.woff,.woff2', description: 'Typography files' },
   { id: 'color_palettes', label: 'Color Palettes', icon: Palette, accept: '.pdf,.png,.jpg,.jpeg', description: 'Color specifications' },
-  { id: 'templates', label: 'Templates', icon: Layout, accept: '.pdf,.pptx,.png,.jpg,.jpeg', description: 'Design templates and mockups' },
-  { id: 'photography', label: 'Photography', icon: Camera, accept: '.png,.jpg,.jpeg', description: 'Brand photos and stock images' },
+  { id: 'client_brief', label: 'Client Brief', icon: FileText, accept: '.pdf,.docx,.pptx,.txt', description: 'Project briefs and requirements' },
+  { id: 'artistic_direction', label: 'Artistic Direction', icon: Sparkles, accept: '.pdf,.png,.jpg,.jpeg,.pptx', description: 'Visual direction and moodboards' },
 ] as const;
 
 type CategoryId = typeof DOCUMENT_CATEGORIES[number]['id'];
@@ -48,19 +56,33 @@ export interface ClientDocument {
   created_at: string;
 }
 
+export interface ResourceLink {
+  id: string;
+  project_id: string;
+  software_name: string;
+  file_name: string;
+  url: string;
+  created_by: string;
+  created_at: string;
+}
+
 interface ClientDocumentsPanelProps {
   projectId: string;
   documents: ClientDocument[];
+  resourceLinks?: ResourceLink[];
   readOnly?: boolean;
   onRefresh: () => void;
+  onRefreshLinks?: () => void;
   shareToken?: string;
 }
 
 export function ClientDocumentsPanel({
   projectId,
   documents,
+  resourceLinks = [],
   readOnly = false,
   onRefresh,
+  onRefreshLinks,
 }: ClientDocumentsPanelProps) {
   const [uploading, setUploading] = useState<CategoryId | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -68,6 +90,12 @@ export function ClientDocumentsPanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  
+  // Add link dialog state
+  const [addLinkOpen, setAddLinkOpen] = useState(false);
+  const [linkForm, setLinkForm] = useState({ softwareName: '', fileName: '', url: '' });
+  const [addingLink, setAddingLink] = useState(false);
+  const [deletingLink, setDeletingLink] = useState<string | null>(null);
 
   const getDocumentsByCategory = (categoryId: string) => {
     return documents.filter(doc => doc.category === categoryId);
@@ -225,9 +253,77 @@ export function ClientDocumentsPanel({
     setPreviewDoc(null);
     setPreviewUrl(null);
   };
+  
+  // Resource Links handlers
+  const handleAddLink = async () => {
+    if (!linkForm.softwareName.trim() || !linkForm.fileName.trim() || !linkForm.url.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+    
+    // Validate URL
+    try {
+      new URL(linkForm.url.trim());
+    } catch {
+      toast.error('Please enter a valid URL');
+      return;
+    }
+    
+    setAddingLink(true);
+    
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) throw new Error('Not authenticated');
+      
+      const { error } = await (supabase as any)
+        .from('project_resource_links')
+        .insert({
+          project_id: projectId,
+          software_name: linkForm.softwareName.trim(),
+          file_name: linkForm.fileName.trim(),
+          url: linkForm.url.trim(),
+          created_by: userData.user.id,
+        });
+      
+      if (error) throw error;
+      
+      toast.success('Link added successfully');
+      setAddLinkOpen(false);
+      setLinkForm({ softwareName: '', fileName: '', url: '' });
+      onRefreshLinks?.();
+    } catch (error: any) {
+      console.error('Add link error:', error);
+      toast.error(error.message || 'Failed to add link');
+    } finally {
+      setAddingLink(false);
+    }
+  };
+  
+  const handleDeleteLink = async (linkId: string) => {
+    if (readOnly) return;
+    setDeletingLink(linkId);
+    
+    try {
+      const { error } = await (supabase as any)
+        .from('project_resource_links')
+        .delete()
+        .eq('id', linkId);
+      
+      if (error) throw error;
+      
+      toast.success('Link deleted');
+      onRefreshLinks?.();
+    } catch (error: any) {
+      console.error('Delete link error:', error);
+      toast.error(error.message || 'Failed to delete link');
+    } finally {
+      setDeletingLink(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
+      {/* Document Categories */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {DOCUMENT_CATEGORIES.map((category) => {
           const categoryDocs = getDocumentsByCategory(category.id);
@@ -367,6 +463,144 @@ export function ClientDocumentsPanel({
           );
         })}
       </div>
+
+      {/* Resource Links Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <LinkIcon className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Resource Links</CardTitle>
+                <CardDescription className="text-xs">Quick access to project files and tools</CardDescription>
+              </div>
+            </div>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAddLinkOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Link
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {resourceLinks.length === 0 ? (
+            <div className="text-center py-8">
+              <LinkIcon className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {readOnly ? 'No resource links available' : 'Add links to project files like Figma, Google Drive, Notion, etc.'}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {resourceLinks.map((link) => (
+                <div
+                  key={link.id}
+                  className="flex items-center gap-4 py-3 group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="shrink-0 font-normal">
+                        {link.software_name}
+                      </Badge>
+                      <span className="font-medium truncate">{link.file_name}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                    >
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="gap-2"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open
+                      </a>
+                    </Button>
+                    {!readOnly && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        disabled={deletingLink === link.id}
+                        onClick={() => handleDeleteLink(link.id)}
+                      >
+                        {deletingLink === link.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Link Dialog */}
+      <Dialog open={addLinkOpen} onOpenChange={setAddLinkOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Resource Link</DialogTitle>
+            <DialogDescription>
+              Add a link to an external resource like Figma, Google Drive, or Notion.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="software-name">Software / Platform</Label>
+              <Input
+                id="software-name"
+                placeholder="e.g., Figma, Google Drive, Notion"
+                value={linkForm.softwareName}
+                onChange={(e) => setLinkForm(f => ({ ...f, softwareName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="file-name">File / Document Name</Label>
+              <Input
+                id="file-name"
+                placeholder="e.g., Main Design File, Project Assets"
+                value={linkForm.fileName}
+                onChange={(e) => setLinkForm(f => ({ ...f, fileName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="url">URL</Label>
+              <Input
+                id="url"
+                type="url"
+                placeholder="https://..."
+                value={linkForm.url}
+                onChange={(e) => setLinkForm(f => ({ ...f, url: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddLinkOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddLink} disabled={addingLink}>
+              {addingLink && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Add Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => !open && closePreview()}>
