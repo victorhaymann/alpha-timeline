@@ -154,6 +154,11 @@ export function GanttChart({
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
+  // Sync dateRange when project dates change (e.g., deadline updated in settings)
+  useEffect(() => {
+    setDateRange({ from: validStartDate, to: validEndDate });
+  }, [validStartDate.getTime(), validEndDate.getTime()]);
+  
   // Track collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   
