@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -76,6 +77,7 @@ export function ClientDocumentsPanel({
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [dragOverCategory, setDragOverCategory] = useState<CategoryId | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const getDocumentsByCategory = (categoryId: string) => {
@@ -113,6 +115,7 @@ export function ClientDocumentsPanel({
     if (!files || files.length === 0) return;
 
     setUploading(category);
+    setDragOverCategory(null);
 
     try {
       for (const file of Array.from(files)) {
@@ -266,6 +269,34 @@ export function ClientDocumentsPanel({
     setPreviewUrl(null);
   };
 
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent, categoryId: CategoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!readOnly) {
+      setDragOverCategory(categoryId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, categoryId: CategoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+    
+    if (readOnly) return;
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileSelect(categoryId, files);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Accordion type="multiple" className="space-y-2" defaultValue={['brandbook', 'logos']}>
@@ -293,9 +324,19 @@ export function ClientDocumentsPanel({
                   {category.description}
                 </p>
 
-                {/* Upload button (only in edit mode) */}
+                {/* Drag-and-drop zone + Upload button (only in edit mode) */}
                 {!readOnly && (
-                  <div className="mb-4">
+                  <div
+                    className={cn(
+                      "mb-4 border-2 border-dashed rounded-lg p-4 transition-colors",
+                      dragOverCategory === category.id
+                        ? "border-primary bg-primary/5"
+                        : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                    )}
+                    onDragOver={(e) => handleDragOver(e, category.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, category.id)}
+                  >
                     <input
                       type="file"
                       ref={(el) => { fileInputRefs.current[category.id] = el; }}
@@ -304,27 +345,36 @@ export function ClientDocumentsPanel({
                       className="hidden"
                       onChange={(e) => handleFileSelect(category.id, e.target.files)}
                     />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRefs.current[category.id]?.click()}
-                      disabled={uploading === category.id}
-                    >
+                    <div className="flex flex-col items-center justify-center gap-2 text-center">
                       {uploading === category.id ? (
                         <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Uploading...
+                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                          <p className="text-sm font-medium">Uploading...</p>
+                        </>
+                      ) : dragOverCategory === category.id ? (
+                        <>
+                          <Upload className="w-8 h-8 text-primary" />
+                          <p className="text-sm font-medium text-primary">Drop files here</p>
                         </>
                       ) : (
                         <>
-                          <Upload className="w-4 h-4 mr-2" />
-                          Upload {category.label}
+                          <Upload className="w-8 h-8 text-muted-foreground" />
+                          <p className="text-sm font-medium">
+                            Drag & drop files here, or{' '}
+                            <button
+                              type="button"
+                              onClick={() => fileInputRefs.current[category.id]?.click()}
+                              className="text-primary hover:underline"
+                            >
+                              browse
+                            </button>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Accepts: {category.accept}
+                          </p>
                         </>
                       )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      Accepts: {category.accept}
-                    </span>
+                    </div>
                   </div>
                 )}
 
