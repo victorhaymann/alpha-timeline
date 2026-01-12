@@ -672,6 +672,30 @@ export default function SharedProjectView() {
         setClientDocuments(clientDocsRes.data || []);
       }
 
+      // Fetch resource links
+      addDebugStep('Fetching resource links...');
+      const resourceLinksRes = await withTimeout(
+        (supabase as any).from('project_resource_links')
+          .select('*')
+          .eq('project_id', shareInfo.project_id)
+          .order('created_at', { ascending: false }),
+        REQUEST_TIMEOUT_MS,
+        'Fetch resource links'
+      ) as QueryResult<ResourceLink[]>;
+
+      if (thisRequestId !== requestIdRef.current) {
+        inFlightRef.current = false;
+        return;
+      }
+
+      if (resourceLinksRes.error) {
+        addDebugStep(`Resource links warning: ${resourceLinksRes.error.message}`);
+        // Non-fatal - continue with no resource links
+      } else {
+        addDebugStep(`Resource links: ${resourceLinksRes.data?.length || 0}`);
+        setResourceLinks(resourceLinksRes.data || []);
+      }
+
       // Fetch hidden meeting dates via secure RPC (works for anonymous users)
       addDebugStep('Fetching hidden meetings via RPC...');
       const hiddenMeetingsRes = await withTimeout(
@@ -1413,6 +1437,7 @@ export default function SharedProjectView() {
               documents={clientDocuments}
               resourceLinks={resourceLinks}
               readOnly={true}
+              canUpload={true}
               onRefresh={refreshClientDocuments}
             />
           </TabsContent>
