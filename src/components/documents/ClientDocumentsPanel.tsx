@@ -28,12 +28,12 @@ import { format } from 'date-fns';
 
 // Document categories - updated Templates -> Client Brief, Photography -> Artistic Direction
 const DOCUMENT_CATEGORIES = [
-  { id: 'brandbook', label: 'Brandbook', icon: BookOpen, accept: '.pdf,.pptx', description: 'Brand guidelines and style guides' },
-  { id: 'logos', label: 'Logos', icon: Image, accept: '.png,.jpg,.jpeg,.svg,.pdf', description: 'Logo files in various formats' },
+  { id: 'brandbook', label: 'Brandbook', icon: BookOpen, accept: '.pdf,.pptx,.ai', description: 'Brand guidelines and style guides' },
+  { id: 'logos', label: 'Logos', icon: Image, accept: '.png,.jpg,.jpeg,.svg,.ai,.pdf', description: 'Logo files in various formats' },
   { id: 'fonts', label: 'Fonts', icon: Type, accept: '.otf,.ttf,.woff,.woff2', description: 'Typography files' },
   { id: '3d_assets', label: '3D Assets', icon: Box, accept: '.glb,.gltf,.fbx,.obj,.stl,.step,.stp,.iges,.igs', description: '3D models and CAD files' },
   { id: 'client_brief', label: 'Client Brief', icon: FileText, accept: '.pdf,.docx,.pptx,.txt', description: 'Project briefs and requirements' },
-  { id: 'artistic_direction', label: 'Artistic Direction', icon: Sparkles, accept: '.pdf,.png,.jpg,.jpeg,.pptx', description: 'Visual direction and moodboards' },
+  { id: 'artistic_direction', label: 'Artistic Direction', icon: Sparkles, accept: '.pdf,.png,.jpg,.jpeg,.svg,.ai,.pptx', description: 'Visual direction and moodboards' },
 ] as const;
 
 type CategoryId = typeof DOCUMENT_CATEGORIES[number]['id'];
