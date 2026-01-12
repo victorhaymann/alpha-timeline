@@ -324,19 +324,9 @@ export function ClientDocumentsPanel({
                   {category.description}
                 </p>
 
-                {/* Drag-and-drop zone + Upload button (only in edit mode) */}
+                {/* Upload button + Drag-and-drop zone (only in edit mode) */}
                 {!readOnly && (
-                  <div
-                    className={cn(
-                      "mb-4 border-2 border-dashed rounded-lg p-4 transition-colors",
-                      dragOverCategory === category.id
-                        ? "border-primary bg-primary/5"
-                        : "border-muted-foreground/25 hover:border-muted-foreground/50"
-                    )}
-                    onDragOver={(e) => handleDragOver(e, category.id)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, category.id)}
-                  >
+                  <>
                     <input
                       type="file"
                       ref={(el) => { fileInputRefs.current[category.id] = el; }}
@@ -345,37 +335,61 @@ export function ClientDocumentsPanel({
                       className="hidden"
                       onChange={(e) => handleFileSelect(category.id, e.target.files)}
                     />
-                    <div className="flex flex-col items-center justify-center gap-2 text-center">
-                      {uploading === category.id ? (
-                        <>
-                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                          <p className="text-sm font-medium">Uploading...</p>
-                        </>
-                      ) : dragOverCategory === category.id ? (
-                        <>
-                          <Upload className="w-8 h-8 text-primary" />
-                          <p className="text-sm font-medium text-primary">Drop files here</p>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-8 h-8 text-muted-foreground" />
-                          <p className="text-sm font-medium">
-                            Drag & drop files here, or{' '}
-                            <button
-                              type="button"
-                              onClick={() => fileInputRefs.current[category.id]?.click()}
-                              className="text-primary hover:underline"
-                            >
-                              browse
-                            </button>
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Accepts: {category.accept}
-                          </p>
-                        </>
-                      )}
+                    
+                    {/* Upload Button */}
+                    <div className="mb-4 flex items-center gap-2">
+                      <Button
+                        onClick={() => fileInputRefs.current[category.id]?.click()}
+                        disabled={uploading === category.id}
+                        size="sm"
+                      >
+                        {uploading === category.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            Upload {category.label}
+                          </>
+                        )}
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {category.accept}
+                      </span>
                     </div>
-                  </div>
+
+                    {/* Drag-and-drop zone */}
+                    <div
+                      className={cn(
+                        "mb-4 border-2 border-dashed rounded-lg p-6 transition-colors cursor-pointer",
+                        dragOverCategory === category.id
+                          ? "border-primary bg-primary/5"
+                          : "border-muted-foreground/25 hover:border-muted-foreground/50"
+                      )}
+                      onDragOver={(e) => handleDragOver(e, category.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, category.id)}
+                      onClick={() => fileInputRefs.current[category.id]?.click()}
+                    >
+                      <div className="flex flex-col items-center justify-center gap-2 text-center">
+                        {dragOverCategory === category.id ? (
+                          <>
+                            <Upload className="w-8 h-8 text-primary" />
+                            <p className="text-sm font-medium text-primary">Drop files here</p>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-8 h-8 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">
+                              Drag & drop files here, or click to browse
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {/* Document list */}
