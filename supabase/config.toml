@@ -1,1 +1,4 @@
 project_id = "ugqhdgojxfxbfpviakza"
+
+[functions.notify-pm-upload]
+verify_jwt = false
