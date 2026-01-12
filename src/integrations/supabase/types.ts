@@ -528,6 +528,44 @@ export type Database = {
         }
         Relationships: []
       }
+      project_resource_links: {
+        Row: {
+          created_at: string
+          created_by: string
+          file_name: string
+          id: string
+          project_id: string
+          software_name: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          file_name: string
+          id?: string
+          project_id: string
+          software_name: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          file_name?: string
+          id?: string
+          project_id?: string
+          software_name?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_resource_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_shares: {
         Row: {
           created_at: string
