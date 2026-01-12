@@ -69,6 +69,9 @@ interface ClientDocumentsPanelProps {
   invoices?: ProjectDocument[];
   onQuotationsRefresh?: () => void;
   showQuotationsInvoices?: boolean;
+  // Shared view props for PM notifications
+  shareToken?: string;
+  isSharedView?: boolean;
 }
 
 export function ClientDocumentsPanel({
@@ -81,6 +84,8 @@ export function ClientDocumentsPanel({
   invoices = [],
   onQuotationsRefresh,
   showQuotationsInvoices = false,
+  shareToken,
+  isSharedView = false,
 }: ClientDocumentsPanelProps) {
   const [uploading, setUploading] = useState<CategoryId | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -148,6 +153,29 @@ export function ClientDocumentsPanel({
         }
 
         toast.success(`Uploaded ${file.name}`);
+
+        // Notify PM if this is a shared view upload
+        if (isSharedView && shareToken) {
+          try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            await fetch(`${supabaseUrl}/functions/v1/notify-pm-upload`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+              body: JSON.stringify({
+                projectId,
+                fileName: file.name,
+                category,
+                shareToken,
+              }),
+            });
+          } catch (notifyError) {
+            // Silently log - don't disrupt user experience
+            console.error('Failed to send PM notification:', notifyError);
+          }
+        }
       }
 
       onRefresh();

@@ -1346,6 +1346,8 @@ export default function SharedProjectView() {
               quotations={quotations}
               invoices={invoices}
               showQuotationsInvoices={true}
+              shareToken={token}
+              isSharedView={true}
             />
           </TabsContent>
         </Tabs>
