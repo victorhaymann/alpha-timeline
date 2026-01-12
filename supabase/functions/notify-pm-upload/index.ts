@@ -125,7 +125,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email notification
     const emailResponse = await resend.emails.send({
-      from: "The New Face <notifications@thenewface.io>",
+      from: "The New Face <onboarding@resend.dev>",
       to: [pmEmail],
       subject: `📁 New file uploaded to ${project.name}`,
       html: `
@@ -186,7 +186,16 @@ const handler = async (req: Request): Promise<Response> => {
       `,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    // Check for email sending errors
+    if (emailResponse.error) {
+      console.error("Failed to send email:", emailResponse.error);
+      return new Response(
+        JSON.stringify({ error: "Failed to send notification email", details: emailResponse.error }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log("Email sent successfully:", emailResponse.data);
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailResponse.data?.id }),
