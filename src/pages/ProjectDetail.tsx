@@ -435,16 +435,7 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          {/* Client Logo */}
-          {project.client_logo_url && (
-            <img
-              src={project.client_logo_url}
-              alt="Client logo"
-              className="h-12 w-auto object-contain"
-            />
-          )}
-          <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button 
             variant="outline" 
             size="sm" 
@@ -463,9 +454,19 @@ export default function ProjectDetail() {
             <Settings className="w-4 h-4" />
             Settings
           </Button>
-          </div>
         </div>
       </div>
+
+      {/* Client Logo - Large Centered Display */}
+      {project.client_logo_url && (
+        <div className="flex justify-center py-6">
+          <img
+            src={project.client_logo_url}
+            alt="Client logo"
+            className="h-24 md:h-32 w-auto object-contain max-w-[300px]"
+          />
+        </div>
+      )}
 
       {/* Project Stats */}
       <div className="grid gap-4 md:grid-cols-5">
