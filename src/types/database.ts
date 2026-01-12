@@ -33,6 +33,7 @@ export interface Project {
   name: string;
   description: string | null;
   client_name: string | null;
+  client_logo_url: string | null;
   start_date: string;
   end_date: string;
   status: ProjectStatus;

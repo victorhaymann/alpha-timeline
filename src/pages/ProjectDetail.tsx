@@ -12,6 +12,7 @@ import { TaskDetailDialog } from '@/components/tasks/TaskDetailDialog';
 import { ExportPanel } from '@/components/exports/ExportPanel';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { ShareProjectDialog } from '@/components/shares/ShareProjectDialog';
+import { ProjectSettingsDialog } from '@/components/projects/ProjectSettingsDialog';
 import { ErrorCard } from '@/components/errors/ErrorCard';
 import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
 import { Input } from '@/components/ui/input';
@@ -90,6 +91,9 @@ export default function ProjectDetail() {
   
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  
+  // Settings dialog state
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   
   // PM Edit dialog state
   const [pmDialogOpen, setPmDialogOpen] = useState(false);
@@ -431,7 +435,16 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-4">
+          {/* Client Logo */}
+          {project.client_logo_url && (
+            <img
+              src={project.client_logo_url}
+              alt="Client logo"
+              className="h-12 w-auto object-contain"
+            />
+          )}
+          <div className="flex gap-2">
           <Button 
             variant="outline" 
             size="sm" 
@@ -441,10 +454,16 @@ export default function ProjectDetail() {
             <Share2 className="w-4 h-4" />
             Share
           </Button>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-2"
+            onClick={() => setSettingsDialogOpen(true)}
+          >
             <Settings className="w-4 h-4" />
             Settings
           </Button>
+          </div>
         </div>
       </div>
 
@@ -755,6 +774,24 @@ export default function ProjectDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Project Settings Dialog */}
+      <ProjectSettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        projectId={project.id}
+        projectName={project.name}
+        projectEndDate={project.end_date}
+        clientLogoUrl={project.client_logo_url || null}
+        onSave={(updates) => {
+          setProject(prev => prev ? {
+            ...prev,
+            name: updates.name,
+            end_date: updates.end_date,
+            client_logo_url: updates.client_logo_url,
+          } : null);
+        }}
+      />
     </div>
   );
 }
