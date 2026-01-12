@@ -45,7 +45,8 @@ import {
   Pencil,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import confetti from 'canvas-confetti';
@@ -655,6 +656,13 @@ export default function ProjectDetail() {
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">
+          <ResourceLinksPanel
+            projectId={id!}
+            resourceLinks={resourceLinks}
+            readOnly={false}
+            onRefresh={fetchDocuments}
+          />
+          
           <Card>
             <CardHeader>
               <CardTitle>Learning Resources</CardTitle>
@@ -691,10 +699,8 @@ export default function ProjectDetail() {
           <ClientDocumentsPanel
             projectId={id!}
             documents={clientDocuments}
-            resourceLinks={resourceLinks}
             readOnly={false}
             onRefresh={fetchDocuments}
-            onRefreshLinks={fetchDocuments}
           />
         </TabsContent>
       </Tabs>

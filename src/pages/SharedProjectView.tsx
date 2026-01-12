@@ -32,7 +32,8 @@ import {
   Copy,
   Folder,
 } from 'lucide-react';
-import { ClientDocumentsPanel, ClientDocument as ClientDocType, ResourceLink } from '@/components/documents/ClientDocumentsPanel';
+import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
+import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -1399,6 +1400,13 @@ export default function SharedProjectView() {
           </TabsContent>
 
           <TabsContent value="resources" className="space-y-4">
+            <ResourceLinksPanel
+              projectId={project.id}
+              resourceLinks={resourceLinks}
+              readOnly={true}
+              onRefresh={refreshClientDocuments}
+            />
+            
             <Card>
               <CardHeader>
                 <CardTitle>Learning Resources</CardTitle>
@@ -1435,7 +1443,6 @@ export default function SharedProjectView() {
             <ClientDocumentsPanel
               projectId={project.id}
               documents={clientDocuments}
-              resourceLinks={resourceLinks}
               readOnly={true}
               canUpload={true}
               onRefresh={refreshClientDocuments}
