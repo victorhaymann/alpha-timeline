@@ -1248,10 +1248,6 @@ export default function SharedProjectView() {
         <Tabs defaultValue="timeline" className="space-y-6">
           <TabsList className="border border-border">
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="documents" className="gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              Quotations & Invoices
-            </TabsTrigger>
             <TabsTrigger value="resources" className="gap-1.5">
               <BookOpen className="w-3.5 h-3.5" />
               Resources
@@ -1298,105 +1294,6 @@ export default function SharedProjectView() {
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
-
-          <TabsContent value="documents" className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Quotations</h3>
-                {quotations.length > 0 ? (
-                  <div className="space-y-2">
-                    {quotations.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                      >
-                        <div className="flex items-center gap-3">
-                          <FileText className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{doc.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatFileSize(doc.file_size)} • {safeFormatDate(doc.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          {doc.name.toLowerCase().endsWith('.pdf') && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handlePreview(doc)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDownload(doc)}
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <Card className="border-dashed">
-                    <CardContent className="py-8 text-center text-muted-foreground">
-                      No quotations available.
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Invoices</h3>
-                {invoices.length > 0 ? (
-                  <div className="space-y-2">
-                    {invoices.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
-                      >
-                        <div className="flex items-center gap-3">
-                          <FileText className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{doc.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatFileSize(doc.file_size)} • {safeFormatDate(doc.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          {doc.name.toLowerCase().endsWith('.pdf') && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handlePreview(doc)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDownload(doc)}
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <Card className="border-dashed">
-                    <CardContent className="py-8 text-center text-muted-foreground">
-                      No invoices available.
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
           </TabsContent>
 
           <TabsContent value="resources" className="space-y-4">
@@ -1446,6 +1343,9 @@ export default function SharedProjectView() {
               readOnly={true}
               canUpload={true}
               onRefresh={refreshClientDocuments}
+              quotations={quotations}
+              invoices={invoices}
+              showQuotationsInvoices={true}
             />
           </TabsContent>
         </Tabs>

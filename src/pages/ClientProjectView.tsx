@@ -14,7 +14,6 @@ import {
   Loader2,
   BarChart3,
   FileText,
-  Download,
   BookOpen,
   Layers,
   Users,
@@ -314,10 +313,6 @@ export default function ClientProjectView() {
       <Tabs defaultValue="timeline" className="space-y-6">
         <TabsList>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="documents" className="gap-1.5">
-            <FileText className="w-3.5 h-3.5" />
-            Quotations & Invoices
-          </TabsTrigger>
           <TabsTrigger value="resources" className="gap-1.5">
             <BookOpen className="w-3.5 h-3.5" />
             Resources
@@ -346,10 +341,6 @@ export default function ClientProjectView() {
             onAddTask={() => {}}
             readOnly={true}
           />
-        </TabsContent>
-
-        <TabsContent value="documents">
-          <ReadOnlyDocuments documents={quotations} />
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">
@@ -398,108 +389,12 @@ export default function ClientProjectView() {
             documents={clientDocuments}
             readOnly={true}
             onRefresh={() => fetchData()}
+            quotations={quotations}
+            invoices={[]}
+            showQuotationsInvoices={true}
           />
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// Read-only document viewer for client portal
-function ReadOnlyDocuments({ documents }: { documents: ProjectDocument[] }) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewDoc, setPreviewDoc] = useState<ProjectDocument | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-
-  const handlePreview = async (doc: ProjectDocument) => {
-    setPreviewDoc(doc);
-    setLoadingPreview(true);
-
-    try {
-      const { data, error } = await supabase.storage
-        .from('project-documents')
-        .createSignedUrl(doc.file_path, 3600);
-
-      if (error) throw error;
-      setPreviewUrl(data.signedUrl);
-    } catch (error) {
-      console.error('Preview error:', error);
-      setPreviewDoc(null);
-    } finally {
-      setLoadingPreview(false);
-    }
-  };
-
-  const closePreview = () => {
-    setPreviewDoc(null);
-    setPreviewUrl(null);
-  };
-
-  if (documents.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-16">
-          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <FileText className="w-8 h-8 text-primary" />
-          </div>
-          <h3 className="text-lg font-semibold mb-2">No Quotations</h3>
-          <p className="text-muted-foreground text-center max-w-sm">
-            No quotations have been uploaded for this project yet.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <>
-      <div className="grid gap-3">
-        {documents.map((doc) => (
-          <Card
-            key={doc.id}
-            className="hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => handlePreview(doc)}
-          >
-            <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <div className="p-2 rounded-lg bg-destructive/10">
-                  <FileText className="w-6 h-6 text-destructive" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{doc.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(doc.created_at), 'MMM d, yyyy')}
-                  </p>
-                </div>
-                <Badge variant="outline">Click to view</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* PDF Preview Dialog */}
-      {previewDoc && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-background border rounded-lg shadow-lg w-full max-w-4xl h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h3 className="font-semibold truncate pr-4">{previewDoc.name}</h3>
-              <Button variant="ghost" size="sm" onClick={closePreview}>
-                Close
-              </Button>
-            </div>
-            <div className="flex-1 min-h-0">
-              {loadingPreview ? (
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                </div>
-              ) : previewUrl ? (
-                <iframe src={previewUrl} className="w-full h-full border-0" title={previewDoc.name} />
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
   );
 }
