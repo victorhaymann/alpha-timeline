@@ -403,7 +403,7 @@ export default function ProjectDetail() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="relative flex items-start justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Button
@@ -435,6 +435,18 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
+
+        {/* Client Logo - Centered */}
+        {project.client_logo_url && (
+          <div className="absolute left-1/2 -translate-x-1/2 top-0">
+            <img
+              src={project.client_logo_url}
+              alt="Client logo"
+              className="h-9 w-auto object-contain"
+            />
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <Button 
             variant="outline" 
@@ -456,17 +468,6 @@ export default function ProjectDetail() {
           </Button>
         </div>
       </div>
-
-      {/* Client Logo - Large Centered Display */}
-      {project.client_logo_url && (
-        <div className="flex justify-center py-6">
-          <img
-            src={project.client_logo_url}
-            alt="Client logo"
-            className="h-24 md:h-32 w-auto object-contain max-w-[300px]"
-          />
-        </div>
-      )}
 
       {/* Project Stats */}
       <div className="grid gap-4 md:grid-cols-5">
