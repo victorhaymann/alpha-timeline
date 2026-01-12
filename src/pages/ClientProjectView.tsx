@@ -243,6 +243,14 @@ export default function ClientProjectView() {
             <p className="text-muted-foreground ml-11">{project.description}</p>
           )}
         </div>
+        {/* Client Logo */}
+        {project.client_logo_url && (
+          <img
+            src={project.client_logo_url}
+            alt="Client logo"
+            className="h-12 w-auto object-contain"
+          />
+        )}
       </div>
 
       {/* Stats */}

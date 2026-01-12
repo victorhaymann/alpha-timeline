@@ -661,6 +661,7 @@ export type Database = {
           checkin_timezone: string | null
           checkin_weekday: string | null
           client_id: string | null
+          client_logo_url: string | null
           client_name: string | null
           created_at: string
           default_review_rounds: number | null
@@ -688,6 +689,7 @@ export type Database = {
           checkin_timezone?: string | null
           checkin_weekday?: string | null
           client_id?: string | null
+          client_logo_url?: string | null
           client_name?: string | null
           created_at?: string
           default_review_rounds?: number | null
@@ -715,6 +717,7 @@ export type Database = {
           checkin_timezone?: string | null
           checkin_weekday?: string | null
           client_id?: string | null
+          client_logo_url?: string | null
           client_name?: string | null
           created_at?: string
           default_review_rounds?: number | null
