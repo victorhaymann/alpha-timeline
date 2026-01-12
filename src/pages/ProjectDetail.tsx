@@ -567,10 +567,6 @@ export default function ProjectDetail() {
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="documents" className="gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              Quotations & Invoices
-            </TabsTrigger>
             <TabsTrigger value="resources" className="gap-1.5">
               <BookOpen className="w-3.5 h-3.5" />
               Resources
@@ -632,29 +628,6 @@ export default function ProjectDetail() {
           </ErrorBoundary>
         </TabsContent>
 
-        <TabsContent value="documents" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Quotations</h3>
-              <DocumentUploader
-                projectId={id!}
-                type="quotations"
-                documents={quotations}
-                onUploadComplete={fetchDocuments}
-              />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Invoices</h3>
-              <DocumentUploader
-                projectId={id!}
-                type="invoices"
-                documents={invoices}
-                onUploadComplete={fetchDocuments}
-              />
-            </div>
-          </div>
-        </TabsContent>
-
         <TabsContent value="resources" className="space-y-4">
           <ResourceLinksPanel
             projectId={id!}
@@ -701,6 +674,10 @@ export default function ProjectDetail() {
             documents={clientDocuments}
             readOnly={false}
             onRefresh={fetchDocuments}
+            quotations={quotations}
+            invoices={invoices}
+            onQuotationsRefresh={fetchDocuments}
+            showQuotationsInvoices={true}
           />
         </TabsContent>
       </Tabs>

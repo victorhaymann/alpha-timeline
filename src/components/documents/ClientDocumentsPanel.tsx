@@ -23,6 +23,8 @@ import {
   File,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { DocumentUploader } from './DocumentUploader';
+import { format } from 'date-fns';
 
 // Document categories - updated Templates -> Client Brief, Photography -> Artistic Direction
 const DOCUMENT_CATEGORIES = [
@@ -48,12 +50,25 @@ export interface ClientDocument {
   created_at: string;
 }
 
+export interface ProjectDocument {
+  id: string;
+  name: string;
+  file_path: string;
+  file_size: number | null;
+  created_at: string;
+}
+
 interface ClientDocumentsPanelProps {
   projectId: string;
   documents: ClientDocument[];
   readOnly?: boolean;
   canUpload?: boolean; // Allow uploads even when readOnly (for clients via share link)
   onRefresh: () => void;
+  // Quotations & Invoices
+  quotations?: ProjectDocument[];
+  invoices?: ProjectDocument[];
+  onQuotationsRefresh?: () => void;
+  showQuotationsInvoices?: boolean;
 }
 
 export function ClientDocumentsPanel({
@@ -62,6 +77,10 @@ export function ClientDocumentsPanel({
   readOnly = false,
   canUpload = true, // Default to true - uploads allowed unless explicitly disabled
   onRefresh,
+  quotations = [],
+  invoices = [],
+  onQuotationsRefresh,
+  showQuotationsInvoices = false,
 }: ClientDocumentsPanelProps) {
   const [uploading, setUploading] = useState<CategoryId | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -69,6 +88,11 @@ export function ClientDocumentsPanel({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  
+  // Quotations/Invoices preview state (for read-only clients)
+  const [quotationPreviewDoc, setQuotationPreviewDoc] = useState<ProjectDocument | null>(null);
+  const [quotationPreviewUrl, setQuotationPreviewUrl] = useState<string | null>(null);
+  const [quotationLoadingPreview, setQuotationLoadingPreview] = useState(false);
 
   const getDocumentsByCategory = (categoryId: string) => {
     return documents.filter(doc => doc.category === categoryId);
@@ -227,6 +251,69 @@ export function ClientDocumentsPanel({
     setPreviewUrl(null);
   };
 
+  // Quotation/Invoice preview for read-only mode
+  const handleQuotationPreview = async (doc: ProjectDocument) => {
+    setQuotationPreviewDoc(doc);
+    setQuotationLoadingPreview(true);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-documents')
+        .createSignedUrl(doc.file_path, 3600);
+
+      if (error) {
+        console.error('Quotation preview URL error:', error);
+        toast.error('Failed to load preview');
+        setQuotationPreviewDoc(null);
+        return;
+      }
+
+      setQuotationPreviewUrl(data.signedUrl);
+    } catch (err) {
+      console.error('Quotation preview error:', err);
+      toast.error('Failed to load preview');
+      setQuotationPreviewDoc(null);
+    } finally {
+      setQuotationLoadingPreview(false);
+    }
+  };
+
+  const handleQuotationDownload = async (doc: ProjectDocument) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-documents')
+        .createSignedUrl(doc.file_path, 60);
+
+      if (error) {
+        console.error('Quotation download URL error:', error);
+        toast.error('Failed to generate download link');
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.download = doc.name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Quotation download error:', err);
+      toast.error('Failed to download file');
+    }
+  };
+
+  const closeQuotationPreview = () => {
+    setQuotationPreviewDoc(null);
+    setQuotationPreviewUrl(null);
+  };
+
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Document Categories */}
@@ -370,6 +457,142 @@ export function ClientDocumentsPanel({
         })}
       </div>
 
+      {/* Quotations & Invoices Section */}
+      {showQuotationsInvoices && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold border-t pt-6 mt-2">Quotations & Invoices</h3>
+          
+          {!readOnly ? (
+            // PM View: Full document uploader with upload/delete
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-medium mb-3 text-muted-foreground">Quotations</h4>
+                <DocumentUploader
+                  projectId={projectId}
+                  type="quotations"
+                  documents={quotations}
+                  onUploadComplete={onQuotationsRefresh || onRefresh}
+                />
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-3 text-muted-foreground">Invoices</h4>
+                <DocumentUploader
+                  projectId={projectId}
+                  type="invoices"
+                  documents={invoices}
+                  onUploadComplete={onQuotationsRefresh || onRefresh}
+                />
+              </div>
+            </div>
+          ) : (
+            // Client View: Read-only with preview/download
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <h4 className="text-sm font-medium mb-3 text-muted-foreground">Quotations</h4>
+                {quotations.length > 0 ? (
+                  <div className="space-y-2">
+                    {quotations.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium text-sm">{doc.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(doc.file_size)} • {format(new Date(doc.created_at), 'MMM d, yyyy')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          {doc.name.toLowerCase().endsWith('.pdf') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleQuotationPreview(doc)}
+                              title="Preview"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleQuotationDownload(doc)}
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="border-dashed">
+                    <CardContent className="py-8 text-center text-muted-foreground text-sm">
+                      No quotations available.
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-3 text-muted-foreground">Invoices</h4>
+                {invoices.length > 0 ? (
+                  <div className="space-y-2">
+                    {invoices.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      >
+                        <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium text-sm">{doc.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatFileSize(doc.file_size)} • {format(new Date(doc.created_at), 'MMM d, yyyy')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          {doc.name.toLowerCase().endsWith('.pdf') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => handleQuotationPreview(doc)}
+                              title="Preview"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleQuotationDownload(doc)}
+                            title="Download"
+                          >
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="border-dashed">
+                    <CardContent className="py-8 text-center text-muted-foreground text-sm">
+                      No invoices available.
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Preview Dialog */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => !open && closePreview()}>
@@ -410,6 +633,42 @@ export function ClientDocumentsPanel({
                   className="max-w-full max-h-full object-contain rounded"
                 />
               )
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quotation/Invoice Preview Dialog (for read-only) */}
+      <Dialog open={!!quotationPreviewDoc} onOpenChange={(open) => !open && closeQuotationPreview()}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
+          <DialogHeader className="p-4 border-b flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="truncate pr-4">
+                {quotationPreviewDoc?.name}
+              </DialogTitle>
+              <div className="flex items-center gap-2">
+                {quotationPreviewDoc && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleQuotationDownload(quotationPreviewDoc)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4 bg-muted/30">
+            {quotationLoadingPreview ? (
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            ) : quotationPreviewUrl ? (
+              <iframe
+                src={quotationPreviewUrl}
+                className="w-full h-full border-0 rounded"
+                title={quotationPreviewDoc?.name}
+              />
             ) : null}
           </div>
         </DialogContent>
