@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
 import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment, SegmentType } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
@@ -20,6 +20,8 @@ import {
 import { MeetingHoverCard } from './MeetingHoverCard';
 import { InlineDatePicker } from './InlineDatePicker';
 import { GanttHeader } from './GanttHeader';
+import { useTaskPopover } from './useTaskPopover';
+import { TaskPopoverMenu } from './TaskPopoverMenu';
 import { 
   useGanttCalculations, 
   isValidDate, 
@@ -162,13 +164,6 @@ export function GanttChart({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskName, setEditingTaskName] = useState<string>('');
   const editInputRef = useRef<HTMLInputElement>(null);
-  
-  // Task menu popover state (mouse-positioned)
-  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
-  const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
-  const [taskMenuPos, setTaskMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const closeTaskMenuTimeoutRef = useRef<number | null>(null);
-  const clickStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Handle starting task name edit (simplified - no cascade context needed)
   const handleStartEdit = useCallback((taskId: string, currentName: string) => {
@@ -289,58 +284,6 @@ export function GanttChart({
     }
   }, [onUpdateSegment]);
 
-  // Helper to render the convert option - ALWAYS shows, handles all cases including 0 segments
-  const renderConvertOption = useCallback((task: Task, taskSegments: TaskSegment[]) => {
-    if (!onConvertSegmentType && !onAddSegment) return null;
-    
-    // Priority: hovered segment > first segment > create initial segment
-    const targetSeg = hoveredSegmentId 
-      ? taskSegments.find(s => s.id === hoveredSegmentId)
-      : taskSegments[0];
-    
-    if (targetSeg && onConvertSegmentType) {
-      // Existing segment - convert it
-      const isReview = targetSeg.segment_type === 'review';
-      return (
-        <>
-          <div className="h-px bg-border my-1" />
-          <button
-            onClick={() => {
-              onConvertSegmentType(targetSeg.id, isReview ? 'work' : 'review');
-              setOpenTaskMenuId(null);
-              setHoveredSegmentId(null);
-            }}
-            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-          >
-            <RefreshCw className="w-4 h-4" />
-            {isReview ? 'Convert to Work Period' : 'Convert to Review'}
-          </button>
-        </>
-      );
-    }
-    
-    // No segments exist - use onAddSegment with 'review' type to create initial review segment
-    if (onAddSegment) {
-      return (
-        <>
-          <div className="h-px bg-border my-1" />
-          <button
-            onClick={() => {
-              onAddSegment(task.id, 'after', 'review');
-              setOpenTaskMenuId(null);
-            }}
-            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Convert to Review
-          </button>
-        </>
-      );
-    }
-    
-    return null;
-  }, [onConvertSegmentType, onAddSegment, hoveredSegmentId]);
-
   // Drag and drop hook
   const {
     dragging,
@@ -365,6 +308,21 @@ export function GanttChart({
     projectStartDate: validStartDate,
     projectEndDate: validEndDate,
   });
+
+  // Task popover hook - consolidated menu state and handlers
+  const {
+    openTaskMenuId,
+    hoveredSegmentId,
+    taskMenuPos,
+    setOpenTaskMenuId,
+    setHoveredSegmentId,
+    handleTaskBarMouseEnter,
+    handleTaskBarMouseLeave,
+    handlePopoverMouseEnter,
+    handlePopoverMouseLeave,
+    handleMenuButtonClick,
+    closeMenu: closeTaskMenu,
+  } = useTaskPopover({ readOnly, isDraggingAny });
 
   // Vertical reorder hook
   const {
@@ -1427,48 +1385,11 @@ export function GanttChart({
                                                   getDragClasses(task.id, seg.id)
                                                 )}
                                                 style={segmentStyle}
-                                                onMouseEnter={(e) => {
-                                                  if (readOnly || isDraggingAny) return;
-                                                  if (closeTaskMenuTimeoutRef.current) {
-                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                    closeTaskMenuTimeoutRef.current = null;
-                                                  }
-                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                  setOpenTaskMenuId(task.id);
-                                                  setHoveredSegmentId(seg.id);
-                                                }}
-                                                onMouseMove={(e) => {
-                                                  if (readOnly || openTaskMenuId !== task.id) return;
-                                                  setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                }}
-                                                onMouseLeave={() => {
-                                                  if (readOnly) return;
-                                                  if (closeTaskMenuTimeoutRef.current) {
-                                                    window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                                  }
-                                                  closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                                    setOpenTaskMenuId((current) =>
-                                                      current === task.id ? null : current
-                                                    );
-                                                    setTaskMenuPos(null);
-                                                  }, 120);
-                                                }}
+                                                onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id, seg.id)}
+                                                onMouseLeave={() => handleTaskBarMouseLeave(task.id)}
                                                 onMouseDown={readOnly ? undefined : (e) => {
-                                                  clickStartPosRef.current = { x: e.clientX, y: e.clientY };
                                                   // Enable segment-level dragging for all segments
                                                   handleDragStart(e, task, 'move', seg);
-                                                }}
-                                                onMouseUp={(e) => {
-                                                  if (readOnly || !clickStartPosRef.current) return;
-                                                  const dx = Math.abs(e.clientX - clickStartPosRef.current.x);
-                                                  const dy = Math.abs(e.clientY - clickStartPosRef.current.y);
-                                                  if (dx < 5 && dy < 5) {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                    setOpenTaskMenuId(task.id);
-                                                  }
-                                                  clickStartPosRef.current = null;
                                                 }}
                                               >
                                                 {/* Review badge indicator */}
@@ -1504,12 +1425,7 @@ export function GanttChart({
                                                         "opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded shrink-0 ml-1 absolute right-1",
                                                         isReviewSegment ? "hover:bg-black/10" : "hover:bg-white/20"
                                                       )}
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                                        setOpenTaskMenuId(task.id);
-                                                        setHoveredSegmentId(seg.id);
-                                                      }}
+                                                      onClick={(e) => handleMenuButtonClick(e, task.id, seg.id)}
                                                       onMouseDown={(e) => e.stopPropagation()}
                                                     >
                                                       <MoreHorizontal className={cn("w-4 h-4 drop-shadow-md", isReviewSegment ? "text-foreground" : "text-white")} />
@@ -1573,8 +1489,8 @@ export function GanttChart({
                                     <Popover 
                                       open={openTaskMenuId === task.id}
                                       onOpenChange={(open) => {
-                                        setOpenTaskMenuId(open ? task.id : null);
-                                        if (!open) setTaskMenuPos(null);
+                                        if (!open) closeTaskMenu();
+                                        else setOpenTaskMenuId(task.id);
                                       }}
                                     >
                                       {openTaskMenuId === task.id && taskMenuPos && (
@@ -1596,89 +1512,20 @@ export function GanttChart({
                                         side="bottom"
                                         align="start"
                                         sideOffset={8}
-                                        onMouseEnter={() => {
-                                          if (closeTaskMenuTimeoutRef.current) {
-                                            window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                            closeTaskMenuTimeoutRef.current = null;
-                                          }
-                                        }}
-                                        onMouseLeave={() => {
-                                          if (closeTaskMenuTimeoutRef.current) {
-                                            window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                          }
-                                          closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                            setOpenTaskMenuId((current) => (current === task.id ? null : current));
-                                            setTaskMenuPos(null);
-                                          }, 120);
-                                        }}
+                                        onMouseEnter={handlePopoverMouseEnter}
+                                        onMouseLeave={() => handlePopoverMouseLeave(task.id)}
                                       >
-                                        <div className="flex flex-col">
-                                          <button
-                                            onClick={() => {
-                                              onAddSegment?.(task.id, 'after');
-                                              setOpenTaskMenuId(null);
-                                            }}
-                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                          >
-                                            <Plus className="w-4 h-4" />
-                                            Add Period After
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              onAddSegment?.(task.id, 'before');
-                                              setOpenTaskMenuId(null);
-                                            }}
-                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                          >
-                                            <Plus className="w-4 h-4" />
-                                            Add Period Before
-                                          </button>
-                                          <div className="h-px bg-border my-1" />
-                                          <button
-                                            onClick={() => {
-                                              onEditSegments?.(task);
-                                              setOpenTaskMenuId(null);
-                                            }}
-                                            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                          >
-                                            <Layers className="w-4 h-4" />
-                                            Edit Periods...
-                                            <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
-                                              {taskSegments.length}
-                                            </Badge>
-                                          </button>
-                                          {/* Convert segment type option - always available */}
-                                          {renderConvertOption(task, taskSegments)}
-                                          {/* Delete Period option - only if multiple segments */}
-                                          {onDeleteSegment && taskSegments.length > 1 && hoveredSegmentId && (
-                                            <button
-                                              onClick={() => {
-                                                onDeleteSegment(hoveredSegmentId, task.id);
-                                                setOpenTaskMenuId(null);
-                                                setHoveredSegmentId(null);
-                                              }}
-                                              className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                              Delete Period
-                                            </button>
-                                          )}
-                                          {onDeleteTask && (
-                                            <>
-                                              <div className="h-px bg-border my-1" />
-                                              <button
-                                                onClick={() => {
-                                                  onDeleteTask(task.id);
-                                                  setOpenTaskMenuId(null);
-                                                }}
-                                                className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
-                                              >
-                                                <Trash2 className="w-4 h-4" />
-                                                Delete Task
-                                              </button>
-                                            </>
-                                          )}
-                                        </div>
+                                        <TaskPopoverMenu
+                                          task={task}
+                                          taskSegments={taskSegments}
+                                          hoveredSegmentId={hoveredSegmentId}
+                                          onAddSegment={onAddSegment}
+                                          onEditSegments={onEditSegments}
+                                          onConvertSegmentType={onConvertSegmentType}
+                                          onDeleteSegment={onDeleteSegment}
+                                          onDeleteTask={onDeleteTask}
+                                          onClose={closeTaskMenu}
+                                        />
                                       </PopoverContent>
                                     </Popover>
                                   </>
@@ -1711,8 +1558,8 @@ export function GanttChart({
                               <Popover 
                                 open={openTaskMenuId === task.id}
                                 onOpenChange={(open) => {
-                                  setOpenTaskMenuId(open ? task.id : null);
-                                  if (!open) setTaskMenuPos(null);
+                                  if (!open) closeTaskMenu();
+                                  else setOpenTaskMenuId(task.id);
                                 }}
                               >
                                 {openTaskMenuId === task.id && taskMenuPos && (
@@ -1750,31 +1597,8 @@ export function GanttChart({
                                         boxShadow: `0 4px 12px ${sectionColor}66`,
                                         ...getDragStyles(task.id),
                                       }}
-                                      onMouseEnter={(e) => {
-                                        if (readOnly || isDraggingAny) return;
-                                        if (closeTaskMenuTimeoutRef.current) {
-                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                          closeTaskMenuTimeoutRef.current = null;
-                                        }
-                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                        setOpenTaskMenuId(task.id);
-                                      }}
-                                      onMouseMove={(e) => {
-                                        if (readOnly || openTaskMenuId !== task.id) return;
-                                        setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                      }}
-                                      onMouseLeave={() => {
-                                        if (readOnly) return;
-                                        if (closeTaskMenuTimeoutRef.current) {
-                                          window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                        }
-                                        closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                          setOpenTaskMenuId((current) =>
-                                            current === task.id ? null : current
-                                          );
-                                          setTaskMenuPos(null);
-                                        }, 120);
-                                      }}
+                                      onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id)}
+                                      onMouseLeave={() => handleTaskBarMouseLeave(task.id)}
                                       onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
                                     >
                                       {!readOnly && (
@@ -1794,11 +1618,7 @@ export function GanttChart({
                                         {!readOnly && clippedWidth > 40 && (
                                           <button
                                             className="opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-white/20 shrink-0 ml-1"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setTaskMenuPos({ x: e.clientX, y: e.clientY });
-                                              setOpenTaskMenuId(task.id);
-                                            }}
+                                            onClick={(e) => handleMenuButtonClick(e, task.id)}
                                             onMouseDown={(e) => e.stopPropagation()}
                                           >
                                             <MoreHorizontal className="w-4 h-4 text-white drop-shadow-md" />
@@ -1832,72 +1652,20 @@ export function GanttChart({
                                   side="bottom"
                                   align="start"
                                   sideOffset={8}
-                                  onMouseEnter={() => {
-                                    if (closeTaskMenuTimeoutRef.current) {
-                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                      closeTaskMenuTimeoutRef.current = null;
-                                    }
-                                  }}
-                                  onMouseLeave={() => {
-                                    if (closeTaskMenuTimeoutRef.current) {
-                                      window.clearTimeout(closeTaskMenuTimeoutRef.current);
-                                    }
-                                    closeTaskMenuTimeoutRef.current = window.setTimeout(() => {
-                                      setOpenTaskMenuId((current) => (current === task.id ? null : current));
-                                      setTaskMenuPos(null);
-                                    }, 120);
-                                  }}
+                                  onMouseEnter={handlePopoverMouseEnter}
+                                  onMouseLeave={() => handlePopoverMouseLeave(task.id)}
                                 >
-                                  <div className="flex flex-col">
-                                    <button
-                                      onClick={() => {
-                                        onAddSegment?.(task.id, 'after');
-                                        setOpenTaskMenuId(null);
-                                      }}
-                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                      Add Period After
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        onAddSegment?.(task.id, 'before');
-                                        setOpenTaskMenuId(null);
-                                      }}
-                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                      Add Period Before
-                                    </button>
-                                    <div className="h-px bg-border my-1" />
-                                    <button
-                                      onClick={() => {
-                                        onEditSegments?.(task);
-                                        setOpenTaskMenuId(null);
-                                      }}
-                                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left"
-                                    >
-                                      <Layers className="w-4 h-4" />
-                                      Edit Periods...
-                                    </button>
-                                    {/* Convert to Review option - always available */}
-                                    {renderConvertOption(task, taskSegments)}
-                                    {onDeleteTask && (
-                                      <>
-                                        <div className="h-px bg-border my-1" />
-                                        <button
-                                          onClick={() => {
-                                            onDeleteTask(task.id);
-                                            setOpenTaskMenuId(null);
-                                          }}
-                                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                          Delete Task
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
+                                  <TaskPopoverMenu
+                                    task={task}
+                                    taskSegments={taskSegments}
+                                    hoveredSegmentId={hoveredSegmentId}
+                                    onAddSegment={onAddSegment}
+                                    onEditSegments={onEditSegments}
+                                    onConvertSegmentType={onConvertSegmentType}
+                                    onDeleteSegment={onDeleteSegment}
+                                    onDeleteTask={onDeleteTask}
+                                    onClose={closeTaskMenu}
+                                  />
                                 </PopoverContent>
                               </Popover>
                               
