@@ -423,17 +423,6 @@ export function RightsAgreementsList({
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDuplicate(agreement.id)}
-                            disabled={duplicating === agreement.id}
-                          >
-                            {duplicating === agreement.id ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : (
-                              <Copy className="h-4 w-4 mr-2" />
-                            )}
-                            Duplicate
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
                             onClick={() => {
                               setPreviewAgreementId(agreement.id);
                               setPreviewOpen(true);
@@ -461,14 +450,6 @@ export function RightsAgreementsList({
                             >
                               <ExternalLink className="h-4 w-4 mr-2" />
                               Open Signed Document
-                            </DropdownMenuItem>
-                          )}
-                          {(agreement.status === 'sent' || agreement.status === 'viewed') && agreement.generated_document_path && (
-                            <DropdownMenuItem
-                              onClick={() => handleDownloadDocument(agreement.id, agreement.generated_document_path)}
-                            >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Sent Document
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
