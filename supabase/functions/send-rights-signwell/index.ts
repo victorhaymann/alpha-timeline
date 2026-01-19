@@ -167,7 +167,7 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setFont('helvetica', 'bold');
   doc.text('Deliverables:', margin, y);
   doc.setFont('helvetica', 'normal');
-  doc.text('As per Quotation', margin + 30, y);
+  doc.text(data.DELIVERABLES || 'As per Quotation', margin + 30, y);
   y += 10;
 
   // ========== SECTION 3: AGREEMENT DATES ==========
@@ -561,6 +561,7 @@ serve(async (req) => {
       CLIENT_EMAIL: agreement.client_email,
       PROJECT_NAME: project?.name || 'N/A',
       CONTENT_DESCRIPTION: project?.description || 'Video content as per project documentation',
+      DELIVERABLES: agreement.deliverables || 'As per Quotation',
       AGREEMENT_DATE: formatDate(agreement.agreement_date),
       VALID_FROM: formatDate(agreement.valid_from),
       VALID_UNTIL: agreement.valid_until ? formatDate(agreement.valid_until) : 'Perpetual',

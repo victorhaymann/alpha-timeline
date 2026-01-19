@@ -23,6 +23,7 @@ const formSchema = z.object({
   clientName: z.string().min(1, 'Client name is required'),
   clientEmail: z.string().email('Valid email is required'),
   clientContactName: z.string().optional(),
+  deliverables: z.string().min(1, 'Deliverables is required'),
   agreementDate: z.date(),
   validFrom: z.date(),
   validUntil: z.date().nullable(),
@@ -56,6 +57,7 @@ export function RightsAgreementForm({
       clientName: project.client_name || '',
       clientEmail: '',
       clientContactName: '',
+      deliverables: 'As per Quotation',
       agreementDate: new Date(),
       validFrom: new Date(project.start_date),
       validUntil: null,
@@ -82,6 +84,7 @@ export function RightsAgreementForm({
         clientName: agreement.client_name,
         clientEmail: agreement.client_email,
         clientContactName: agreement.client_contact_name || '',
+        deliverables: agreement.deliverables || 'As per Quotation',
         agreementDate: new Date(agreement.agreement_date),
         validFrom: new Date(agreement.valid_from),
         validUntil: agreement.valid_until ? new Date(agreement.valid_until) : null,
@@ -154,6 +157,7 @@ export function RightsAgreementForm({
             client_name: values.clientName,
             client_email: values.clientEmail,
             client_contact_name: values.clientContactName || null,
+            deliverables: values.deliverables,
             agreement_date: format(values.agreementDate, 'yyyy-MM-dd'),
             valid_from: format(values.validFrom, 'yyyy-MM-dd'),
             valid_until: values.validUntil ? format(values.validUntil, 'yyyy-MM-dd') : null,
@@ -173,6 +177,7 @@ export function RightsAgreementForm({
             client_name: values.clientName,
             client_email: values.clientEmail,
             client_contact_name: values.clientContactName || null,
+            deliverables: values.deliverables,
             agreement_date: format(values.agreementDate, 'yyyy-MM-dd'),
             valid_from: format(values.validFrom, 'yyyy-MM-dd'),
             valid_until: values.validUntil ? format(values.validUntil, 'yyyy-MM-dd') : null,
@@ -299,10 +304,23 @@ export function RightsAgreementForm({
                 control={form.control}
                 name="clientEmail"
                 render={({ field }) => (
-                  <FormItem className="sm:col-span-2">
+                  <FormItem>
                     <FormLabel>Signer Email</FormLabel>
                     <FormControl>
                       <Input type="email" placeholder="Enter email for signature" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="deliverables"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Deliverables</FormLabel>
+                    <FormControl>
+                      <Input placeholder="As per Quotation" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
