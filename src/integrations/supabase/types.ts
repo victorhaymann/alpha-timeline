@@ -841,6 +841,7 @@ export type Database = {
           client_name: string
           created_at: string
           created_by: string
+          deliverables: string | null
           docusign_envelope_id: string | null
           generated_document_path: string | null
           id: string
@@ -859,6 +860,7 @@ export type Database = {
           client_name: string
           created_at?: string
           created_by: string
+          deliverables?: string | null
           docusign_envelope_id?: string | null
           generated_document_path?: string | null
           id?: string
@@ -877,6 +879,7 @@ export type Database = {
           client_name?: string
           created_at?: string
           created_by?: string
+          deliverables?: string | null
           docusign_envelope_id?: string | null
           generated_document_path?: string | null
           id?: string
