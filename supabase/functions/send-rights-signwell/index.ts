@@ -539,8 +539,14 @@ serve(async (req) => {
         );
       }
 
+      // Update last_sent_at timestamp
+      await supabase
+        .from('rights_agreements')
+        .update({ last_sent_at: new Date().toISOString() })
+        .eq('id', agreementId);
+
       return new Response(
-        JSON.stringify({ success: true, message: 'Signature request resent successfully' }),
+        JSON.stringify({ success: true, message: 'Signature request resent successfully', lastSentAt: new Date().toISOString() }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -693,6 +699,7 @@ serve(async (req) => {
       .update({
         signwell_document_id: signwellResult.id,
         status: 'sent',
+        last_sent_at: new Date().toISOString(),
       })
       .eq('id', agreementId);
 

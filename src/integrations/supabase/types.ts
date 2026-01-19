@@ -845,6 +845,7 @@ export type Database = {
           docusign_envelope_id: string | null
           generated_document_path: string | null
           id: string
+          last_sent_at: string | null
           project_id: string
           signed_document_path: string | null
           signwell_document_id: string | null
@@ -864,6 +865,7 @@ export type Database = {
           docusign_envelope_id?: string | null
           generated_document_path?: string | null
           id?: string
+          last_sent_at?: string | null
           project_id: string
           signed_document_path?: string | null
           signwell_document_id?: string | null
@@ -883,6 +885,7 @@ export type Database = {
           docusign_envelope_id?: string | null
           generated_document_path?: string | null
           id?: string
+          last_sent_at?: string | null
           project_id?: string
           signed_document_path?: string | null
           signwell_document_id?: string | null
