@@ -43,6 +43,8 @@ interface RightsAgreement {
   valid_from: string;
   valid_until: string | null;
   status: string;
+  generated_document_path: string | null;
+  signed_document_path: string | null;
   created_at: string;
 }
 
@@ -72,6 +74,7 @@ export function RightsAgreementsList({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agreementToDelete, setAgreementToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAgreements();
@@ -116,6 +119,64 @@ export function RightsAgreementsList({
       setDeleting(false);
       setDeleteDialogOpen(false);
       setAgreementToDelete(null);
+    }
+  };
+
+  const handleGeneratePdf = async (agreementId: string) => {
+    setGeneratingPdf(agreementId);
+    try {
+      toast.info('Generating agreement document...');
+      
+      const { data: pdfResult, error: pdfError } = await supabase.functions.invoke(
+        'generate-rights-pdf',
+        { body: { agreementId } }
+      );
+
+      if (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        toast.error('Failed to generate document');
+        return;
+      }
+
+      if (pdfResult?.documentUrl) {
+        toast.success('Agreement document generated!');
+        // Update the agreement in local state
+        setAgreements((prev) =>
+          prev.map((a) =>
+            a.id === agreementId
+              ? { ...a, generated_document_path: pdfResult.documentPath }
+              : a
+          )
+        );
+        // Open the document in a new tab
+        window.open(pdfResult.documentUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate document');
+    } finally {
+      setGeneratingPdf(null);
+    }
+  };
+
+  const handleDownloadDocument = async (agreementId: string, path: string | null) => {
+    if (!path) {
+      toast.error('No document available');
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('rights-agreements')
+        .createSignedUrl(path, 3600);
+
+      if (error) throw error;
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      toast.error('Failed to download document');
     }
   };
 
@@ -220,13 +281,30 @@ export function RightsAgreementsList({
                             View Details
                           </DropdownMenuItem>
                           {agreement.status === 'draft' && (
-                            <DropdownMenuItem>
-                              <Send className="h-4 w-4 mr-2" />
+                            <DropdownMenuItem
+                              onClick={() => handleGeneratePdf(agreement.id)}
+                              disabled={generatingPdf === agreement.id}
+                            >
+                              {generatingPdf === agreement.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4 mr-2" />
+                              )}
                               Generate PDF
                             </DropdownMenuItem>
                           )}
-                          {agreement.status === 'signed' && (
-                            <DropdownMenuItem>
+                          {agreement.generated_document_path && (
+                            <DropdownMenuItem
+                              onClick={() => handleDownloadDocument(agreement.id, agreement.generated_document_path)}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              View Document
+                            </DropdownMenuItem>
+                          )}
+                          {agreement.status === 'signed' && agreement.signed_document_path && (
+                            <DropdownMenuItem
+                              onClick={() => handleDownloadDocument(agreement.id, agreement.signed_document_path)}
+                            >
                               <Download className="h-4 w-4 mr-2" />
                               Download Signed Copy
                             </DropdownMenuItem>
