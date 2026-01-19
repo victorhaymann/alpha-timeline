@@ -414,20 +414,7 @@ export function RightsAgreementsList({
                             <FileSearch className="h-4 w-4 mr-2" />
                             Preview Document
                           </DropdownMenuItem>
-                          {agreement.status === 'draft' && (
-                            <DropdownMenuItem
-                              onClick={() => handleGeneratePdf(agreement.id)}
-                              disabled={generatingPdf === agreement.id}
-                            >
-                              {generatingPdf === agreement.id ? (
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <FileText className="h-4 w-4 mr-2" />
-                              )}
-                              Generate PDF
-                            </DropdownMenuItem>
-                          )}
-                          {agreement.status === 'draft' && agreement.generated_document_path && !agreement.signwell_document_id && (
+                          {agreement.status === 'draft' && !agreement.signwell_document_id && (
                             <DropdownMenuItem
                               onClick={() => handleSendForSignature(agreement.id)}
                               disabled={sendingForSignature === agreement.id}
@@ -438,14 +425,6 @@ export function RightsAgreementsList({
                                 <Send className="h-4 w-4 mr-2" />
                               )}
                               Send for Signature
-                            </DropdownMenuItem>
-                          )}
-                          {agreement.generated_document_path && (
-                            <DropdownMenuItem
-                              onClick={() => handleDownloadDocument(agreement.id, agreement.generated_document_path)}
-                            >
-                              <Download className="h-4 w-4 mr-2" />
-                              View Document
                             </DropdownMenuItem>
                           )}
                           {agreement.status === 'signed' && agreement.signed_document_path && (
