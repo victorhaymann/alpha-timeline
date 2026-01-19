@@ -11,7 +11,6 @@ import {
 import {
   BookOpen,
   Image,
-  Type,
   Box,
   FileText,
   Sparkles,
@@ -21,19 +20,20 @@ import {
   Eye,
   Trash2,
   File,
+  Scale,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DocumentUploader } from './DocumentUploader';
 import { format } from 'date-fns';
 
-// Document categories - updated Templates -> Client Brief, Photography -> Artistic Direction
+// Document categories - merged Logos & Fonts, added GTC & Content Rights
 const DOCUMENT_CATEGORIES = [
   { id: 'brandbook', label: 'Brandbook', icon: BookOpen, accept: '.pdf,.pptx,.ai', description: 'Brand guidelines and style guides' },
-  { id: 'logos', label: 'Logos', icon: Image, accept: '.png,.jpg,.jpeg,.svg,.ai,.pdf', description: 'Logo files in various formats' },
-  { id: 'fonts', label: 'Fonts', icon: Type, accept: '.otf,.ttf,.woff,.woff2', description: 'Typography files' },
+  { id: 'logos_fonts', label: 'Logos & Fonts', icon: Image, accept: '.png,.jpg,.jpeg,.svg,.ai,.pdf,.otf,.ttf,.woff,.woff2', description: 'Logo files and typography' },
   { id: '3d_assets', label: '3D Assets', icon: Box, accept: '.glb,.gltf,.fbx,.obj,.stl,.step,.stp,.iges,.igs', description: '3D models and CAD files' },
   { id: 'client_brief', label: 'Client Brief', icon: FileText, accept: '.pdf,.docx,.pptx,.txt', description: 'Project briefs and requirements' },
   { id: 'artistic_direction', label: 'Artistic Direction', icon: Sparkles, accept: '.pdf,.png,.jpg,.jpeg,.svg,.ai,.pptx', description: 'Visual direction and moodboards' },
+  { id: 'gtc_content_rights', label: 'GTC & Content Rights', icon: Scale, accept: '.pdf', description: 'General terms and content rights' },
 ] as const;
 
 type CategoryId = typeof DOCUMENT_CATEGORIES[number]['id'];
