@@ -412,11 +412,11 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setTextColor(255, 255, 255); // White text for hidden tag
   doc.text('{{signature:1:y}}', margin + 28, y + 38);
 
-  // Date field (text tag) - quadrupled font size: 10 -> 40
+  // Date field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Date:', margin + 5, y + 60);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{date:1:y::::60:40}}', margin + 20, y + 60);
+  doc.text('{{date:1:y::::60:20}}', margin + 20, y + 60);
 
   // ===== LICENSEE (CLIENT) SIGNATURE BOX =====
   const licSigX = margin + sigBoxWidth + 10;
@@ -431,29 +431,29 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
 
-  // Company field (text tag - client fills in) - quadrupled font size: 8 -> 32
+  // Company field (text tag - client fills in) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Company:', licSigX + 5, y + 18);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{text:2:y:Company Name:::55:32}}', licSigX + 28, y + 18);
+  doc.text('{{text:2:y:Company Name:::55:20}}', licSigX + 28, y + 18);
 
-  // Name field (text tag - client fills in) - quadrupled font size: 8 -> 32
+  // Name field (text tag - client fills in) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Name:', licSigX + 5, y + 28);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{text:2:y:Full Name:::55:32}}', licSigX + 20, y + 28);
+  doc.text('{{text:2:y:Full Name:::55:20}}', licSigX + 20, y + 28);
 
-  // Role/Title field (text tag) - quadrupled font size: 8 -> 32
+  // Role/Title field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Role:', licSigX + 5, y + 38);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{text:2:y:Role/Title:::55:32}}', licSigX + 20, y + 38);
+  doc.text('{{text:2:y:Role/Title:::55:20}}', licSigX + 20, y + 38);
 
-  // Address field (text tag) - quadrupled font size: 8 -> 32
+  // Address field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Address:', licSigX + 5, y + 48);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{text:2:y:Address:::55:32}}', licSigX + 28, y + 48);
+  doc.text('{{text:2:y:Address:::55:20}}', licSigX + 28, y + 48);
 
   // Signature field (text tag)
   doc.setTextColor(102, 102, 102);
@@ -461,11 +461,11 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setTextColor(255, 255, 255);
   doc.text('{{signature:2:y}}', licSigX + 28, y + 62);
 
-  // Date field (text tag) - quadrupled font size: 10 -> 40
+  // Date field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
   doc.text('Date:', licSigX + 5, y + 78);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{date:2:y::::60:40}}', licSigX + 20, y + 78);
+  doc.text('{{date:2:y::::60:20}}', licSigX + 20, y + 78);
 
   y += sigBoxHeight + 15;
 
