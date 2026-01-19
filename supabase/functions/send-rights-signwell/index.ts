@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const SIGNWELL_API_URL = 'https://www.signwell.com/api/v1';
-const TNF_EMAIL = 'contact@thenewface.io';
+const TNF_EMAIL = 'victor@thenewface.io';
 
 interface UsageSelection {
   category: string;
@@ -373,7 +373,7 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   y += 12;
 
   // ========== SECTION 6: SIGNATURES ==========
-  checkPageBreak(70);
+  checkPageBreak(90); // Increased height for additional fields
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('6. SIGNATURES', margin, y);
@@ -384,11 +384,11 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   y = addWrappedText('By signing below, the Parties acknowledge that they have read, understood, and agree to be bound by the terms and conditions of this Agreement.', margin, y, contentWidth, 4.5);
   y += 10;
 
-  // Signature boxes
+  // Signature boxes - larger to accommodate extra client fields
   const sigBoxWidth = contentWidth / 2 - 5;
-  const sigBoxHeight = 50;
+  const sigBoxHeight = 70; // Increased from 50 to 70
 
-  // Licensor signature
+  // ===== LICENSOR (TNF) SIGNATURE BOX =====
   doc.setDrawColor(221, 221, 221);
   doc.setLineWidth(0.3);
   doc.rect(margin, y, sigBoxWidth, sigBoxHeight);
@@ -399,21 +399,26 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(102, 102, 102);
-  doc.text('Signature:', margin + 5, y + 18);
-  doc.setDrawColor(26, 26, 26);
-  doc.line(margin + 25, y + 18, margin + sigBoxWidth - 5, y + 18);
 
-  doc.text('Name:', margin + 5, y + 28);
+  // Name (prefilled)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Name:', margin + 5, y + 18);
   doc.setTextColor(0, 0, 0);
-  doc.text('The New Face Representative', margin + 25, y + 28);
+  doc.text('Victor - The New Face', margin + 25, y + 18);
 
+  // Signature field (text tag - white text to hide tag)
   doc.setTextColor(102, 102, 102);
-  doc.text('Date:', margin + 5, y + 38);
-  doc.setDrawColor(26, 26, 26);
-  doc.line(margin + 25, y + 38, margin + sigBoxWidth - 5, y + 38);
+  doc.text('Signature:', margin + 5, y + 32);
+  doc.setTextColor(255, 255, 255); // White text for hidden tag
+  doc.text('{{signature:1:y}}', margin + 28, y + 32);
 
-  // Licensee signature
+  // Date field (text tag)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Date:', margin + 5, y + 48);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{date:1:y::::60:10}}', margin + 20, y + 48);
+
+  // ===== LICENSEE (CLIENT) SIGNATURE BOX =====
   const licSigX = margin + sigBoxWidth + 10;
   doc.setTextColor(0, 0, 0);
   doc.setDrawColor(221, 221, 221);
@@ -425,19 +430,36 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(102, 102, 102);
-  doc.text('Signature:', licSigX + 5, y + 18);
-  doc.setDrawColor(26, 26, 26);
-  doc.line(licSigX + 25, y + 18, licSigX + sigBoxWidth - 5, y + 18);
 
-  doc.text('Name:', licSigX + 5, y + 28);
-  doc.setTextColor(0, 0, 0);
-  doc.text(data.CLIENT_CONTACT_NAME || data.CLIENT_NAME || 'N/A', licSigX + 25, y + 28);
-
+  // Name field (text tag - client fills in)
   doc.setTextColor(102, 102, 102);
-  doc.text('Date:', licSigX + 5, y + 38);
-  doc.setDrawColor(26, 26, 26);
-  doc.line(licSigX + 25, y + 38, licSigX + sigBoxWidth - 5, y + 38);
+  doc.text('Name:', licSigX + 5, y + 18);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{text:2:y:Full Name:::55:8}}', licSigX + 20, y + 18);
+
+  // Role/Title field (text tag)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Role:', licSigX + 5, y + 28);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{text:2:y:Role/Title:::55:8}}', licSigX + 20, y + 28);
+
+  // Address field (text tag)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Address:', licSigX + 5, y + 38);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{text:2:y:Address:::55:8}}', licSigX + 28, y + 38);
+
+  // Signature field (text tag)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Signature:', licSigX + 5, y + 52);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{signature:2:y}}', licSigX + 28, y + 52);
+
+  // Date field (text tag)
+  doc.setTextColor(102, 102, 102);
+  doc.text('Date:', licSigX + 5, y + 64);
+  doc.setTextColor(255, 255, 255);
+  doc.text('{{date:2:y::::60:10}}', licSigX + 20, y + 64);
 
   y += sigBoxHeight + 15;
 
@@ -590,9 +612,10 @@ serve(async (req) => {
       });
     }
 
-    // Create document in SignWell with signature page that includes date fields
+    // Create document in SignWell with text tags for embedded signature fields
     const signwellPayload = {
       test_mode: testMode,
+      text_tags: true, // Enable text tag parsing for embedded fields
       files: [
         {
           name: `the-new-face-usage-rights-agreement-${agreement.client_name.replace(/\s+/g, '-').toLowerCase()}.pdf`,
@@ -604,10 +627,6 @@ serve(async (req) => {
       message: `Please review and sign the attached Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
       recipients,
       draft: false,
-      with_signature_page: true,
-      signature_page_options: {
-        include_date: true,
-      },
       reminders: true,
     };
 
