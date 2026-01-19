@@ -833,6 +833,109 @@ export type Database = {
           },
         ]
       }
+      rights_agreements: {
+        Row: {
+          agreement_date: string
+          client_contact_name: string | null
+          client_email: string
+          client_name: string
+          created_at: string
+          created_by: string
+          docusign_envelope_id: string | null
+          generated_document_path: string | null
+          id: string
+          project_id: string
+          signed_document_path: string | null
+          status: string
+          updated_at: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          agreement_date?: string
+          client_contact_name?: string | null
+          client_email: string
+          client_name: string
+          created_at?: string
+          created_by: string
+          docusign_envelope_id?: string | null
+          generated_document_path?: string | null
+          id?: string
+          project_id: string
+          signed_document_path?: string | null
+          status?: string
+          updated_at?: string
+          valid_from: string
+          valid_until?: string | null
+        }
+        Update: {
+          agreement_date?: string
+          client_contact_name?: string | null
+          client_email?: string
+          client_name?: string
+          created_at?: string
+          created_by?: string
+          docusign_envelope_id?: string | null
+          generated_document_path?: string | null
+          id?: string
+          project_id?: string
+          signed_document_path?: string | null
+          status?: string
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rights_agreements_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rights_usage_selections: {
+        Row: {
+          agreement_id: string
+          category: string
+          created_at: string
+          geographies: string[]
+          id: string
+          is_paid: boolean
+          period_end: string | null
+          period_start: string
+        }
+        Insert: {
+          agreement_id: string
+          category: string
+          created_at?: string
+          geographies?: string[]
+          id?: string
+          is_paid?: boolean
+          period_end?: string | null
+          period_start: string
+        }
+        Update: {
+          agreement_id?: string
+          category?: string
+          created_at?: string
+          geographies?: string[]
+          id?: string
+          is_paid?: boolean
+          period_end?: string | null
+          period_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rights_usage_selections_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "rights_agreements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       share_invites: {
         Row: {
           created_at: string

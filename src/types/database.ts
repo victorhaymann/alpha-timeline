@@ -12,6 +12,8 @@ export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'blocked';
 export type TaskType = 'task' | 'milestone' | 'meeting';
 export type ChangeRequestStatus = 'pending' | 'approved' | 'rejected';
+export type RightsAgreementStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined';
+export type UsageCategory = 'digital' | 'paid_media' | 'pos_retail' | 'print' | 'ooh' | 'tv';
 
 export interface Profile {
   id: string;
@@ -221,6 +223,36 @@ export interface CanonicalStepWithSelection extends CanonicalStep {
   is_included: boolean;
   custom_weight_percent: number | null;
   custom_review_rounds: number | null;
+}
+
+// Rights Agreement types
+export interface RightsAgreement {
+  id: string;
+  project_id: string;
+  client_name: string;
+  client_email: string;
+  client_contact_name: string | null;
+  agreement_date: string;
+  valid_from: string;
+  valid_until: string | null;
+  status: RightsAgreementStatus;
+  docusign_envelope_id: string | null;
+  generated_document_path: string | null;
+  signed_document_path: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RightsUsageSelection {
+  id: string;
+  agreement_id: string;
+  category: UsageCategory;
+  is_paid: boolean;
+  geographies: string[];
+  period_start: string;
+  period_end: string | null;
+  created_at: string;
 }
 
 // Phase categories for grouping
