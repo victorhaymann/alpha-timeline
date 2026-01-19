@@ -1,7 +1,20 @@
 project_id = "ugqhdgojxfxbfpviakza"
 
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[functions.generate-rights-pdf]
+verify_jwt = false
+
 [functions.notify-pm-upload]
 verify_jwt = false
 
-[functions.generate-rights-pdf]
+[functions.send-rights-signwell]
+verify_jwt = false
+
+[functions.signwell-webhook]
 verify_jwt = false

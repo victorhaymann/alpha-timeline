@@ -45,6 +45,7 @@ interface RightsAgreement {
   status: string;
   generated_document_path: string | null;
   signed_document_path: string | null;
+  signwell_document_id: string | null;
   created_at: string;
 }
 
@@ -75,6 +76,7 @@ export function RightsAgreementsList({
   const [agreementToDelete, setAgreementToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
+  const [sendingForSignature, setSendingForSignature] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAgreements();
@@ -156,6 +158,42 @@ export function RightsAgreementsList({
       toast.error('Failed to generate document');
     } finally {
       setGeneratingPdf(null);
+    }
+  };
+
+  const handleSendForSignature = async (agreementId: string) => {
+    setSendingForSignature(agreementId);
+    try {
+      toast.info('Sending agreement for signature...');
+      
+      const { data: result, error } = await supabase.functions.invoke(
+        'send-rights-signwell',
+        { body: { agreementId, testMode: false } }
+      );
+
+      if (error) {
+        console.error('Send for signature error:', error);
+        toast.error('Failed to send for signature');
+        return;
+      }
+
+      if (result?.success) {
+        toast.success(result.message || 'Agreement sent for signature!');
+        setAgreements((prev) =>
+          prev.map((a) =>
+            a.id === agreementId
+              ? { ...a, status: 'sent', signwell_document_id: result.signwellDocumentId }
+              : a
+          )
+        );
+      } else {
+        toast.error(result?.error || 'Failed to send for signature');
+      }
+    } catch (error) {
+      console.error('Error sending for signature:', error);
+      toast.error('Failed to send for signature');
+    } finally {
+      setSendingForSignature(null);
     }
   };
 
@@ -288,9 +326,22 @@ export function RightsAgreementsList({
                               {generatingPdf === agreement.id ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               ) : (
-                                <Send className="h-4 w-4 mr-2" />
+                                <FileText className="h-4 w-4 mr-2" />
                               )}
                               Generate PDF
+                            </DropdownMenuItem>
+                          )}
+                          {agreement.status === 'draft' && agreement.generated_document_path && !agreement.signwell_document_id && (
+                            <DropdownMenuItem
+                              onClick={() => handleSendForSignature(agreement.id)}
+                              disabled={sendingForSignature === agreement.id}
+                            >
+                              {sendingForSignature === agreement.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4 mr-2" />
+                              )}
+                              Send for Signature
                             </DropdownMenuItem>
                           )}
                           {agreement.generated_document_path && (
