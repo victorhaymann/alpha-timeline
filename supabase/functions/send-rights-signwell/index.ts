@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,6 +8,7 @@ const corsHeaders = {
 };
 
 const SIGNWELL_API_URL = 'https://www.signwell.com/api/v1';
+const TNF_EMAIL = 'contact@thenewface.io';
 
 interface UsageSelection {
   category: string;
@@ -25,6 +27,15 @@ const CATEGORY_MAP: Record<string, string> = {
   tv: 'TV',
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  DIGITAL: 'Digital (Web, Social Media, Email)',
+  PAID_MEDIA: 'Paid Media (Advertising, Sponsored)',
+  POS: 'POS / Retail (In-store, Displays)',
+  PRINT: 'Print (Magazines, Brochures)',
+  OOH: 'OOH (Billboards, Street Furniture)',
+  TV: 'TV (Broadcast, Streaming)',
+};
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -36,584 +47,444 @@ function formatPeriod(start: string, end: string | null): string {
   return `${startDate} - ${formatDate(end)}`;
 }
 
-function escapeHtml(str: string): string {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+// Generate PDF using jsPDF
+function generateAgreementPdf(data: Record<string, string>): Uint8Array {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
 
-// Proper UTF-8 to Base64 encoding for special characters
-function utf8ToBase64(str: string): string {
-  const utf8Bytes = new TextEncoder().encode(str);
-  let binary = '';
-  for (let i = 0; i < utf8Bytes.length; i++) {
-    binary += String.fromCharCode(utf8Bytes[i]);
-  }
-  return btoa(binary);
-}
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  const contentWidth = pageWidth - (margin * 2);
+  let y = 20;
 
-// TNF Logo as SVG (embedded for reliability)
-const TNF_LOGO_SVG = `<svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
-  <text x="0" y="28" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#000">THE NEW FACE</text>
-</svg>`;
+  // Helper function to add text with word wrap
+  const addWrappedText = (text: string, x: number, startY: number, maxWidth: number, lineHeight: number = 5): number => {
+    const lines = doc.splitTextToSize(text, maxWidth);
+    doc.text(lines, x, startY);
+    return startY + (lines.length * lineHeight);
+  };
 
-function generateAgreementHtml(data: Record<string, string>): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Content Usage Rights Agreement</title>
-  <style>
-    @page { 
-      size: A4; 
-      margin: 20mm 20mm 25mm 20mm;
-      @bottom-center {
-        content: "Page " counter(page) " of " counter(pages);
-        font-size: 9pt;
-        color: #666;
-      }
+  // Helper function to check page break
+  const checkPageBreak = (neededSpace: number): void => {
+    if (y + neededSpace > 280) {
+      doc.addPage();
+      y = 20;
     }
-    
-    * {
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 10pt;
-      line-height: 1.6;
-      color: #1a1a1a;
-      max-width: 210mm;
-      margin: 0 auto;
-      padding: 0;
-      background: #fff;
-    }
-    
-    .document-container {
-      padding: 40px 50px;
-    }
-    
-    /* Header with logo */
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 30px;
-      padding-bottom: 20px;
-      border-bottom: 2px solid #1a1a1a;
-    }
-    
-    .header-left {
-      flex: 1;
-    }
-    
-    .header-right {
-      text-align: right;
-    }
-    
-    .logo {
-      max-width: 180px;
-      height: auto;
-    }
-    
-    .document-title {
-      font-size: 20pt;
-      font-weight: bold;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin: 0 0 5px 0;
-      color: #1a1a1a;
-    }
-    
-    .document-subtitle {
-      font-size: 10pt;
-      color: #666;
-      margin: 0;
-    }
-    
-    /* Section styling */
-    .section {
-      margin-bottom: 24px;
-    }
-    
-    .section-title {
-      font-size: 12pt;
-      font-weight: bold;
-      color: #1a1a1a;
-      margin: 0 0 12px 0;
-      padding-bottom: 6px;
-      border-bottom: 1px solid #ddd;
-    }
-    
-    .subsection-title {
-      font-size: 10pt;
-      font-weight: bold;
-      color: #333;
-      margin: 16px 0 8px 0;
-    }
-    
-    /* Party blocks */
-    .parties-container {
-      display: flex;
-      gap: 40px;
-      margin: 16px 0;
-    }
-    
-    .party-block {
-      flex: 1;
-      background: #f9f9f9;
-      padding: 16px 20px;
-      border-radius: 4px;
-      border-left: 3px solid #1a1a1a;
-    }
-    
-    .party-block h4 {
-      font-size: 10pt;
-      font-weight: bold;
-      margin: 0 0 10px 0;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .party-block p {
-      margin: 4px 0;
-      font-size: 10pt;
-    }
-    
-    .party-block .label {
-      color: #666;
-      font-size: 9pt;
-    }
-    
-    /* Content details */
-    .detail-grid {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 8px 16px;
-      margin: 12px 0;
-    }
-    
-    .detail-label {
-      font-weight: bold;
-      color: #333;
-      font-size: 9pt;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-    
-    .detail-value {
-      color: #1a1a1a;
-    }
-    
-    /* Usage rights table */
-    .usage-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0;
-      font-size: 9pt;
-    }
-    
-    .usage-table th {
-      background-color: #1a1a1a;
-      color: #fff;
-      font-weight: bold;
-      text-align: left;
-      padding: 10px 12px;
-      font-size: 9pt;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-    
-    .usage-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #e0e0e0;
-      vertical-align: top;
-    }
-    
-    .usage-table tr:nth-child(even) {
-      background-color: #f9f9f9;
-    }
-    
-    .usage-table tr:hover {
-      background-color: #f0f0f0;
-    }
-    
-    .granted-yes {
-      color: #0a7c42;
-      font-weight: bold;
-    }
-    
-    .granted-no {
-      color: #999;
-    }
-    
-    /* Terms section */
-    .terms-section {
-      margin-top: 24px;
-    }
-    
-    .terms-section p {
-      margin: 8px 0;
-      text-align: justify;
-    }
-    
-    .terms-section ol, .terms-section ul {
-      margin: 8px 0 8px 20px;
-      padding-left: 0;
-    }
-    
-    .terms-section li {
-      margin: 6px 0;
-      text-align: justify;
-    }
-    
-    /* Signature section */
-    .signature-section {
-      margin-top: 40px;
-      page-break-inside: avoid;
-    }
-    
-    .signature-intro {
-      margin-bottom: 30px;
-      font-style: italic;
-    }
-    
-    .signature-grid {
-      display: flex;
-      gap: 40px;
-    }
-    
-    .signature-block {
-      flex: 1;
-      border: 1px solid #ddd;
-      padding: 20px;
-      border-radius: 4px;
-    }
-    
-    .signature-block h4 {
-      font-size: 10pt;
-      font-weight: bold;
-      margin: 0 0 20px 0;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #ddd;
-    }
-    
-    .signature-field {
-      margin: 12px 0;
-    }
-    
-    .signature-field .label {
-      font-size: 9pt;
-      color: #666;
-      margin-bottom: 4px;
-    }
-    
-    .signature-line {
-      border-bottom: 1px solid #1a1a1a;
-      height: 30px;
-      margin-top: 4px;
-    }
-    
-    .signature-field .value {
-      font-size: 10pt;
-      padding-top: 4px;
-    }
-    
-    /* Footer */
-    .document-footer {
-      margin-top: 40px;
-      padding-top: 16px;
-      border-top: 1px solid #ddd;
-      text-align: center;
-    }
-    
-    .confidential-notice {
-      font-size: 9pt;
-      font-weight: bold;
-      color: #666;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    
-    .footer-meta {
-      font-size: 8pt;
-      color: #999;
-      margin-top: 8px;
-    }
-    
-    /* Print styles */
-    @media print {
-      body { 
-        padding: 0;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      .document-container {
-        padding: 0;
-      }
-      .section {
-        page-break-inside: avoid;
-      }
-      .signature-section {
-        page-break-before: auto;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="document-container">
-    <header class="header">
-      <div class="header-left">
-        <h1 class="document-title">Video Content Usage Rights Agreement</h1>
-        <p class="document-subtitle">Non-Exclusive License Agreement</p>
-      </div>
-      <div class="header-right">
-        ${TNF_LOGO_SVG}
-      </div>
-    </header>
+  };
 
-    <section class="section">
-      <h2 class="section-title">1. Parties</h2>
-      <p>This Video Content Usage Rights Agreement (the "Agreement") is entered into by and between:</p>
-      
-      <div class="parties-container">
-        <div class="party-block">
-          <h4>Licensor</h4>
-          <p><strong>The New Face</strong></p>
-          <p><span class="label">Address:</span><br>23 Rue des Petits Hotels<br>75010, Paris, France</p>
-        </div>
-        
-        <div class="party-block">
-          <h4>Licensee (Client)</h4>
-          <p><strong>${escapeHtml(data.CLIENT_NAME)}</strong></p>
-          <p><span class="label">Contact:</span> ${escapeHtml(data.CLIENT_CONTACT_NAME) || 'N/A'}</p>
-          <p><span class="label">Email:</span> ${escapeHtml(data.CLIENT_EMAIL)}</p>
-        </div>
-      </div>
-      
-      <p>The Licensor and Licensee may each be referred to as a "Party" and collectively as the "Parties."</p>
-    </section>
+  // ========== HEADER ==========
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VIDEO CONTENT USAGE RIGHTS AGREEMENT', pageWidth / 2, y, { align: 'center' });
+  y += 7;
 
-    <section class="section">
-      <h2 class="section-title">2. Content Description</h2>
-      <div class="detail-grid">
-        <span class="detail-label">Project Name</span>
-        <span class="detail-value">${escapeHtml(data.PROJECT_NAME)}</span>
-        
-        <span class="detail-label">Description</span>
-        <span class="detail-value">${escapeHtml(data.CONTENT_DESCRIPTION)}</span>
-        
-        <span class="detail-label">Deliverables</span>
-        <span class="detail-value">As per project documentation</span>
-      </div>
-    </section>
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Non-Exclusive License Agreement', pageWidth / 2, y, { align: 'center' });
+  y += 5;
 
-    <section class="section">
-      <h2 class="section-title">3. Agreement Dates</h2>
-      <div class="detail-grid">
-        <span class="detail-label">Agreement Date</span>
-        <span class="detail-value">${escapeHtml(data.AGREEMENT_DATE)}</span>
-        
-        <span class="detail-label">Rights Valid From</span>
-        <span class="detail-value">${escapeHtml(data.VALID_FROM)}</span>
-        
-        <span class="detail-label">Rights Valid Until</span>
-        <span class="detail-value">${escapeHtml(data.VALID_UNTIL)}</span>
-      </div>
-    </section>
+  // Header line
+  doc.setDrawColor(26, 26, 26);
+  doc.setLineWidth(0.5);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 12;
 
-    <section class="section">
-      <h2 class="section-title">4. Usage Rights</h2>
-      <p>Usage rights are granted strictly as indicated below. Any usage category not explicitly granted is not permitted.</p>
-      
-      <table class="usage-table">
-        <thead>
-          <tr>
-            <th style="width: 30%">Usage Category</th>
-            <th style="width: 12%">Granted</th>
-            <th style="width: 12%">Type</th>
-            <th style="width: 22%">Territories</th>
-            <th style="width: 24%">Period</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Digital (Web, Social Media, Email)</td>
-            <td class="${data.DIGITAL_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.DIGITAL_GRANTED)}</td>
-            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_TYPE) : '-'}</td>
-            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_TERRITORIES) : '-'}</td>
-            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_PERIOD) : '-'}</td>
-          </tr>
-          <tr>
-            <td>Paid Media (Advertising, Sponsored)</td>
-            <td class="${data.PAID_MEDIA_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.PAID_MEDIA_GRANTED)}</td>
-            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_TYPE) : '-'}</td>
-            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_TERRITORIES) : '-'}</td>
-            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_PERIOD) : '-'}</td>
-          </tr>
-          <tr>
-            <td>POS / Retail (In-store, Displays)</td>
-            <td class="${data.POS_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.POS_GRANTED)}</td>
-            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_TYPE) : '-'}</td>
-            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_TERRITORIES) : '-'}</td>
-            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_PERIOD) : '-'}</td>
-          </tr>
-          <tr>
-            <td>Print (Magazines, Brochures)</td>
-            <td class="${data.PRINT_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.PRINT_GRANTED)}</td>
-            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_TYPE) : '-'}</td>
-            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_TERRITORIES) : '-'}</td>
-            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_PERIOD) : '-'}</td>
-          </tr>
-          <tr>
-            <td>OOH (Billboards, Street Furniture)</td>
-            <td class="${data.OOH_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.OOH_GRANTED)}</td>
-            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_TYPE) : '-'}</td>
-            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_TERRITORIES) : '-'}</td>
-            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_PERIOD) : '-'}</td>
-          </tr>
-          <tr>
-            <td>TV (Broadcast, Streaming)</td>
-            <td class="${data.TV_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.TV_GRANTED)}</td>
-            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_TYPE) : '-'}</td>
-            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_TERRITORIES) : '-'}</td>
-            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_PERIOD) : '-'}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+  // ========== SECTION 1: PARTIES ==========
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('1. PARTIES', margin, y);
+  y += 8;
 
-    <section class="section terms-section">
-      <h2 class="section-title">5. Terms and Conditions</h2>
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  y = addWrappedText('This Video Content Usage Rights Agreement (the "Agreement") is entered into by and between:', margin, y, contentWidth);
+  y += 8;
 
-      <h3 class="subsection-title">5.1 Grant of Rights (Non-Exclusive License)</h3>
-      <p>Subject to the terms of this Agreement and the Usage Rights table in Section 4, the Licensor grants the Licensee a non-exclusive, non-transferable license to use the video content and associated deliverables described in Section 2 (the "Content") solely for the permitted usage categories, territories, and periods indicated in Section 4.</p>
-      <p>No rights are granted by implication. All rights not expressly granted to the Licensee are reserved by the Licensor.</p>
+  // Licensor box
+  doc.setFillColor(249, 249, 249);
+  doc.setDrawColor(26, 26, 26);
+  doc.rect(margin, y, contentWidth / 2 - 5, 35, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 35);
 
-      <h3 class="subsection-title">5.2 Restrictions</h3>
-      <p>Unless expressly agreed in writing by the Licensor, the Licensee shall not:</p>
-      <ol>
-        <li>Sublicense, assign, or otherwise transfer the rights granted under this Agreement to any third party.</li>
-        <li>Use the Content in any unlawful, misleading, defamatory, or infringing manner.</li>
-        <li>Use the Content outside the granted category, territory, or period specified in Section 4.</li>
-      </ol>
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('LICENSOR', margin + 5, y + 7);
+  doc.setFontSize(10);
+  doc.text('The New Face', margin + 5, y + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Address:', margin + 5, y + 21);
+  doc.text('23 Rue des Petits Hotels', margin + 5, y + 26);
+  doc.text('75010, Paris, France', margin + 5, y + 31);
 
-      <h3 class="subsection-title">5.3 Credit / Attribution</h3>
-      <p>Where reasonably practicable (e.g., online captions, video descriptions, campaign credits, press releases, or case studies), the Licensee shall include credit substantially as follows: "Content produced by The New Face."</p>
+  // Licensee box
+  const licBox = margin + contentWidth / 2 + 5;
+  doc.setFillColor(249, 249, 249);
+  doc.rect(licBox, y, contentWidth / 2 - 5, 35, 'F');
+  doc.line(licBox, y, licBox, y + 35);
 
-      <h3 class="subsection-title">5.4 Modifications and Formatting</h3>
-      <p>The Licensee may perform technical formatting required for distribution, including cropping, resizing, compression, aspect ratio adjustments, captioning, and minor length edits (e.g., cut-downs), provided that such changes do not substantively alter the Content, misrepresent the Licensor's work, or create a misleading context.</p>
-      <p>The Licensee shall not materially modify the Content (including altering key visuals, compositing new scenes, changing narrative meaning, removing or replacing branding elements, or using AI-based transformations) without the Licensor's prior written consent.</p>
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('LICENSEE (CLIENT)', licBox + 5, y + 7);
+  doc.setFontSize(10);
+  doc.text(data.CLIENT_NAME || 'N/A', licBox + 5, y + 14);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Contact: ${data.CLIENT_CONTACT_NAME || 'N/A'}`, licBox + 5, y + 21);
+  doc.text(`Email: ${data.CLIENT_EMAIL || 'N/A'}`, licBox + 5, y + 28);
 
-      <h3 class="subsection-title">5.5 Term and Expiry</h3>
-      <p>This Agreement is effective from ${escapeHtml(data.VALID_FROM)} and remains in effect until ${escapeHtml(data.VALID_UNTIL)}, unless terminated earlier in accordance with Section 5.6.</p>
-      <p>Upon expiry (or earlier termination), the Licensee must cease new use of the Content in any category whose Period has ended and must remove/withdraw placements where reasonably possible, except for:</p>
-      <ul>
-        <li>archival copies retained for legal/compliance purposes; and</li>
-        <li>non-cancellable media buys already placed in good faith prior to expiry (limited to the shortest practicable run), unless the Licensee is in breach of this Agreement.</li>
-      </ul>
+  y += 42;
 
-      <h3 class="subsection-title">5.6 Termination</h3>
-      <p>Either Party may terminate this Agreement:</p>
-      <ol>
-        <li>For material breach by the other Party, if such breach is not cured within ten (10) business days of written notice; or</li>
-        <li>Immediately if the other Party becomes insolvent, enters liquidation, or is unable to pay its debts as they fall due.</li>
-      </ol>
-      <p>Upon termination, all licenses granted under this Agreement cease, and the Licensee must promptly discontinue use of the Content, subject to reasonable takedown periods and any exceptions expressly stated in Section 5.5.</p>
+  doc.setFontSize(10);
+  y = addWrappedText('The Licensor and Licensee may each be referred to as a "Party" and collectively as the "Parties."', margin, y, contentWidth);
+  y += 10;
 
-      <h3 class="subsection-title">5.7 Governing Law</h3>
-      <p>This Agreement shall be governed by and construed in accordance with the laws of ${escapeHtml(data.GOVERNING_LAW)}, without regard to conflict-of-law principles.</p>
+  // ========== SECTION 2: CONTENT DESCRIPTION ==========
+  checkPageBreak(40);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('2. CONTENT DESCRIPTION', margin, y);
+  y += 8;
 
-      <h3 class="subsection-title">5.8 Entire Agreement</h3>
-      <p>This Agreement (including the Usage Rights table) constitutes the entire agreement between the Parties regarding the licensing of the Content and supersedes all prior discussions or understandings relating to the same subject matter.</p>
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Project Name:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.PROJECT_NAME || 'N/A', margin + 30, y);
+  y += 6;
 
-      <h3 class="subsection-title">5.9 Counterparts and Electronic Signature</h3>
-      <p>This Agreement may be executed in counterparts and signed electronically. Electronic signatures (including via DocuSign or equivalent) shall be deemed original and binding.</p>
-    </section>
+  doc.setFont('helvetica', 'bold');
+  doc.text('Description:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  const descLines = doc.splitTextToSize(data.CONTENT_DESCRIPTION || 'As per project documentation', contentWidth - 30);
+  doc.text(descLines, margin + 30, y);
+  y += descLines.length * 4.5 + 4;
 
-    <section class="section signature-section">
-      <h2 class="section-title">6. Signatures</h2>
-      <p class="signature-intro">IN WITNESS WHEREOF, the Parties have executed this Agreement as of the Agreement Date.</p>
+  doc.setFont('helvetica', 'bold');
+  doc.text('Deliverables:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text('As per project documentation', margin + 30, y);
+  y += 10;
 
-      <div class="signature-grid">
-        <div class="signature-block">
-          <h4>Licensor (The New Face)</h4>
-          <div class="signature-field">
-            <div class="label">Signature</div>
-            <div class="signature-line"></div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Printed Name</div>
-            <div class="value">Victor Haymann</div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Title</div>
-            <div class="value">COO</div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Date</div>
-            <div class="signature-line"></div>
-          </div>
-        </div>
+  // ========== SECTION 3: AGREEMENT DATES ==========
+  checkPageBreak(30);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('3. AGREEMENT DATES', margin, y);
+  y += 8;
 
-        <div class="signature-block">
-          <h4>Licensee (Client)</h4>
-          <div class="signature-field">
-            <div class="label">Signature</div>
-            <div class="signature-line"></div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Printed Name</div>
-            <div class="value">${escapeHtml(data.CLIENT_SIGNER_NAME) || '________________________'}</div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Title</div>
-            <div class="signature-line"></div>
-          </div>
-          <div class="signature-field">
-            <div class="label">Date</div>
-            <div class="signature-line"></div>
-          </div>
-        </div>
-      </div>
-    </section>
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Agreement Date:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.AGREEMENT_DATE || 'N/A', margin + 35, y);
+  y += 6;
 
-    <footer class="document-footer">
-      <p class="confidential-notice">Confidential - Video Content Usage Rights Agreement</p>
-      <p class="footer-meta">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-    </footer>
-  </div>
-</body>
-</html>`;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Rights Valid From:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.VALID_FROM || 'N/A', margin + 35, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Rights Valid Until:', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.VALID_UNTIL || 'N/A', margin + 35, y);
+  y += 12;
+
+  // ========== SECTION 4: USAGE RIGHTS TABLE ==========
+  checkPageBreak(80);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('4. USAGE RIGHTS', margin, y);
+  y += 6;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  y = addWrappedText('Usage rights are granted strictly as indicated below. Any usage category not explicitly granted is not permitted.', margin, y, contentWidth, 4);
+  y += 6;
+
+  // Table headers
+  const colWidths = [55, 20, 22, 40, 35];
+  const tableX = margin;
+  
+  doc.setFillColor(26, 26, 26);
+  doc.rect(tableX, y, contentWidth, 8, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  
+  let colX = tableX + 2;
+  doc.text('USAGE CATEGORY', colX, y + 5.5);
+  colX += colWidths[0];
+  doc.text('GRANTED', colX, y + 5.5);
+  colX += colWidths[1];
+  doc.text('TYPE', colX, y + 5.5);
+  colX += colWidths[2];
+  doc.text('TERRITORIES', colX, y + 5.5);
+  colX += colWidths[3];
+  doc.text('PERIOD', colX, y + 5.5);
+  
+  y += 8;
+  doc.setTextColor(0, 0, 0);
+
+  // Table rows
+  const categories = ['DIGITAL', 'PAID_MEDIA', 'POS', 'PRINT', 'OOH', 'TV'];
+  
+  categories.forEach((cat, index) => {
+    checkPageBreak(10);
+    
+    if (index % 2 === 1) {
+      doc.setFillColor(249, 249, 249);
+      doc.rect(tableX, y, contentWidth, 8, 'F');
+    }
+    
+    doc.setDrawColor(224, 224, 224);
+    doc.line(tableX, y + 8, tableX + contentWidth, y + 8);
+    
+    colX = tableX + 2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    
+    // Category label
+    doc.text(CATEGORY_LABELS[cat] || cat, colX, y + 5.5);
+    colX += colWidths[0];
+    
+    // Granted
+    const granted = data[`${cat}_GRANTED`] || 'No';
+    if (granted === 'Yes') {
+      doc.setTextColor(10, 124, 66);
+      doc.setFont('helvetica', 'bold');
+    } else {
+      doc.setTextColor(153, 153, 153);
+    }
+    doc.text(granted, colX, y + 5.5);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    colX += colWidths[1];
+    
+    // Type
+    doc.text(granted === 'Yes' ? (data[`${cat}_TYPE`] || '-') : '-', colX, y + 5.5);
+    colX += colWidths[2];
+    
+    // Territories (may need truncation)
+    const territories = granted === 'Yes' ? (data[`${cat}_TERRITORIES`] || '-') : '-';
+    const truncTerr = territories.length > 25 ? territories.substring(0, 22) + '...' : territories;
+    doc.text(truncTerr, colX, y + 5.5);
+    colX += colWidths[3];
+    
+    // Period (may need truncation)
+    const period = granted === 'Yes' ? (data[`${cat}_PERIOD`] || '-') : '-';
+    const truncPeriod = period.length > 22 ? period.substring(0, 19) + '...' : period;
+    doc.text(truncPeriod, colX, y + 5.5);
+    
+    y += 8;
+  });
+
+  y += 10;
+
+  // ========== SECTION 5: TERMS AND CONDITIONS ==========
+  checkPageBreak(60);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5. TERMS AND CONDITIONS', margin, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.1 Grant of Rights (Non-Exclusive License)', margin, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const grantText = 'Subject to the terms of this Agreement and the Usage Rights table in Section 4, the Licensor grants the Licensee a non-exclusive, non-transferable license to use the video content and associated deliverables described in Section 2 (the "Content") solely for the permitted usage categories, territories, and periods indicated in Section 4.';
+  y = addWrappedText(grantText, margin, y, contentWidth, 4.5);
+  y += 4;
+  y = addWrappedText('No rights are granted by implication. All rights not expressly granted to the Licensee are reserved by the Licensor.', margin, y, contentWidth, 4.5);
+  y += 8;
+
+  checkPageBreak(40);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.2 Restrictions', margin, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  y = addWrappedText('The Licensee shall not:', margin, y, contentWidth, 4.5);
+  y += 4;
+  const restrictions = [
+    'Sublicense, sell, or transfer the Content to any third party without prior written consent from the Licensor',
+    'Modify, edit, or create derivative works from the Content without prior approval',
+    'Use the Content in any manner that could be considered defamatory, obscene, or otherwise objectionable',
+    'Use the Content beyond the specified territories, time periods, or usage categories without additional authorization'
+  ];
+  restrictions.forEach(r => {
+    checkPageBreak(10);
+    doc.text('•', margin + 2, y);
+    y = addWrappedText(r, margin + 6, y, contentWidth - 6, 4.5);
+    y += 2;
+  });
+  y += 6;
+
+  checkPageBreak(30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.3 Credit and Attribution', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  y = addWrappedText('Unless otherwise agreed in writing, the Licensee shall provide appropriate credit to The New Face in connection with any public use of the Content, in a manner consistent with industry standards.', margin, y, contentWidth, 4.5);
+  y += 8;
+
+  checkPageBreak(30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.4 Ownership', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  y = addWrappedText('The Licensor retains all ownership rights, including copyright, in and to the Content. This Agreement does not transfer any ownership rights to the Licensee.', margin, y, contentWidth, 4.5);
+  y += 8;
+
+  checkPageBreak(30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.5 Termination', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  y = addWrappedText('Either Party may terminate this Agreement upon written notice if the other Party materially breaches any term of this Agreement and fails to cure such breach within thirty (30) days of receiving written notice thereof. Upon termination, the Licensee shall immediately cease all use of the Content.', margin, y, contentWidth, 4.5);
+  y += 8;
+
+  checkPageBreak(30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('5.6 Governing Law', margin, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  y = addWrappedText('This Agreement shall be governed by and construed in accordance with the laws of France. Any disputes arising from this Agreement shall be subject to the exclusive jurisdiction of the courts of Paris, France.', margin, y, contentWidth, 4.5);
+  y += 12;
+
+  // ========== SECTION 6: SIGNATURES ==========
+  checkPageBreak(70);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('6. SIGNATURES', margin, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  y = addWrappedText('By signing below, the Parties acknowledge that they have read, understood, and agree to be bound by the terms and conditions of this Agreement.', margin, y, contentWidth, 4.5);
+  y += 10;
+
+  // Signature boxes
+  const sigBoxWidth = contentWidth / 2 - 5;
+  const sigBoxHeight = 50;
+
+  // Licensor signature
+  doc.setDrawColor(221, 221, 221);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, sigBoxWidth, sigBoxHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('FOR THE LICENSOR', margin + 5, y + 7);
+  doc.line(margin + 5, y + 8, margin + sigBoxWidth - 5, y + 8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(102, 102, 102);
+  doc.text('Signature:', margin + 5, y + 18);
+  doc.setDrawColor(26, 26, 26);
+  doc.line(margin + 25, y + 18, margin + sigBoxWidth - 5, y + 18);
+
+  doc.text('Name:', margin + 5, y + 28);
+  doc.setTextColor(0, 0, 0);
+  doc.text('The New Face Representative', margin + 25, y + 28);
+
+  doc.setTextColor(102, 102, 102);
+  doc.text('Date:', margin + 5, y + 38);
+  doc.setDrawColor(26, 26, 26);
+  doc.line(margin + 25, y + 38, margin + sigBoxWidth - 5, y + 38);
+
+  // Licensee signature
+  const licSigX = margin + sigBoxWidth + 10;
+  doc.setTextColor(0, 0, 0);
+  doc.setDrawColor(221, 221, 221);
+  doc.rect(licSigX, y, sigBoxWidth, sigBoxHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('FOR THE LICENSEE', licSigX + 5, y + 7);
+  doc.line(licSigX + 5, y + 8, licSigX + sigBoxWidth - 5, y + 8);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(102, 102, 102);
+  doc.text('Signature:', licSigX + 5, y + 18);
+  doc.setDrawColor(26, 26, 26);
+  doc.line(licSigX + 25, y + 18, licSigX + sigBoxWidth - 5, y + 18);
+
+  doc.text('Name:', licSigX + 5, y + 28);
+  doc.setTextColor(0, 0, 0);
+  doc.text(data.CLIENT_CONTACT_NAME || data.CLIENT_NAME || 'N/A', licSigX + 25, y + 28);
+
+  doc.setTextColor(102, 102, 102);
+  doc.text('Date:', licSigX + 5, y + 38);
+  doc.setDrawColor(26, 26, 26);
+  doc.line(licSigX + 25, y + 38, licSigX + sigBoxWidth - 5, y + 38);
+
+  y += sigBoxHeight + 15;
+
+  // ========== FOOTER ==========
+  checkPageBreak(20);
+  doc.setDrawColor(221, 221, 221);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 6;
+
+  doc.setTextColor(102, 102, 102);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CONFIDENTIAL', pageWidth / 2, y, { align: 'center' });
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text(`Generated: ${new Date().toISOString().split('T')[0]} | The New Face - Video Production`, pageWidth / 2, y, { align: 'center' });
+
+  // Return as ArrayBuffer then convert to Uint8Array
+  const arrayBuffer = doc.output('arraybuffer');
+  return new Uint8Array(arrayBuffer);
 }
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const signwellApiKey = Deno.env.get('SIGNWELL_API_KEY')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const signwellApiKey = Deno.env.get('SIGNWELL_API_KEY');
 
     if (!signwellApiKey) {
-      throw new Error('SIGNWELL_API_KEY not configured');
+      return new Response(
+        JSON.stringify({ error: 'SignWell API key not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { agreementId, testMode = true } = await req.json();
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { agreementId, testMode = false } = await req.json();
 
     if (!agreementId) {
       return new Response(
-        JSON.stringify({ error: 'Missing agreementId' }),
+        JSON.stringify({ error: 'Agreement ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -623,7 +494,14 @@ serve(async (req) => {
     // Fetch agreement data
     const { data: agreement, error: agreementError } = await supabase
       .from('rights_agreements')
-      .select('*, projects(name, description, client_name)')
+      .select(`
+        *,
+        projects:project_id (
+          id,
+          name,
+          description
+        )
+      `)
       .eq('id', agreementId)
       .single();
 
@@ -635,46 +513,39 @@ serve(async (req) => {
       );
     }
 
-    if (agreement.signwell_document_id) {
-      return new Response(
-        JSON.stringify({ error: 'Agreement already sent for signature' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const project = agreement.projects as { id: string; name: string; description: string } | null;
 
     // Fetch usage selections
-    const { data: selections } = await supabase
+    const { data: selections, error: selectionsError } = await supabase
       .from('rights_usage_selections')
       .select('*')
       .eq('agreement_id', agreementId);
 
+    if (selectionsError) {
+      console.error('Selections fetch error:', selectionsError);
+    }
+
     // Build template data
-    const project = agreement.projects as { name: string; description: string | null; client_name: string | null } | null;
-    
     const templateData: Record<string, string> = {
       CLIENT_NAME: agreement.client_name,
       CLIENT_CONTACT_NAME: agreement.client_contact_name || '',
       CLIENT_EMAIL: agreement.client_email,
-      PROJECT_NAME: project?.name || '',
-      CONTENT_DESCRIPTION: project?.description || 'Video content as per project scope',
+      PROJECT_NAME: project?.name || 'N/A',
+      CONTENT_DESCRIPTION: project?.description || 'Video content as per project documentation',
       AGREEMENT_DATE: formatDate(agreement.agreement_date),
       VALID_FROM: formatDate(agreement.valid_from),
       VALID_UNTIL: agreement.valid_until ? formatDate(agreement.valid_until) : 'Perpetual',
-      GOVERNING_LAW: 'France',
-      CLIENT_SIGNER_NAME: agreement.client_contact_name || '',
+      // Initialize all categories to No
+      DIGITAL_GRANTED: 'No',
+      PAID_MEDIA_GRANTED: 'No',
+      POS_GRANTED: 'No',
+      PRINT_GRANTED: 'No',
+      OOH_GRANTED: 'No',
+      TV_GRANTED: 'No',
     };
 
-    // Initialize all usage categories as "Not Granted"
-    const categories = ['DIGITAL', 'PAID_MEDIA', 'POS', 'PRINT', 'OOH', 'TV'];
-    for (const cat of categories) {
-      templateData[`${cat}_GRANTED`] = 'No';
-      templateData[`${cat}_TYPE`] = '-';
-      templateData[`${cat}_TERRITORIES`] = '-';
-      templateData[`${cat}_PERIOD`] = '-';
-    }
-
-    // Fill in granted categories
-    if (selections) {
+    // Populate granted rights from selections
+    if (selections && selections.length > 0) {
       for (const sel of selections as UsageSelection[]) {
         const catKey = CATEGORY_MAP[sel.category];
         if (catKey) {
@@ -686,11 +557,37 @@ serve(async (req) => {
       }
     }
 
-    // Generate HTML document
-    const htmlContent = generateAgreementHtml(templateData);
+    // Generate PDF document
+    const pdfBytes = generateAgreementPdf(templateData);
 
-    // Use proper UTF-8 to Base64 encoding
-    const base64Content = utf8ToBase64(htmlContent);
+    // Convert to base64
+    let binary = '';
+    for (let i = 0; i < pdfBytes.length; i++) {
+      binary += String.fromCharCode(pdfBytes[i]);
+    }
+    const base64Content = btoa(binary);
+
+    // Build recipients array - avoid duplicates if client email is same as TNF
+    const recipients = [];
+    
+    // Always add TNF as first signer
+    recipients.push({
+      id: 'tnf',
+      name: 'The New Face',
+      email: TNF_EMAIL,
+      signing_order: 1,
+    });
+
+    // Only add client as second signer if different email
+    const clientEmail = agreement.client_email?.toLowerCase().trim();
+    if (clientEmail && clientEmail !== TNF_EMAIL.toLowerCase()) {
+      recipients.push({
+        id: 'client',
+        name: agreement.client_contact_name || agreement.client_name,
+        email: agreement.client_email,
+        signing_order: 2,
+      });
+    }
 
     // Create document in SignWell
     const signwellPayload = {
@@ -704,20 +601,7 @@ serve(async (req) => {
       name: `Video Content Usage Rights Agreement - ${agreement.client_name}`,
       subject: 'Video Content Usage Rights Agreement Ready for Signature',
       message: `Please review and sign the attached Video Content Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
-      recipients: [
-        {
-          id: 'tnf',
-          name: 'The New Face',
-          email: 'contact@thenewface.io',
-          signing_order: 1,
-        },
-        {
-          id: 'client',
-          name: agreement.client_contact_name || agreement.client_name,
-          email: agreement.client_email,
-          signing_order: 2,
-        }
-      ],
+      recipients,
       draft: false,
       with_signature_page: true,
       reminders: true,
@@ -759,11 +643,14 @@ serve(async (req) => {
       console.error('Failed to update agreement:', updateError);
     }
 
+    // Build success message
+    const recipientEmails = recipients.map(r => r.email).join(' and ');
+
     return new Response(
       JSON.stringify({
         success: true,
         signwellDocumentId: signwellResult.id,
-        message: `Agreement sent to The New Face and ${agreement.client_email} for signature`,
+        message: `Agreement sent to ${recipientEmails} for signature`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
