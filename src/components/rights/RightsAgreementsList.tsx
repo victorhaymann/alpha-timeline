@@ -33,9 +33,11 @@ import {
   Plus,
   FileText,
   Copy,
+  FileSearch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { AgreementPreviewDialog } from './AgreementPreviewDialog';
 
 interface RightsAgreement {
   id: string;
@@ -81,6 +83,8 @@ export function RightsAgreementsList({
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
   const [sendingForSignature, setSendingForSignature] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [previewAgreementId, setPreviewAgreementId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     fetchAgreements();
@@ -401,6 +405,15 @@ export function RightsAgreementsList({
                             )}
                             Duplicate
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setPreviewAgreementId(agreement.id);
+                              setPreviewOpen(true);
+                            }}
+                          >
+                            <FileSearch className="h-4 w-4 mr-2" />
+                            Preview Document
+                          </DropdownMenuItem>
                           {agreement.status === 'draft' && (
                             <DropdownMenuItem
                               onClick={() => handleGeneratePdf(agreement.id)}
@@ -487,6 +500,21 @@ export function RightsAgreementsList({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AgreementPreviewDialog
+        agreementId={previewAgreementId}
+        projectId={projectId}
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setPreviewAgreementId(null);
+        }}
+        onGeneratePdf={(id) => {
+          setPreviewOpen(false);
+          handleGeneratePdf(id);
+        }}
+        generatingPdf={generatingPdf !== null}
+      />
     </div>
   );
 }
