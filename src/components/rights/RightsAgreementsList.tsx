@@ -34,6 +34,8 @@ import {
   FileText,
   Copy,
   FileSearch,
+  CheckCircle2,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -338,14 +340,40 @@ export function RightsAgreementsList({
       <div className="space-y-3">
         {agreements.map((agreement) => {
           const statusConfig = STATUS_CONFIG[agreement.status] || STATUS_CONFIG.draft;
+          const isSigned = agreement.status === 'signed';
+          const isDeclined = agreement.status === 'declined';
+          const isSent = agreement.status === 'sent' || agreement.status === 'viewed';
+
+          // Dynamic icon and colors based on status
+          const IconComponent = isSigned ? CheckCircle2 : FileText;
+          const iconBgClass = isSigned
+            ? 'bg-status-completed/10'
+            : isDeclined
+            ? 'bg-destructive/10'
+            : isSent
+            ? 'bg-amber-500/10'
+            : 'bg-primary/10';
+          const iconColorClass = isSigned
+            ? 'text-status-completed'
+            : isDeclined
+            ? 'text-destructive'
+            : isSent
+            ? 'text-amber-600'
+            : 'text-primary';
 
           return (
-            <Card key={agreement.id} className="hover:shadow-md transition-shadow">
+            <Card
+              key={agreement.id}
+              className={cn(
+                'hover:shadow-md transition-shadow',
+                isSigned && 'border-l-4 border-l-status-completed'
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-primary" />
+                    <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', iconBgClass)}>
+                      <IconComponent className={cn('w-5 h-5', iconColorClass)} />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -431,8 +459,16 @@ export function RightsAgreementsList({
                             <DropdownMenuItem
                               onClick={() => handleDownloadDocument(agreement.id, agreement.signed_document_path)}
                             >
-                              <Download className="h-4 w-4 mr-2" />
-                              Download Signed Copy
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open Signed Document
+                            </DropdownMenuItem>
+                          )}
+                          {(agreement.status === 'sent' || agreement.status === 'viewed') && agreement.generated_document_path && (
+                            <DropdownMenuItem
+                              onClick={() => handleDownloadDocument(agreement.id, agreement.generated_document_path)}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Sent Document
                             </DropdownMenuItem>
                           )}
                           {agreement.status === 'draft' && (
