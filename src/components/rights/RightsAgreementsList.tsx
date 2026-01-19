@@ -54,6 +54,7 @@ interface RightsAgreement {
   signed_document_path: string | null;
   signwell_document_id: string | null;
   created_at: string;
+  last_sent_at: string | null;
 }
 
 interface RightsAgreementsListProps {
@@ -228,6 +229,14 @@ export function RightsAgreementsList({
 
       if (result?.success) {
         toast.success('Signature request resent successfully!');
+        // Update local state with new timestamp
+        setAgreements((prev) =>
+          prev.map((a) =>
+            a.id === agreementId
+              ? { ...a, last_sent_at: result.lastSentAt || new Date().toISOString() }
+              : a
+          )
+        );
       } else {
         toast.error(result?.error || 'Failed to resend signature request');
       }
@@ -432,9 +441,12 @@ export function RightsAgreementsList({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      Created {format(new Date(agreement.created_at), 'MMM d, yyyy')}
-                    </span>
+                    <div className="text-right text-xs text-muted-foreground">
+                      {agreement.last_sent_at && (agreement.status === 'sent' || agreement.status === 'viewed') && (
+                        <div>Sent {format(new Date(agreement.last_sent_at), 'MMM d, yyyy h:mm a')}</div>
+                      )}
+                      <div>Created {format(new Date(agreement.created_at), 'MMM d, yyyy')}</div>
+                    </div>
 
                     {!readOnly && (
                       <DropdownMenu>
