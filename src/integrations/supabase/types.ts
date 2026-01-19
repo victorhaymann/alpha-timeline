@@ -846,6 +846,7 @@ export type Database = {
           id: string
           project_id: string
           signed_document_path: string | null
+          signwell_document_id: string | null
           status: string
           updated_at: string
           valid_from: string
@@ -863,6 +864,7 @@ export type Database = {
           id?: string
           project_id: string
           signed_document_path?: string | null
+          signwell_document_id?: string | null
           status?: string
           updated_at?: string
           valid_from: string
@@ -880,6 +882,7 @@ export type Database = {
           id?: string
           project_id?: string
           signed_document_path?: string | null
+          signwell_document_id?: string | null
           status?: string
           updated_at?: string
           valid_from?: string
