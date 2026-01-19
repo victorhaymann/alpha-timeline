@@ -120,7 +120,7 @@ export function RightsAgreementForm({
     }
   };
 
-  const onSubmit = async (values: FormValues, sendForSignature = false) => {
+  const onSubmit = async (values: FormValues, generatePdf = false) => {
     if (!user) return;
 
     const includedSelections = usageSelections.filter((s) => s.included);
@@ -157,7 +157,6 @@ export function RightsAgreementForm({
             agreement_date: format(values.agreementDate, 'yyyy-MM-dd'),
             valid_from: format(values.validFrom, 'yyyy-MM-dd'),
             valid_until: values.validUntil ? format(values.validUntil, 'yyyy-MM-dd') : null,
-            status: sendForSignature ? 'sent' : 'draft',
           })
           .eq('id', agreementId);
 
@@ -177,7 +176,7 @@ export function RightsAgreementForm({
             agreement_date: format(values.agreementDate, 'yyyy-MM-dd'),
             valid_from: format(values.validFrom, 'yyyy-MM-dd'),
             valid_until: values.validUntil ? format(values.validUntil, 'yyyy-MM-dd') : null,
-            status: sendForSignature ? 'sent' : 'draft',
+            status: 'draft',
             created_by: user.id,
           })
           .select()
@@ -203,13 +202,30 @@ export function RightsAgreementForm({
 
       if (selectionsError) throw selectionsError;
 
-      toast.success(
-        agreementId
-          ? 'Agreement updated successfully'
-          : sendForSignature
-          ? 'Agreement saved and ready for signature'
-          : 'Agreement saved as draft'
-      );
+      // Generate PDF if requested
+      if (generatePdf && savedAgreementId) {
+        toast.info('Generating agreement document...');
+        
+        const { data: pdfResult, error: pdfError } = await supabase.functions.invoke(
+          'generate-rights-pdf',
+          { body: { agreementId: savedAgreementId } }
+        );
+
+        if (pdfError) {
+          console.error('PDF generation error:', pdfError);
+          toast.error('Failed to generate document');
+        } else if (pdfResult?.documentUrl) {
+          toast.success('Agreement document generated!');
+          // Open the document in a new tab
+          window.open(pdfResult.documentUrl, '_blank');
+        }
+      } else {
+        toast.success(
+          agreementId
+            ? 'Agreement updated successfully'
+            : 'Agreement saved as draft'
+        );
+      }
 
       onSaved();
     } catch (error) {
