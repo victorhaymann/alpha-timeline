@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -92,6 +93,7 @@ export function ClientDocumentsPanel({
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [dragOverCategory, setDragOverCategory] = useState<CategoryId | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   
   // Quotations/Invoices preview state (for read-only clients)
@@ -101,6 +103,34 @@ export function ClientDocumentsPanel({
 
   const getDocumentsByCategory = (categoryId: string) => {
     return documents.filter(doc => doc.category === categoryId);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent, categoryId: CategoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (canUpload) {
+      setDragOverCategory(categoryId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, categoryId: CategoryId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+    
+    if (!canUpload) return;
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      handleFileSelect(categoryId, files);
+    }
   };
 
   const isPreviewable = (mimeType: string | null, name: string): boolean => {
@@ -350,9 +380,20 @@ export function ClientDocumentsPanel({
           const categoryDocs = getDocumentsByCategory(category.id);
           const Icon = category.icon;
           const isUploading = uploading === category.id;
+          const isDragOver = dragOverCategory === category.id;
 
           return (
-            <Card key={category.id} className={categoryDocs.length === 0 ? "border-dashed" : ""}>
+            <Card 
+              key={category.id} 
+              className={cn(
+                categoryDocs.length === 0 ? "border-dashed" : "",
+                isDragOver && canUpload && "border-primary border-2 bg-primary/5 transition-colors",
+                canUpload && "cursor-pointer"
+              )}
+              onDragOver={(e) => handleDragOver(e, category.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, category.id)}
+            >
               {/* Hidden file input */}
               <input
                 type="file"
@@ -366,12 +407,18 @@ export function ClientDocumentsPanel({
               {categoryDocs.length === 0 ? (
                 /* Empty state */
                 <CardContent className="flex flex-col items-center justify-center py-10">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
-                    <Icon className="w-6 h-6 text-muted-foreground" />
+                  <div className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors",
+                    isDragOver ? "bg-primary/20" : "bg-muted"
+                  )}>
+                    <Icon className={cn(
+                      "w-6 h-6 transition-colors",
+                      isDragOver ? "text-primary" : "text-muted-foreground"
+                    )} />
                   </div>
                   <h3 className="font-semibold text-sm mb-1">{category.label}</h3>
                   <p className="text-xs text-muted-foreground text-center mb-4 max-w-[180px]">
-                    {category.description}
+                    {isDragOver ? "Drop files here" : category.description}
                   </p>
                   {canUpload && (
                     <Button 
