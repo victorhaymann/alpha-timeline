@@ -1,5 +1,8 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
+
+const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +23,155 @@ interface SignWellWebhookPayload {
       status: string;
     }>;
   };
+}
+
+async function sendPmNotification(
+  supabase: any,
+  agreement: { id: string; project_id: string; client_name: string; client_email: string },
+  eventType: 'signed' | 'declined'
+) {
+  try {
+    // Fetch project details including PM email
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id, name, pm_email, pm_name, owner_id")
+      .eq("id", agreement.project_id)
+      .single();
+
+    if (projectError || !project) {
+      console.error("Project not found for notification:", projectError);
+      return;
+    }
+
+    // Get PM email - fallback to owner's profile email if pm_email is not set
+    let pmEmail = (project as any).pm_email;
+    
+    if (!pmEmail && (project as any).owner_id) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", (project as any).owner_id)
+        .single();
+      
+      pmEmail = (ownerProfile as any)?.email;
+    }
+
+    if (!pmEmail) {
+      console.log("No PM email configured for project:", agreement.project_id);
+      return;
+    }
+
+    const projectName = (project as any).name || 'Unknown Project';
+
+    const isDeclined = eventType === 'declined';
+    const statusEmoji = isDeclined ? '❌' : '✅';
+    const statusText = isDeclined ? 'Declined' : 'Signed';
+    const statusColor = isDeclined ? '#ef4444' : '#22c55e';
+    const headerGradient = isDeclined 
+      ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+      : 'linear-gradient(135deg, #16a34a 0%, #22c55e 100%)';
+
+    const eventTime = new Date().toLocaleString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+
+    const emailResponse = await resend.emails.send({
+      from: "The New Face <onboarding@resend.dev>",
+      to: [pmEmail],
+      subject: `${statusEmoji} Rights Agreement ${statusText} - ${agreement.client_name}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5; margin: 0; padding: 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+            
+            <!-- Header -->
+            <div style="background: ${headerGradient}; padding: 32px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">
+                Rights Agreement ${statusText}
+              </h1>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 32px;">
+              <p style="color: #3f3f46; font-size: 16px; margin: 0 0 24px 0;">
+                ${isDeclined 
+                  ? `<strong>${agreement.client_name}</strong> has declined the rights agreement for <strong>${projectName}</strong>.`
+                  : `Great news! <strong>${agreement.client_name}</strong> has signed the rights agreement for <strong>${projectName}</strong>.`
+                }
+              </p>
+              
+              <!-- Agreement details card -->
+              <div style="background-color: #f4f4f5; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="color: #71717a; font-size: 14px; padding: 8px 0;">Status</td>
+                    <td style="color: ${statusColor}; font-size: 14px; font-weight: 600; text-align: right; padding: 8px 0;">${statusText}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #71717a; font-size: 14px; padding: 8px 0;">Client</td>
+                    <td style="color: #18181b; font-size: 14px; font-weight: 500; text-align: right; padding: 8px 0;">${agreement.client_name}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #71717a; font-size: 14px; padding: 8px 0;">Email</td>
+                    <td style="color: #18181b; font-size: 14px; font-weight: 500; text-align: right; padding: 8px 0;">${agreement.client_email}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #71717a; font-size: 14px; padding: 8px 0;">Project</td>
+                    <td style="color: #18181b; font-size: 14px; font-weight: 500; text-align: right; padding: 8px 0;">${projectName}</td>
+                  </tr>
+                  <tr>
+                    <td style="color: #71717a; font-size: 14px; padding: 8px 0;">${statusText} At</td>
+                    <td style="color: #18181b; font-size: 14px; font-weight: 500; text-align: right; padding: 8px 0;">${eventTime}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              ${!isDeclined ? `
+              <p style="color: #3f3f46; font-size: 14px; margin: 0 0 16px 0;">
+                The signed copy has been automatically saved to the project. You can download it from the Rights tab in the project details.
+              </p>
+              ` : `
+              <p style="color: #3f3f46; font-size: 14px; margin: 0 0 16px 0;">
+                You may want to reach out to the client to discuss the agreement terms or create a revised version.
+              </p>
+              `}
+              
+              <p style="color: #71717a; font-size: 14px; margin: 0; text-align: center;">
+                You're receiving this because you're the PM for this project.
+              </p>
+            </div>
+            
+            <!-- Footer -->
+            <div style="background-color: #f4f4f5; padding: 20px; text-align: center;">
+              <p style="color: #a1a1aa; font-size: 12px; margin: 0;">
+                Powered by The New Face
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    });
+
+    if (emailResponse.error) {
+      console.error("Failed to send PM notification email:", emailResponse.error);
+    } else {
+      console.log("PM notification email sent successfully:", emailResponse.data?.id);
+    }
+  } catch (error) {
+    console.error("Error sending PM notification:", error);
+  }
 }
 
 serve(async (req) => {
@@ -48,7 +200,7 @@ serve(async (req) => {
     // Find the agreement by SignWell document ID
     const { data: agreement, error: findError } = await supabase
       .from('rights_agreements')
-      .select('id, project_id')
+      .select('id, project_id, client_name, client_email')
       .eq('signwell_document_id', signwellDocumentId)
       .maybeSingle();
 
@@ -72,6 +224,8 @@ serve(async (req) => {
 
     let newStatus: string | null = null;
     let signedDocumentPath: string | null = null;
+    let shouldNotifyPm = false;
+    let notificationEventType: 'signed' | 'declined' = 'signed';
 
     switch (payload.event_type) {
       case 'document_viewed':
@@ -81,6 +235,8 @@ serve(async (req) => {
 
       case 'document_completed':
         newStatus = 'signed';
+        shouldNotifyPm = true;
+        notificationEventType = 'signed';
         console.log('Document completed/signed');
 
         // Download and store the signed PDF if available
@@ -119,6 +275,8 @@ serve(async (req) => {
 
       case 'document_declined':
         newStatus = 'declined';
+        shouldNotifyPm = true;
+        notificationEventType = 'declined';
         console.log('Document declined');
         break;
 
@@ -151,6 +309,11 @@ serve(async (req) => {
       }
 
       console.log('Agreement status updated to:', newStatus);
+    }
+
+    // Send PM notification for signed/declined events
+    if (shouldNotifyPm) {
+      await sendPmNotification(supabase, agreement, notificationEventType);
     }
 
     return new Response(
