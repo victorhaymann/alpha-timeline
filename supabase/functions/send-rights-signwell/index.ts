@@ -78,7 +78,7 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   // ========== HEADER ==========
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('VIDEO CONTENT USAGE RIGHTS AGREEMENT', pageWidth / 2, y, { align: 'center' });
+  doc.text('THE NEW FACE USAGE RIGHTS AGREEMENT', pageWidth / 2, y, { align: 'center' });
   y += 7;
 
   doc.setFontSize(10);
@@ -209,7 +209,7 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   y += 6;
 
   // Table headers
-  const colWidths = [55, 20, 22, 40, 35];
+  const colWidths = [50, 18, 20, 35, 49];
   const tableX = margin;
   
   doc.setFillColor(26, 26, 26);
@@ -273,14 +273,15 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
     
     // Territories (may need truncation)
     const territories = granted === 'Yes' ? (data[`${cat}_TERRITORIES`] || '-') : '-';
-    const truncTerr = territories.length > 25 ? territories.substring(0, 22) + '...' : territories;
+    const truncTerr = territories.length > 20 ? territories.substring(0, 17) + '...' : territories;
     doc.text(truncTerr, colX, y + 5.5);
     colX += colWidths[3];
     
-    // Period (may need truncation)
+    // Period (show full date range)
     const period = granted === 'Yes' ? (data[`${cat}_PERIOD`] || '-') : '-';
-    const truncPeriod = period.length > 22 ? period.substring(0, 19) + '...' : period;
-    doc.text(truncPeriod, colX, y + 5.5);
+    doc.setFontSize(7);
+    doc.text(period, colX, y + 5.5);
+    doc.setFontSize(8);
     
     y += 8;
   });
@@ -570,7 +571,7 @@ serve(async (req) => {
     // Build recipients array - avoid duplicates if client email is same as TNF
     const recipients = [];
     
-    // Always add TNF as first signer
+    // Always add TNF as first signer with signature and date fields
     recipients.push({
       id: 'tnf',
       name: 'The New Face',
@@ -578,7 +579,7 @@ serve(async (req) => {
       signing_order: 1,
     });
 
-    // Only add client as second signer if different email
+    // Only add client as second signer if different email (with date field required)
     const clientEmail = agreement.client_email?.toLowerCase().trim();
     if (clientEmail && clientEmail !== TNF_EMAIL.toLowerCase()) {
       recipients.push({
@@ -589,21 +590,24 @@ serve(async (req) => {
       });
     }
 
-    // Create document in SignWell
+    // Create document in SignWell with signature page that includes date fields
     const signwellPayload = {
       test_mode: testMode,
       files: [
         {
-          name: `rights-agreement-${agreement.client_name.replace(/\s+/g, '-').toLowerCase()}.pdf`,
+          name: `the-new-face-usage-rights-agreement-${agreement.client_name.replace(/\s+/g, '-').toLowerCase()}.pdf`,
           file_base64: base64Content,
         }
       ],
-      name: `Video Content Usage Rights Agreement - ${agreement.client_name}`,
-      subject: 'Video Content Usage Rights Agreement Ready for Signature',
-      message: `Please review and sign the attached Video Content Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
+      name: `The New Face Usage Rights Agreement - ${agreement.client_name}`,
+      subject: 'The New Face Usage Rights Agreement Ready for Signature',
+      message: `Please review and sign the attached Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
       recipients,
       draft: false,
       with_signature_page: true,
+      signature_page_options: {
+        include_date: true,
+      },
       reminders: true,
     };
 
