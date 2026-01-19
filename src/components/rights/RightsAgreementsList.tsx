@@ -32,8 +32,10 @@ import {
   Loader2,
   Plus,
   FileText,
+  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 interface RightsAgreement {
   id: string;
@@ -70,6 +72,7 @@ export function RightsAgreementsList({
   onEdit,
   readOnly = false,
 }: RightsAgreementsListProps) {
+  const { user } = useAuth();
   const [agreements, setAgreements] = useState<RightsAgreement[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -77,6 +80,7 @@ export function RightsAgreementsList({
   const [deleting, setDeleting] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
   const [sendingForSignature, setSendingForSignature] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAgreements();
@@ -194,6 +198,74 @@ export function RightsAgreementsList({
       toast.error('Failed to send for signature');
     } finally {
       setSendingForSignature(null);
+    }
+  };
+
+  const handleDuplicate = async (agreementId: string) => {
+    if (!user) return;
+    
+    setDuplicating(agreementId);
+    try {
+      // Fetch the original agreement
+      const { data: original, error: fetchError } = await supabase
+        .from('rights_agreements')
+        .select('*')
+        .eq('id', agreementId)
+        .single();
+
+      if (fetchError || !original) {
+        throw new Error('Failed to fetch original agreement');
+      }
+
+      // Create a new agreement with copied data
+      const { data: newAgreement, error: insertError } = await supabase
+        .from('rights_agreements')
+        .insert({
+          project_id: projectId,
+          client_name: original.client_name,
+          client_email: original.client_email,
+          client_contact_name: original.client_contact_name,
+          agreement_date: new Date().toISOString().split('T')[0], // Today's date
+          valid_from: original.valid_from,
+          valid_until: original.valid_until,
+          status: 'draft',
+          created_by: user.id,
+        })
+        .select()
+        .single();
+
+      if (insertError || !newAgreement) {
+        throw new Error('Failed to create duplicate agreement');
+      }
+
+      // Copy usage selections
+      const { data: selections, error: selectionsError } = await supabase
+        .from('rights_usage_selections')
+        .select('*')
+        .eq('agreement_id', agreementId);
+
+      if (!selectionsError && selections && selections.length > 0) {
+        const newSelections = selections.map((sel) => ({
+          agreement_id: newAgreement.id,
+          category: sel.category,
+          is_paid: sel.is_paid,
+          geographies: sel.geographies,
+          period_start: sel.period_start,
+          period_end: sel.period_end,
+        }));
+
+        await supabase.from('rights_usage_selections').insert(newSelections);
+      }
+
+      toast.success('Agreement duplicated as draft');
+      
+      // Refresh the list
+      fetchAgreements();
+    } catch (error) {
+      console.error('Error duplicating agreement:', error);
+      toast.error('Failed to duplicate agreement');
+    } finally {
+      setDuplicating(null);
     }
   };
 
@@ -317,6 +389,17 @@ export function RightsAgreementsList({
                           <DropdownMenuItem onClick={() => onEdit(agreement.id)}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDuplicate(agreement.id)}
+                            disabled={duplicating === agreement.id}
+                          >
+                            {duplicating === agreement.id ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Copy className="h-4 w-4 mr-2" />
+                            )}
+                            Duplicate
                           </DropdownMenuItem>
                           {agreement.status === 'draft' && (
                             <DropdownMenuItem
