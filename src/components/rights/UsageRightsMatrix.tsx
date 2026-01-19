@@ -4,6 +4,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { CalendarIcon, X, ChevronDown } from 'lucide-react';
@@ -54,6 +56,8 @@ const PERIOD_PRESETS = [
 
 export function UsageRightsMatrix({ selections, onChange, readOnly = false }: UsageRightsMatrixProps) {
   const [openGeoDropdown, setOpenGeoDropdown] = useState<UsageCategory | null>(null);
+  const [customPeriodValue, setCustomPeriodValue] = useState<Record<UsageCategory, string>>({} as Record<UsageCategory, string>);
+  const [customPeriodUnit, setCustomPeriodUnit] = useState<Record<UsageCategory, 'months' | 'years'>>({} as Record<UsageCategory, 'months' | 'years'>);
 
   const updateSelection = (category: UsageCategory, updates: Partial<UsageSelection>) => {
     onChange(
@@ -82,14 +86,33 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
   };
 
   const applyPreset = (category: UsageCategory, months: number | null) => {
-    const now = new Date();
+    const selection = selections.find((s) => s.category === category);
+    const startDate = selection?.periodStart || new Date();
     if (months === null) {
-      updateSelection(category, { periodStart: now, periodEnd: null });
+      updateSelection(category, { periodStart: startDate, periodEnd: null });
     } else {
-      const endDate = new Date(now);
+      const endDate = new Date(startDate);
       endDate.setMonth(endDate.getMonth() + months);
-      updateSelection(category, { periodStart: now, periodEnd: endDate });
+      updateSelection(category, { periodStart: startDate, periodEnd: endDate });
     }
+  };
+
+  const applyCustomPeriod = (category: UsageCategory) => {
+    const value = parseInt(customPeriodValue[category] || '1', 10);
+    const unit = customPeriodUnit[category] || 'months';
+    if (isNaN(value) || value <= 0) return;
+    
+    const selection = selections.find((s) => s.category === category);
+    const startDate = selection?.periodStart || new Date();
+    const endDate = new Date(startDate);
+    
+    if (unit === 'years') {
+      endDate.setFullYear(endDate.getFullYear() + value);
+    } else {
+      endDate.setMonth(endDate.getMonth() + value);
+    }
+    
+    updateSelection(category, { periodStart: startDate, periodEnd: endDate });
   };
 
   return (
@@ -222,7 +245,8 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
               {/* Period */}
               <div className="col-span-3">
                 {isIncluded ? (
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
+                    {/* Preset buttons */}
                     <div className="flex gap-1 flex-wrap">
                       {PERIOD_PRESETS.map((preset) => (
                         <Button
@@ -238,6 +262,45 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                         </Button>
                       ))}
                     </div>
+                    
+                    {/* Custom period input */}
+                    <div className="flex items-center gap-1">
+                      <Input
+                        type="number"
+                        min="1"
+                        max="99"
+                        placeholder="X"
+                        className="h-6 w-10 px-1 text-xs text-center"
+                        value={customPeriodValue[cat.value] || ''}
+                        onChange={(e) => setCustomPeriodValue(prev => ({ ...prev, [cat.value]: e.target.value }))}
+                        disabled={readOnly}
+                      />
+                      <Select
+                        value={customPeriodUnit[cat.value] || 'months'}
+                        onValueChange={(val: 'months' | 'years') => setCustomPeriodUnit(prev => ({ ...prev, [cat.value]: val }))}
+                        disabled={readOnly}
+                      >
+                        <SelectTrigger className="h-6 w-[72px] text-xs px-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-background">
+                          <SelectItem value="months">months</SelectItem>
+                          <SelectItem value="years">years</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => applyCustomPeriod(cat.value)}
+                        disabled={readOnly || !customPeriodValue[cat.value]}
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                    
+                    {/* Date display */}
                     <div className="flex items-center gap-1 text-xs">
                       <Popover>
                         <PopoverTrigger asChild>
@@ -261,6 +324,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                             onSelect={(date) =>
                               updateSelection(cat.value, { periodStart: date || null })
                             }
+                            className="p-3 pointer-events-auto"
                           />
                         </PopoverContent>
                       </Popover>
@@ -290,6 +354,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                               onSelect={(date) =>
                                 updateSelection(cat.value, { periodEnd: date || null })
                               }
+                              className="p-3 pointer-events-auto"
                             />
                           </PopoverContent>
                         </Popover>
