@@ -406,11 +406,11 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setTextColor(0, 0, 0);
   doc.text('Victor - The New Face', margin + 25, y + 18);
 
-  // Signature field (text tag - white text to hide tag)
+  // Signature field (text tag - white text to hide tag) - width: 80, height: 20 to match text fields
   doc.setTextColor(102, 102, 102);
   doc.text('Signature:', margin + 5, y + 38);
   doc.setTextColor(255, 255, 255); // White text for hidden tag
-  doc.text('{{signature:1:y}}', margin + 28, y + 38);
+  doc.text('{{signature:1:y:::80:20}}', margin + 28, y + 38);
 
   // Date field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
@@ -455,11 +455,11 @@ function generateAgreementPdf(data: Record<string, string>): Uint8Array {
   doc.setTextColor(255, 255, 255);
   doc.text('{{text:2:y:Address:::55:20}}', licSigX + 28, y + 48);
 
-  // Signature field (text tag)
+  // Signature field (text tag) - width: 80, height: 20 to match text fields
   doc.setTextColor(102, 102, 102);
   doc.text('Signature:', licSigX + 5, y + 62);
   doc.setTextColor(255, 255, 255);
-  doc.text('{{signature:2:y}}', licSigX + 28, y + 62);
+  doc.text('{{signature:2:y:::80:20}}', licSigX + 28, y + 62);
 
   // Date field (text tag) - font size: 20
   doc.setTextColor(102, 102, 102);
