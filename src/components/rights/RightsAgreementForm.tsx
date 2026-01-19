@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { CalendarIcon, ArrowLeft, Save, Send, Loader2 } from 'lucide-react';
+import { CalendarIcon, ArrowLeft, Save, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UsageRightsMatrix, UsageSelection, createEmptySelections } from './UsageRightsMatrix';
 import type { Project } from '@/types/database';
@@ -123,7 +123,7 @@ export function RightsAgreementForm({
     }
   };
 
-  const onSubmit = async (values: FormValues, generatePdf = false) => {
+  const onSubmit = async (values: FormValues) => {
     if (!user) return;
 
     const includedSelections = usageSelections.filter((s) => s.included);
@@ -207,8 +207,8 @@ export function RightsAgreementForm({
 
       if (selectionsError) throw selectionsError;
 
-      // Generate PDF if requested
-      if (generatePdf && savedAgreementId) {
+      // Always generate PDF
+      if (savedAgreementId) {
         toast.info('Generating agreement document...');
         
         const { data: pdfResult, error: pdfError } = await supabase.functions.invoke(
@@ -220,16 +220,10 @@ export function RightsAgreementForm({
           console.error('PDF generation error:', pdfError);
           toast.error('Failed to generate document');
         } else if (pdfResult?.documentUrl) {
-          toast.success('Agreement document generated!');
+          toast.success('Agreement saved and document generated!');
           // Open the document in a new tab
           window.open(pdfResult.documentUrl, '_blank');
         }
-      } else {
-        toast.success(
-          agreementId
-            ? 'Agreement updated successfully'
-            : 'Agreement saved as draft'
-        );
       }
 
       onSaved();
@@ -266,7 +260,7 @@ export function RightsAgreementForm({
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit((v) => onSubmit(v, false))} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Client Information */}
           <Card>
             <CardHeader>
@@ -471,19 +465,10 @@ export function RightsAgreementForm({
             </Button>
             <Button
               type="submit"
-              variant="secondary"
               disabled={saving}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Save as Draft
-            </Button>
-            <Button
-              type="button"
-              disabled={saving}
-              onClick={form.handleSubmit((v) => onSubmit(v, true))}
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-              Save & Generate PDF
+              Save
             </Button>
           </div>
         </form>
