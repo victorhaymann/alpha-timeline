@@ -471,18 +471,16 @@ export function RightsAgreementsList({
                               View Sent Document
                             </DropdownMenuItem>
                           )}
-                          {agreement.status === 'draft' && (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => {
-                                setAgreementToDelete(agreement.id);
-                                setDeleteDialogOpen(true);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => {
+                              setAgreementToDelete(agreement.id);
+                              setDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     )}
