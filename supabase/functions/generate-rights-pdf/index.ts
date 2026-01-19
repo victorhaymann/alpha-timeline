@@ -39,6 +39,554 @@ function formatPeriod(start: string, end: string | null): string {
   return `${startDate} - ${formatDate(end)}`;
 }
 
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// TNF Logo as SVG (embedded for reliability)
+const TNF_LOGO_SVG = `<svg width="180" height="40" viewBox="0 0 180 40" xmlns="http://www.w3.org/2000/svg">
+  <text x="0" y="28" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#000">THE NEW FACE</text>
+</svg>`;
+
+function generateAgreementHtml(data: Record<string, string>): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Content Usage Rights Agreement</title>
+  <style>
+    @page { 
+      size: A4; 
+      margin: 20mm 20mm 25mm 20mm;
+      @bottom-center {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9pt;
+        color: #666;
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10pt;
+      line-height: 1.6;
+      color: #1a1a1a;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 0;
+      background: #fff;
+    }
+    
+    .document-container {
+      padding: 40px 50px;
+    }
+    
+    /* Header with logo */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #1a1a1a;
+    }
+    
+    .header-left {
+      flex: 1;
+    }
+    
+    .header-right {
+      text-align: right;
+    }
+    
+    .logo {
+      max-width: 180px;
+      height: auto;
+    }
+    
+    .document-title {
+      font-size: 20pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 0 0 5px 0;
+      color: #1a1a1a;
+    }
+    
+    .document-subtitle {
+      font-size: 10pt;
+      color: #666;
+      margin: 0;
+    }
+    
+    /* Section styling */
+    .section {
+      margin-bottom: 24px;
+    }
+    
+    .section-title {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #1a1a1a;
+      margin: 0 0 12px 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .subsection-title {
+      font-size: 10pt;
+      font-weight: bold;
+      color: #333;
+      margin: 16px 0 8px 0;
+    }
+    
+    /* Party blocks */
+    .parties-container {
+      display: flex;
+      gap: 40px;
+      margin: 16px 0;
+    }
+    
+    .party-block {
+      flex: 1;
+      background: #f9f9f9;
+      padding: 16px 20px;
+      border-radius: 4px;
+      border-left: 3px solid #1a1a1a;
+    }
+    
+    .party-block h4 {
+      font-size: 10pt;
+      font-weight: bold;
+      margin: 0 0 10px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .party-block p {
+      margin: 4px 0;
+      font-size: 10pt;
+    }
+    
+    .party-block .label {
+      color: #666;
+      font-size: 9pt;
+    }
+    
+    /* Content details */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 8px 16px;
+      margin: 12px 0;
+    }
+    
+    .detail-label {
+      font-weight: bold;
+      color: #333;
+      font-size: 9pt;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    
+    .detail-value {
+      color: #1a1a1a;
+    }
+    
+    /* Usage rights table */
+    .usage-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 9pt;
+    }
+    
+    .usage-table th {
+      background-color: #1a1a1a;
+      color: #fff;
+      font-weight: bold;
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 9pt;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    
+    .usage-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      vertical-align: top;
+    }
+    
+    .usage-table tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    .usage-table tr:hover {
+      background-color: #f0f0f0;
+    }
+    
+    .granted-yes {
+      color: #0a7c42;
+      font-weight: bold;
+    }
+    
+    .granted-no {
+      color: #999;
+    }
+    
+    /* Terms section */
+    .terms-section {
+      margin-top: 24px;
+    }
+    
+    .terms-section p {
+      margin: 8px 0;
+      text-align: justify;
+    }
+    
+    .terms-section ol, .terms-section ul {
+      margin: 8px 0 8px 20px;
+      padding-left: 0;
+    }
+    
+    .terms-section li {
+      margin: 6px 0;
+      text-align: justify;
+    }
+    
+    /* Signature section */
+    .signature-section {
+      margin-top: 40px;
+      page-break-inside: avoid;
+    }
+    
+    .signature-intro {
+      margin-bottom: 30px;
+      font-style: italic;
+    }
+    
+    .signature-grid {
+      display: flex;
+      gap: 40px;
+    }
+    
+    .signature-block {
+      flex: 1;
+      border: 1px solid #ddd;
+      padding: 20px;
+      border-radius: 4px;
+    }
+    
+    .signature-block h4 {
+      font-size: 10pt;
+      font-weight: bold;
+      margin: 0 0 20px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .signature-field {
+      margin: 12px 0;
+    }
+    
+    .signature-field .label {
+      font-size: 9pt;
+      color: #666;
+      margin-bottom: 4px;
+    }
+    
+    .signature-line {
+      border-bottom: 1px solid #1a1a1a;
+      height: 30px;
+      margin-top: 4px;
+    }
+    
+    .signature-field .value {
+      font-size: 10pt;
+      padding-top: 4px;
+    }
+    
+    /* Footer */
+    .document-footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #ddd;
+      text-align: center;
+    }
+    
+    .confidential-notice {
+      font-size: 9pt;
+      font-weight: bold;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .footer-meta {
+      font-size: 8pt;
+      color: #999;
+      margin-top: 8px;
+    }
+    
+    /* Print styles */
+    @media print {
+      body { 
+        padding: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .document-container {
+        padding: 0;
+      }
+      .section {
+        page-break-inside: avoid;
+      }
+      .signature-section {
+        page-break-before: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="document-container">
+    <header class="header">
+      <div class="header-left">
+        <h1 class="document-title">Video Content Usage Rights Agreement</h1>
+        <p class="document-subtitle">Non-Exclusive License Agreement</p>
+      </div>
+      <div class="header-right">
+        ${TNF_LOGO_SVG}
+      </div>
+    </header>
+
+    <section class="section">
+      <h2 class="section-title">1. Parties</h2>
+      <p>This Video Content Usage Rights Agreement (the "Agreement") is entered into by and between:</p>
+      
+      <div class="parties-container">
+        <div class="party-block">
+          <h4>Licensor</h4>
+          <p><strong>The New Face</strong></p>
+          <p><span class="label">Address:</span><br>23 Rue des Petits Hotels<br>75010, Paris, France</p>
+        </div>
+        
+        <div class="party-block">
+          <h4>Licensee (Client)</h4>
+          <p><strong>${escapeHtml(data.CLIENT_NAME)}</strong></p>
+          <p><span class="label">Contact:</span> ${escapeHtml(data.CLIENT_CONTACT_NAME) || 'N/A'}</p>
+          <p><span class="label">Email:</span> ${escapeHtml(data.CLIENT_EMAIL)}</p>
+        </div>
+      </div>
+      
+      <p>The Licensor and Licensee may each be referred to as a "Party" and collectively as the "Parties."</p>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">2. Content Description</h2>
+      <div class="detail-grid">
+        <span class="detail-label">Project Name</span>
+        <span class="detail-value">${escapeHtml(data.PROJECT_NAME)}</span>
+        
+        <span class="detail-label">Description</span>
+        <span class="detail-value">${escapeHtml(data.CONTENT_DESCRIPTION)}</span>
+        
+        <span class="detail-label">Deliverables</span>
+        <span class="detail-value">As per project documentation</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">3. Agreement Dates</h2>
+      <div class="detail-grid">
+        <span class="detail-label">Agreement Date</span>
+        <span class="detail-value">${escapeHtml(data.AGREEMENT_DATE)}</span>
+        
+        <span class="detail-label">Rights Valid From</span>
+        <span class="detail-value">${escapeHtml(data.VALID_FROM)}</span>
+        
+        <span class="detail-label">Rights Valid Until</span>
+        <span class="detail-value">${escapeHtml(data.VALID_UNTIL)}</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">4. Usage Rights</h2>
+      <p>Usage rights are granted strictly as indicated below. Any usage category not explicitly granted is not permitted.</p>
+      
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th style="width: 30%">Usage Category</th>
+            <th style="width: 12%">Granted</th>
+            <th style="width: 12%">Type</th>
+            <th style="width: 22%">Territories</th>
+            <th style="width: 24%">Period</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Digital (Web, Social Media, Email)</td>
+            <td class="${data.DIGITAL_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.DIGITAL_GRANTED)}</td>
+            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_TYPE) : '-'}</td>
+            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_TERRITORIES) : '-'}</td>
+            <td>${data.DIGITAL_GRANTED === 'Yes' ? escapeHtml(data.DIGITAL_PERIOD) : '-'}</td>
+          </tr>
+          <tr>
+            <td>Paid Media (Advertising, Sponsored)</td>
+            <td class="${data.PAID_MEDIA_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.PAID_MEDIA_GRANTED)}</td>
+            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_TYPE) : '-'}</td>
+            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_TERRITORIES) : '-'}</td>
+            <td>${data.PAID_MEDIA_GRANTED === 'Yes' ? escapeHtml(data.PAID_MEDIA_PERIOD) : '-'}</td>
+          </tr>
+          <tr>
+            <td>POS / Retail (In-store, Displays)</td>
+            <td class="${data.POS_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.POS_GRANTED)}</td>
+            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_TYPE) : '-'}</td>
+            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_TERRITORIES) : '-'}</td>
+            <td>${data.POS_GRANTED === 'Yes' ? escapeHtml(data.POS_PERIOD) : '-'}</td>
+          </tr>
+          <tr>
+            <td>Print (Magazines, Brochures)</td>
+            <td class="${data.PRINT_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.PRINT_GRANTED)}</td>
+            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_TYPE) : '-'}</td>
+            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_TERRITORIES) : '-'}</td>
+            <td>${data.PRINT_GRANTED === 'Yes' ? escapeHtml(data.PRINT_PERIOD) : '-'}</td>
+          </tr>
+          <tr>
+            <td>OOH (Billboards, Street Furniture)</td>
+            <td class="${data.OOH_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.OOH_GRANTED)}</td>
+            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_TYPE) : '-'}</td>
+            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_TERRITORIES) : '-'}</td>
+            <td>${data.OOH_GRANTED === 'Yes' ? escapeHtml(data.OOH_PERIOD) : '-'}</td>
+          </tr>
+          <tr>
+            <td>TV (Broadcast, Streaming)</td>
+            <td class="${data.TV_GRANTED === 'Yes' ? 'granted-yes' : 'granted-no'}">${escapeHtml(data.TV_GRANTED)}</td>
+            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_TYPE) : '-'}</td>
+            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_TERRITORIES) : '-'}</td>
+            <td>${data.TV_GRANTED === 'Yes' ? escapeHtml(data.TV_PERIOD) : '-'}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section terms-section">
+      <h2 class="section-title">5. Terms and Conditions</h2>
+
+      <h3 class="subsection-title">5.1 Grant of Rights (Non-Exclusive License)</h3>
+      <p>Subject to the terms of this Agreement and the Usage Rights table in Section 4, the Licensor grants the Licensee a non-exclusive, non-transferable license to use the video content and associated deliverables described in Section 2 (the "Content") solely for the permitted usage categories, territories, and periods indicated in Section 4.</p>
+      <p>No rights are granted by implication. All rights not expressly granted to the Licensee are reserved by the Licensor.</p>
+
+      <h3 class="subsection-title">5.2 Restrictions</h3>
+      <p>Unless expressly agreed in writing by the Licensor, the Licensee shall not:</p>
+      <ol>
+        <li>Sublicense, assign, or otherwise transfer the rights granted under this Agreement to any third party.</li>
+        <li>Use the Content in any unlawful, misleading, defamatory, or infringing manner.</li>
+        <li>Use the Content outside the granted category, territory, or period specified in Section 4.</li>
+      </ol>
+
+      <h3 class="subsection-title">5.3 Credit / Attribution</h3>
+      <p>Where reasonably practicable (e.g., online captions, video descriptions, campaign credits, press releases, or case studies), the Licensee shall include credit substantially as follows: "Content produced by The New Face."</p>
+
+      <h3 class="subsection-title">5.4 Modifications and Formatting</h3>
+      <p>The Licensee may perform technical formatting required for distribution, including cropping, resizing, compression, aspect ratio adjustments, captioning, and minor length edits (e.g., cut-downs), provided that such changes do not substantively alter the Content, misrepresent the Licensor's work, or create a misleading context.</p>
+      <p>The Licensee shall not materially modify the Content (including altering key visuals, compositing new scenes, changing narrative meaning, removing or replacing branding elements, or using AI-based transformations) without the Licensor's prior written consent.</p>
+
+      <h3 class="subsection-title">5.5 Term and Expiry</h3>
+      <p>This Agreement is effective from ${escapeHtml(data.VALID_FROM)} and remains in effect until ${escapeHtml(data.VALID_UNTIL)}, unless terminated earlier in accordance with Section 5.6.</p>
+      <p>Upon expiry (or earlier termination), the Licensee must cease new use of the Content in any category whose Period has ended and must remove/withdraw placements where reasonably possible, except for:</p>
+      <ul>
+        <li>archival copies retained for legal/compliance purposes; and</li>
+        <li>non-cancellable media buys already placed in good faith prior to expiry (limited to the shortest practicable run), unless the Licensee is in breach of this Agreement.</li>
+      </ul>
+
+      <h3 class="subsection-title">5.6 Termination</h3>
+      <p>Either Party may terminate this Agreement:</p>
+      <ol>
+        <li>For material breach by the other Party, if such breach is not cured within ten (10) business days of written notice; or</li>
+        <li>Immediately if the other Party becomes insolvent, enters liquidation, or is unable to pay its debts as they fall due.</li>
+      </ol>
+      <p>Upon termination, all licenses granted under this Agreement cease, and the Licensee must promptly discontinue use of the Content, subject to reasonable takedown periods and any exceptions expressly stated in Section 5.5.</p>
+
+      <h3 class="subsection-title">5.7 Governing Law</h3>
+      <p>This Agreement shall be governed by and construed in accordance with the laws of ${escapeHtml(data.GOVERNING_LAW)}, without regard to conflict-of-law principles.</p>
+
+      <h3 class="subsection-title">5.8 Entire Agreement</h3>
+      <p>This Agreement (including the Usage Rights table) constitutes the entire agreement between the Parties regarding the licensing of the Content and supersedes all prior discussions or understandings relating to the same subject matter.</p>
+
+      <h3 class="subsection-title">5.9 Counterparts and Electronic Signature</h3>
+      <p>This Agreement may be executed in counterparts and signed electronically. Electronic signatures (including via DocuSign or equivalent) shall be deemed original and binding.</p>
+    </section>
+
+    <section class="section signature-section">
+      <h2 class="section-title">6. Signatures</h2>
+      <p class="signature-intro">IN WITNESS WHEREOF, the Parties have executed this Agreement as of the Agreement Date.</p>
+
+      <div class="signature-grid">
+        <div class="signature-block">
+          <h4>Licensor (The New Face)</h4>
+          <div class="signature-field">
+            <div class="label">Signature</div>
+            <div class="signature-line"></div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Printed Name</div>
+            <div class="value">Victor Haymann</div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Title</div>
+            <div class="value">COO</div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Date</div>
+            <div class="signature-line"></div>
+          </div>
+        </div>
+
+        <div class="signature-block">
+          <h4>Licensee (Client)</h4>
+          <div class="signature-field">
+            <div class="label">Signature</div>
+            <div class="signature-line"></div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Printed Name</div>
+            <div class="value">${escapeHtml(data.CLIENT_SIGNER_NAME) || '________________________'}</div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Title</div>
+            <div class="signature-line"></div>
+          </div>
+          <div class="signature-field">
+            <div class="label">Date</div>
+            <div class="signature-line"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="document-footer">
+      <p class="confidential-notice">Confidential - Video Content Usage Rights Agreement</p>
+      <p class="footer-meta">Generated on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+    </footer>
+  </div>
+</body>
+</html>`;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -99,14 +647,13 @@ serve(async (req) => {
       CLIENT_NAME: agreement.client_name,
       CLIENT_CONTACT_NAME: agreement.client_contact_name || '',
       CLIENT_EMAIL: agreement.client_email,
-      CLIENT_ADDRESS: '', // Not stored, leave blank
+      CLIENT_ADDRESS: '',
       PROJECT_NAME: project?.name || '',
       CONTENT_DESCRIPTION: project?.description || 'Video content as per project scope',
       AGREEMENT_DATE: formatDate(agreement.agreement_date),
       VALID_FROM: formatDate(agreement.valid_from),
       VALID_UNTIL: agreement.valid_until ? formatDate(agreement.valid_until) : 'Perpetual',
       GOVERNING_LAW: 'France',
-      // Signatures - left blank for DocuSign
       TNF_SIGNATURE: '',
       CLIENT_SIGNATURE: '',
       CLIENT_SIGNER_NAME: agreement.client_contact_name || '',
@@ -119,9 +666,9 @@ serve(async (req) => {
     const categories = ['DIGITAL', 'PAID_MEDIA', 'POS', 'PRINT', 'OOH', 'TV'];
     for (const cat of categories) {
       templateData[`${cat}_GRANTED`] = 'No';
-      templateData[`${cat}_TYPE`] = '—';
-      templateData[`${cat}_TERRITORIES`] = '—';
-      templateData[`${cat}_PERIOD`] = '—';
+      templateData[`${cat}_TYPE`] = '-';
+      templateData[`${cat}_TERRITORIES`] = '-';
+      templateData[`${cat}_PERIOD`] = '-';
     }
 
     // Fill in granted categories
@@ -142,13 +689,12 @@ serve(async (req) => {
     // Generate HTML document with styling
     const htmlContent = generateAgreementHtml(templateData);
 
-    // Store the generated HTML (we'll convert to PDF in Phase 3 with a proper PDF service)
-    // For now, we generate an HTML file that can be viewed/printed as PDF
+    // Store the generated HTML
     const fileName = `${agreementId}/agreement.html`;
     const { error: uploadError } = await supabase.storage
       .from('rights-agreements')
       .upload(fileName, htmlContent, {
-        contentType: 'text/html',
+        contentType: 'text/html; charset=utf-8',
         upsert: true,
       });
 
@@ -163,7 +709,7 @@ serve(async (req) => {
     // Get signed URL for the document
     const { data: signedUrl } = await supabase.storage
       .from('rights-agreements')
-      .createSignedUrl(fileName, 3600); // 1 hour expiry
+      .createSignedUrl(fileName, 3600);
 
     // Update agreement with document path
     await supabase
@@ -178,7 +724,7 @@ serve(async (req) => {
         success: true, 
         documentPath: fileName,
         documentUrl: signedUrl?.signedUrl,
-        templateData, // Include for debugging/preview
+        templateData,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -192,271 +738,3 @@ serve(async (req) => {
     );
   }
 });
-
-function generateAgreementHtml(data: Record<string, string>): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Content Usage Rights Agreement</title>
-  <style>
-    @page { size: A4; margin: 2cm; }
-    body {
-      font-family: 'Times New Roman', serif;
-      font-size: 11pt;
-      line-height: 1.5;
-      color: #000;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 40px;
-    }
-    h1 {
-      text-align: center;
-      font-size: 16pt;
-      margin-bottom: 30px;
-      text-transform: uppercase;
-    }
-    h2 {
-      font-size: 12pt;
-      margin-top: 24px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid #000;
-      padding-bottom: 4px;
-    }
-    h3 {
-      font-size: 11pt;
-      margin-top: 16px;
-      margin-bottom: 8px;
-    }
-    .party-block {
-      margin: 16px 0;
-      padding-left: 20px;
-    }
-    .party-block p {
-      margin: 4px 0;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0;
-      font-size: 10pt;
-    }
-    th, td {
-      border: 1px solid #000;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background-color: #f0f0f0;
-      font-weight: bold;
-    }
-    .signature-table {
-      margin-top: 40px;
-    }
-    .signature-table td {
-      width: 50%;
-      vertical-align: top;
-      padding: 12px;
-    }
-    .signature-line {
-      border-bottom: 1px solid #000;
-      height: 40px;
-      margin: 8px 0;
-    }
-    .footer {
-      text-align: center;
-      font-size: 9pt;
-      color: #666;
-      margin-top: 40px;
-      padding-top: 16px;
-      border-top: 1px solid #ccc;
-    }
-    ol {
-      padding-left: 20px;
-    }
-    li {
-      margin: 8px 0;
-    }
-    @media print {
-      body { padding: 0; }
-    }
-  </style>
-</head>
-<body>
-  <h1>Video Content Usage Rights Agreement</h1>
-
-  <h2>1. Parties</h2>
-  <p>This Video Content Usage Rights Agreement (the "Agreement") is entered into by and between:</p>
-  
-  <div class="party-block">
-    <p><strong>Licensor:</strong> The New Face</p>
-    <p><strong>Address:</strong> 23 Rue des Petits Hotels, 75010, Paris, France</p>
-  </div>
-  
-  <p>and</p>
-  
-  <div class="party-block">
-    <p><strong>Licensee (Client):</strong> ${escapeHtml(data.CLIENT_NAME)}</p>
-    <p><strong>Contact Person:</strong> ${escapeHtml(data.CLIENT_CONTACT_NAME)}</p>
-    <p><strong>Email:</strong> ${escapeHtml(data.CLIENT_EMAIL)}</p>
-    <p><strong>Address:</strong> ${escapeHtml(data.CLIENT_ADDRESS) || '___________________________'}</p>
-  </div>
-  
-  <p>The Licensor and Licensee may each be referred to as a "Party" and collectively as the "Parties."</p>
-
-  <h2>2. Content Description</h2>
-  <p><strong>Project Name:</strong> ${escapeHtml(data.PROJECT_NAME)}</p>
-  <p><strong>Content Description:</strong> ${escapeHtml(data.CONTENT_DESCRIPTION)}</p>
-  <p><strong>Deliverables Reference:</strong> (as per project documentation)</p>
-
-  <h2>3. Agreement Dates</h2>
-  <p><strong>Agreement Date:</strong> ${escapeHtml(data.AGREEMENT_DATE)}</p>
-  <p><strong>Rights Valid From:</strong> ${escapeHtml(data.VALID_FROM)}</p>
-  <p><strong>Rights Valid Until:</strong> ${escapeHtml(data.VALID_UNTIL)}</p>
-
-  <h2>4. Usage Rights</h2>
-  <p>Usage rights are granted strictly as indicated below. Any usage category not explicitly granted is not permitted.</p>
-  
-  <table>
-    <thead>
-      <tr>
-        <th>Usage Category</th>
-        <th>Granted</th>
-        <th>Type</th>
-        <th>Territories</th>
-        <th>Period</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Digital (Web, Social Media, Email)</td>
-        <td>${escapeHtml(data.DIGITAL_GRANTED)}</td>
-        <td>${escapeHtml(data.DIGITAL_TYPE)}</td>
-        <td>${escapeHtml(data.DIGITAL_TERRITORIES)}</td>
-        <td>${escapeHtml(data.DIGITAL_PERIOD)}</td>
-      </tr>
-      <tr>
-        <td>Paid Media (Advertising, Sponsored)</td>
-        <td>${escapeHtml(data.PAID_MEDIA_GRANTED)}</td>
-        <td>${escapeHtml(data.PAID_MEDIA_TYPE)}</td>
-        <td>${escapeHtml(data.PAID_MEDIA_TERRITORIES)}</td>
-        <td>${escapeHtml(data.PAID_MEDIA_PERIOD)}</td>
-      </tr>
-      <tr>
-        <td>POS / Retail (In-store, Displays)</td>
-        <td>${escapeHtml(data.POS_GRANTED)}</td>
-        <td>${escapeHtml(data.POS_TYPE)}</td>
-        <td>${escapeHtml(data.POS_TERRITORIES)}</td>
-        <td>${escapeHtml(data.POS_PERIOD)}</td>
-      </tr>
-      <tr>
-        <td>Print (Magazines, Brochures)</td>
-        <td>${escapeHtml(data.PRINT_GRANTED)}</td>
-        <td>${escapeHtml(data.PRINT_TYPE)}</td>
-        <td>${escapeHtml(data.PRINT_TERRITORIES)}</td>
-        <td>${escapeHtml(data.PRINT_PERIOD)}</td>
-      </tr>
-      <tr>
-        <td>OOH (Billboards, Street Furniture)</td>
-        <td>${escapeHtml(data.OOH_GRANTED)}</td>
-        <td>${escapeHtml(data.OOH_TYPE)}</td>
-        <td>${escapeHtml(data.OOH_TERRITORIES)}</td>
-        <td>${escapeHtml(data.OOH_PERIOD)}</td>
-      </tr>
-      <tr>
-        <td>TV (Broadcast, Streaming)</td>
-        <td>${escapeHtml(data.TV_GRANTED)}</td>
-        <td>${escapeHtml(data.TV_TYPE)}</td>
-        <td>${escapeHtml(data.TV_TERRITORIES)}</td>
-        <td>${escapeHtml(data.TV_PERIOD)}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h2>5. Terms and Conditions</h2>
-
-  <h3>5.1 Grant of Rights (Non-Exclusive License)</h3>
-  <p>Subject to the terms of this Agreement and the Usage Rights table in Section 4, the Licensor grants the Licensee a non-exclusive, non-transferable license to use the video content and associated deliverables described in Section 2 (the "Content") solely for the permitted usage categories, territories, and periods indicated in Section 4.</p>
-  <p>No rights are granted by implication. All rights not expressly granted to the Licensee are reserved by the Licensor.</p>
-
-  <h3>5.2 Restrictions</h3>
-  <p>Unless expressly agreed in writing by the Licensor, the Licensee shall not:</p>
-  <ol>
-    <li>Sublicense, assign, or otherwise transfer the rights granted under this Agreement to any third party.</li>
-    <li>Use the Content in any unlawful, misleading, defamatory, or infringing manner.</li>
-    <li>Use the Content outside the granted category, territory, or period specified in Section 4.</li>
-  </ol>
-
-  <h3>5.3 Credit / Attribution</h3>
-  <p>Where reasonably practicable (e.g., online captions, video descriptions, campaign credits, press releases, or case studies), the Licensee shall include credit substantially as follows: "Content produced by The New Face."</p>
-
-  <h3>5.4 Modifications and Formatting</h3>
-  <p>The Licensee may perform technical formatting required for distribution, including cropping, resizing, compression, aspect ratio adjustments, captioning, and minor length edits (e.g., cut-downs), provided that such changes do not substantively alter the Content, misrepresent the Licensor's work, or create a misleading context.</p>
-  <p>The Licensee shall not materially modify the Content (including altering key visuals, compositing new scenes, changing narrative meaning, removing or replacing branding elements, or using AI-based transformations) without the Licensor's prior written consent.</p>
-
-  <h3>5.5 Term and Expiry</h3>
-  <p>This Agreement is effective from ${escapeHtml(data.VALID_FROM)} and remains in effect until ${escapeHtml(data.VALID_UNTIL)}, unless terminated earlier in accordance with Section 5.6.</p>
-  <p>Upon expiry (or earlier termination), the Licensee must cease new use of the Content in any category whose Period has ended and must remove/withdraw placements where reasonably possible, except for:</p>
-  <ul>
-    <li>archival copies retained for legal/compliance purposes; and</li>
-    <li>non-cancellable media buys already placed in good faith prior to expiry (limited to the shortest practicable run), unless the Licensee is in breach of this Agreement.</li>
-  </ul>
-
-  <h3>5.6 Termination</h3>
-  <p>Either Party may terminate this Agreement:</p>
-  <ol>
-    <li>For material breach by the other Party, if such breach is not cured within ten (10) business days of written notice; or</li>
-    <li>Immediately if the other Party becomes insolvent, enters liquidation, or is unable to pay its debts as they fall due.</li>
-  </ol>
-  <p>Upon termination, all licenses granted under this Agreement cease, and the Licensee must promptly discontinue use of the Content, subject to reasonable takedown periods and any exceptions expressly stated in Section 5.5.</p>
-
-  <h3>5.7 Governing Law</h3>
-  <p>This Agreement shall be governed by and construed in accordance with the laws of ${escapeHtml(data.GOVERNING_LAW)}, without regard to conflict-of-law principles.</p>
-
-  <h3>5.8 Entire Agreement</h3>
-  <p>This Agreement (including the Usage Rights table) constitutes the entire agreement between the Parties regarding the licensing of the Content and supersedes all prior discussions or understandings relating to the same subject matter.</p>
-
-  <h3>5.9 Counterparts and Electronic Signature</h3>
-  <p>This Agreement may be executed in counterparts and signed electronically. Electronic signatures (including via DocuSign or equivalent) shall be deemed original and binding.</p>
-
-  <h2>6. Signatures</h2>
-  <p>IN WITNESS WHEREOF, the Parties have executed this Agreement as of the Agreement Date.</p>
-
-  <table class="signature-table">
-    <tr>
-      <td>
-        <p><strong>LICENSOR (The New Face)</strong></p>
-        <p>Signature:</p>
-        <div class="signature-line"></div>
-        <p>Printed Name: Victor Haymann</p>
-        <p>Title: COO</p>
-        <p>Date: _______________</p>
-      </td>
-      <td>
-        <p><strong>LICENSEE (Client)</strong></p>
-        <p>Signature:</p>
-        <div class="signature-line"></div>
-        <p>Printed Name: ${escapeHtml(data.CLIENT_SIGNER_NAME) || '_______________'}</p>
-        <p>Title: ${escapeHtml(data.CLIENT_SIGNER_TITLE) || '_______________'}</p>
-        <p>Date: _______________</p>
-      </td>
-    </tr>
-  </table>
-
-  <div class="footer">
-    <p>CONFIDENTIAL — Video Content Usage Rights Agreement</p>
-  </div>
-</body>
-</html>`;
-}
-
-function escapeHtml(str: string): string {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
