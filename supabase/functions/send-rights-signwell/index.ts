@@ -697,20 +697,25 @@ serve(async (req) => {
       test_mode: testMode,
       files: [
         {
-          name: `rights-agreement-${agreement.client_name.replace(/\s+/g, '-').toLowerCase()}.html`,
+          name: `rights-agreement-${agreement.client_name.replace(/\s+/g, '-').toLowerCase()}.pdf`,
           file_base64: base64Content,
         }
       ],
       name: `Video Content Usage Rights Agreement - ${agreement.client_name}`,
       subject: 'Video Content Usage Rights Agreement Ready for Signature',
-      message: `Dear ${agreement.client_contact_name || agreement.client_name},\n\nPlease review and sign the attached Video Content Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
+      message: `Please review and sign the attached Video Content Usage Rights Agreement for the project "${project?.name || 'your project'}".\n\nIf you have any questions, please don't hesitate to reach out.\n\nBest regards,\nThe New Face`,
       recipients: [
+        {
+          id: 'tnf',
+          name: 'The New Face',
+          email: 'contact@thenewface.io',
+          signing_order: 1,
+        },
         {
           id: 'client',
           name: agreement.client_contact_name || agreement.client_name,
           email: agreement.client_email,
-          send_email: true,
-          signing_order: 1,
+          signing_order: 2,
         }
       ],
       draft: false,
@@ -758,7 +763,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         signwellDocumentId: signwellResult.id,
-        message: `Agreement sent to ${agreement.client_email} for signature`,
+        message: `Agreement sent to The New Face and ${agreement.client_email} for signature`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
