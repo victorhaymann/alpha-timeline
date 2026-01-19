@@ -509,12 +509,39 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { agreementId, testMode = false } = await req.json();
+    const { agreementId, testMode = false, resend = false, signwellDocumentId } = await req.json();
 
     if (!agreementId) {
       return new Response(
         JSON.stringify({ error: 'Agreement ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle resend request
+    if (resend && signwellDocumentId) {
+      console.log(`Resending signature request for document ${signwellDocumentId}`);
+      
+      const resendResponse = await fetch(`${SIGNWELL_API_URL}/documents/${signwellDocumentId}/remind`, {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': signwellApiKey,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!resendResponse.ok) {
+        const errorText = await resendResponse.text();
+        console.error('SignWell resend error:', errorText);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to resend signature request' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Signature request resent successfully' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

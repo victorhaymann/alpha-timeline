@@ -36,6 +36,7 @@ import {
   FileSearch,
   CheckCircle2,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -84,6 +85,7 @@ export function RightsAgreementsList({
   const [deleting, setDeleting] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
   const [sendingForSignature, setSendingForSignature] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [previewAgreementId, setPreviewAgreementId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -204,6 +206,36 @@ export function RightsAgreementsList({
       toast.error('Failed to send for signature');
     } finally {
       setSendingForSignature(null);
+    }
+  };
+
+  const handleResendForSignature = async (agreementId: string, signwellDocumentId: string) => {
+    setResending(agreementId);
+    try {
+      toast.info('Resending signature request...');
+      
+      // Use SignWell API to resend the document
+      const { data: result, error } = await supabase.functions.invoke(
+        'send-rights-signwell',
+        { body: { agreementId, resend: true, signwellDocumentId } }
+      );
+
+      if (error) {
+        console.error('Resend error:', error);
+        toast.error('Failed to resend signature request');
+        return;
+      }
+
+      if (result?.success) {
+        toast.success('Signature request resent successfully!');
+      } else {
+        toast.error(result?.error || 'Failed to resend signature request');
+      }
+    } catch (error) {
+      console.error('Error resending signature request:', error);
+      toast.error('Failed to resend signature request');
+    } finally {
+      setResending(null);
     }
   };
 
@@ -442,6 +474,19 @@ export function RightsAgreementsList({
                                 <Send className="h-4 w-4 mr-2" />
                               )}
                               Send for Signature
+                            </DropdownMenuItem>
+                          )}
+                          {(agreement.status === 'sent' || agreement.status === 'viewed') && agreement.signwell_document_id && (
+                            <DropdownMenuItem
+                              onClick={() => handleResendForSignature(agreement.id, agreement.signwell_document_id!)}
+                              disabled={resending === agreement.id}
+                            >
+                              {resending === agreement.id ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                              )}
+                              Resend for Signature
                             </DropdownMenuItem>
                           )}
                           {agreement.status === 'signed' && agreement.signed_document_path && (
