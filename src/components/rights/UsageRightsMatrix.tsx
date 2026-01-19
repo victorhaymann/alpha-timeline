@@ -47,12 +47,6 @@ const GEOGRAPHIES = [
   'Sub-Saharan Africa',
 ];
 
-const PERIOD_PRESETS = [
-  { label: '6 months', months: 6 },
-  { label: '1 year', months: 12 },
-  { label: '2 years', months: 24 },
-  { label: 'Perpetual', months: null },
-];
 
 export function UsageRightsMatrix({ selections, onChange, readOnly = false }: UsageRightsMatrixProps) {
   const [openGeoDropdown, setOpenGeoDropdown] = useState<UsageCategory | null>(null);
@@ -246,22 +240,6 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
               <div className="col-span-3">
                 {isIncluded ? (
                   <div className="space-y-1.5">
-                    {/* Preset buttons */}
-                    <div className="flex gap-1 flex-wrap">
-                      {PERIOD_PRESETS.map((preset) => (
-                        <Button
-                          key={preset.label}
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => applyPreset(cat.value, preset.months)}
-                          disabled={readOnly}
-                        >
-                          {preset.label}
-                        </Button>
-                      ))}
-                    </div>
                     
                     {/* Custom period input */}
                     <div className="flex items-center gap-1">
@@ -297,6 +275,16 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                         disabled={readOnly || !customPeriodValue[cat.value]}
                       >
                         Apply
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => applyPreset(cat.value, null)}
+                        disabled={readOnly}
+                      >
+                        Perpetual
                       </Button>
                     </div>
                     
