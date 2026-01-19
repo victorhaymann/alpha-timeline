@@ -45,7 +45,9 @@ import {
   Phone,
   Pencil,
   Folder,
+  FileSignature,
 } from 'lucide-react';
+import { RightsPanel } from '@/components/rights/RightsPanel';
 import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { LearningResourcesPanel } from '@/components/resources/LearningResourcesPanel';
@@ -597,6 +599,10 @@ export default function ProjectDetail() {
               <Folder className="w-3.5 h-3.5" />
               Client Documents
             </TabsTrigger>
+            <TabsTrigger value="rights" className="gap-1.5">
+              <FileSignature className="w-3.5 h-3.5" />
+              Rights
+            </TabsTrigger>
           </TabsList>
           
           {regenerateHandler && (
@@ -671,6 +677,14 @@ export default function ProjectDetail() {
             invoices={invoices}
             onQuotationsRefresh={fetchDocuments}
             showQuotationsInvoices={true}
+          />
+        </TabsContent>
+
+        <TabsContent value="rights">
+          <RightsPanel
+            projectId={id!}
+            project={project}
+            readOnly={false}
           />
         </TabsContent>
       </Tabs>
