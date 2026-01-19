@@ -180,6 +180,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                   >
                     <PopoverTrigger asChild>
                       <Button
+                        type="button"
                         variant="outline"
                         size="sm"
                         className="w-full justify-between text-xs h-8"
@@ -226,6 +227,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                       {PERIOD_PRESETS.map((preset) => (
                         <Button
                           key={preset.label}
+                          type="button"
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-xs"
@@ -240,6 +242,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             className="h-7 px-2 text-xs"
@@ -268,6 +271,7 @@ export function UsageRightsMatrix({ selections, onChange, readOnly = false }: Us
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
                               className="h-7 px-2 text-xs"
