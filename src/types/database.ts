@@ -7,7 +7,7 @@
  * This file contains TypeScript types matching our Supabase schema
  */
 
-export type UserRole = 'pm' | 'client';
+export type UserRole = 'pm' | 'client' | 'admin';
 export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'blocked';
 export type TaskType = 'task' | 'milestone' | 'meeting';

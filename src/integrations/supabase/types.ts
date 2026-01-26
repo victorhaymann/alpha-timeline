@@ -1177,6 +1177,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       change_request_status: "pending" | "approved" | "rejected"
@@ -1188,7 +1189,7 @@ export type Database = {
         | "completed"
         | "blocked"
       task_type: "task" | "milestone" | "meeting"
-      user_role: "pm" | "client"
+      user_role: "pm" | "client" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1320,7 +1321,7 @@ export const Constants = {
       project_status: ["draft", "active", "completed", "archived"],
       task_status: ["pending", "in_progress", "review", "completed", "blocked"],
       task_type: ["task", "milestone", "meeting"],
-      user_role: ["pm", "client"],
+      user_role: ["pm", "client", "admin"],
     },
   },
 } as const
