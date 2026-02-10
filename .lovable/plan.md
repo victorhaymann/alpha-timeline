@@ -1,108 +1,48 @@
 
 
-# Plan: Add Admin Access for The New Face Team
+# Forgot Password Flow
 
-## Summary
-Give Charles (charles@thenewface.io) and Romain (romain@thenewface.io) full admin editing access to ALL projects, matching Victor's capabilities. This requires adding an "admin" role to the system and updating RLS policies.
+## What will be added
 
-## Current Situation
-- **Victor** - Owns all 5 projects, has `pm` role - full edit access
-- **Charles** - Has `pm` role but owns no projects - cannot edit Victor's projects
-- **Romain** - Does not exist in the system yet (needs to register first)
+A complete "Forgot Password" flow with three parts:
 
-The problem: Current RLS policies only allow the **project owner** to edit. The `pm` role alone doesn't grant edit access to other users' projects.
+1. **"Forgot password?" link** on the sign-in form that switches to a reset request view
+2. **Password reset request** -- the user enters their email and receives a reset link via the built-in authentication email system
+3. **Password update page** (`/reset-password`) -- when the user clicks the link in their email, they land on a page where they set a new password
 
-## Solution Overview
+## How it works
 
-We'll create a new **admin** role that grants full access to all projects, independent of ownership.
+1. User clicks "Forgot password?" on the sign-in tab
+2. A new view appears asking for their email address
+3. The system sends a password reset email with a link pointing to `https://tnfproject.com/reset-password` (or the preview URL)
+4. User clicks the link, lands on the reset page, and enters a new password
+5. Password is updated and user is redirected to the projects dashboard
 
-## Implementation Steps
+## Changes
 
-### Step 1: Add 'admin' to the user_role enum
-Modify the existing `user_role` enum to include an 'admin' role:
-- Current values: `pm`, `client`
-- New values: `pm`, `client`, `admin`
+### 1. Auth page (`src/pages/Auth.tsx`)
+- Add a `forgotPassword` state to toggle between sign-in form and forgot-password form
+- Add a "Forgot password?" button below the sign-in button
+- Forgot password view: email input + "Send Reset Link" button
+- Uses `supabase.auth.resetPasswordForEmail()` with redirect URL pointing to `/reset-password`
+- Success toast confirms email was sent; error toast on failure
 
-### Step 2: Create a helper function to check admin status
-Create a `is_admin()` security definer function that checks if the current user has the admin role. This prevents infinite recursion in RLS policies.
+### 2. New Reset Password page (`src/pages/ResetPassword.tsx`)
+- Standalone page with the TNF branding (logo, card layout matching Auth page)
+- Two password fields: "New Password" and "Confirm Password"
+- Validates passwords match and minimum 6 characters
+- Calls `supabase.auth.updateUser({ password })` to set the new password
+- On success, redirects to `/projects` with a success toast
 
-```text
-+-------------------+
-|   is_admin()      |
-|-------------------|
-| Returns true if   |
-| user has 'admin'  |
-| role              |
-+-------------------+
-```
+### 3. Router update (`src/App.tsx`)
+- Add `/reset-password` as a public route (accessible without being logged in, since the auth token comes from the URL hash)
 
-### Step 3: Update RLS policies for key tables
-Modify policies to allow admins full access:
-
-| Table | Current Policy | Updated Policy |
-|-------|---------------|----------------|
-| `projects` | `owner_id = auth.uid()` | `owner_id = auth.uid() OR is_admin()` |
-| `phases` | owner check | owner check OR is_admin() |
-| `tasks` | owner check | owner check OR is_admin() |
-| `task_segments` | owner check | owner check OR is_admin() |
-| `dependencies` | owner check | owner check OR is_admin() |
-| `meeting_notes` | owner check | owner check OR is_admin() |
-| `invites` | owner check | owner check OR is_admin() |
-| `project_shares` | owner check | owner check OR is_admin() |
-| `rights_agreements` | owner check | owner check OR is_admin() |
-| `rights_usage_selections` | owner check | owner check OR is_admin() |
-| `client_documents` | owner check | owner check OR is_admin() |
-| `quotations` | owner check | owner check OR is_admin() |
-| `invoices` | owner check | owner check OR is_admin() |
-| `project_resource_links` | owner check | owner check OR is_admin() |
-| `project_steps` | owner check | owner check OR is_admin() |
-| `clients` | created_by check | created_by check OR is_admin() |
-
-### Step 4: Grant admin role to Victor and Charles
-Insert admin role for:
-- Victor (`806735de-369f-448c-8afb-5957506048fd`)
-- Charles (`d3ca7493-9387-4d90-8a76-f4d268762e64`)
-
-### Step 5: Handle Romain
-Romain (romain@thenewface.io) **is not registered yet**. Options:
-1. Romain needs to sign up first, then we can add the admin role
-2. OR we create a trigger that automatically assigns admin role when this email signs up
-
-I recommend option 2 - creating an automatic trigger so Romain gets admin access immediately upon registration.
-
----
+### 4. Auth hook (`src/hooks/useAuth.tsx`)
+- No changes needed -- `resetPasswordForEmail` and `updateUser` are called directly via the Supabase client, and the auth state listener already handles the session from the reset link
 
 ## Technical Details
 
-### Database Migration SQL
-
-The migration will:
-1. Add 'admin' to the `user_role` enum
-2. Create `is_admin()` function
-3. Drop and recreate affected RLS policies
-4. Assign admin role to existing users
-5. Create trigger for auto-assigning admin to Romain
-
-### Security Considerations
-- The `is_admin()` function uses `SECURITY DEFINER` to prevent RLS recursion
-- Admin role is separate from `pm` role (users can have both)
-- The admin check is done at the database level, not application level
-
-### Files to Update
-- **Database**: One migration file with all changes
-- **Types**: `src/types/database.ts` - add 'admin' to `UserRole` type
-- **Auth hook**: `src/hooks/useAuth.tsx` - no changes needed (already fetches role)
-
-## What Happens After Implementation
-
-1. **Victor** - Continues as before (owner + admin)
-2. **Charles** - Can immediately view and edit ALL projects
-3. **Romain** - When they sign up with romain@thenewface.io, they'll automatically get admin access
-
-## Rollback Plan
-If needed, the admin role can be removed by:
-1. Deleting admin entries from `user_roles`
-2. Dropping the updated policies
-3. Restoring original policies
-4. Dropping `is_admin()` function
+- `resetPasswordForEmail` sends the email using the built-in authentication email system (no extra API key needed)
+- The reset link includes a token in the URL hash that the Supabase client automatically picks up via `onAuthStateChange` with a `PASSWORD_RECOVERY` event
+- The redirect URL will use `window.location.origin` to work in both preview and production environments
 
