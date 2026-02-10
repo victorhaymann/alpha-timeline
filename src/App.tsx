@@ -19,6 +19,7 @@ import ClientDetail from "./pages/ClientDetail";
 import ClientPortal from "./pages/ClientPortal";
 import ClientProjectView from "./pages/ClientProjectView";
 import SharedProjectView from "./pages/SharedProjectView";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -57,6 +58,7 @@ function AppRoutes() {
       {/* Public routes - render immediately without waiting for auth */}
       <Route path="/" element={<RootRoute />} />
       <Route path="/share/:token" element={<SharedProjectView />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       
       {/* Protected routes with layout */}
       <Route element={
