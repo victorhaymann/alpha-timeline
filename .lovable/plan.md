@@ -1,52 +1,67 @@
 
 
-# Fix: Shift Timeline - Undo Failure and Delivery Tasks Not Shifted
+# Fix: Shift Timeline Shows Correct Dates Then Scrambles
 
-## Issue 1: Undo Fails After Shift
+## Root Cause
 
-**Root cause:** The undo logic (line 148-155 of `TimelineEditor.tsx`) re-inserts segments but omits the `segment_type` field. While the column defaults to `'work'`, any `review` segments lose their type on undo, causing data inconsistency. More critically, the undo deletes ALL segments for each task and re-inserts them, but this triggers the `sync_task_dates_on_segment_change` database trigger repeatedly during the batch operation, which can cause timeouts or race conditions -- especially for a large shift operation affecting many tasks and segments simultaneously.
+There's a **race condition** between two competing database operations happening in `Promise.all`:
 
-**Fix:** Include `segment_type` in the segment re-insert during undo. The fix is a single line addition in the `handleUndo` function.
+1. **Direct task updates** (lines 1088-1095): explicitly sets `tasks.start_date` and `tasks.end_date`
+2. **Segment updates** (lines 1098-1105): updates `task_segments` dates, which **triggers the `sync_task_dates_on_segment_change` database trigger** that ALSO updates `tasks.start_date` and `tasks.end_date`
 
-```text
-Current insert (line 149-155):
-  { id, task_id, start_date, end_date, order_index }
+Since all these fire concurrently in `Promise.all`, the trigger from segment update #1 might run before segment update #2 completes, causing it to calculate task dates from a mix of **old and new segment dates** -- producing "random" intermediate values.
 
-Fixed insert:
-  { id, task_id, start_date, end_date, order_index, segment_type }
+Then `onRefresh()` (line 1119) immediately fetches from the database, which may return these intermediate/wrong trigger-computed dates, overwriting the correct local state that was briefly visible.
+
+### The sequence:
+```
+1. Local state updated (correct dates shown briefly)
+2. Promise.all fires:
+   - Segment A update -> trigger: task.dates = f(newA, oldB) = WRONG
+   - Segment B update -> trigger: task.dates = f(newA, newB) = correct
+   - Direct task update -> task.dates = correct
+   (These race against each other)
+3. onRefresh() fetches from DB -> may get intermediate wrong values
+4. UI shows wrong dates
 ```
 
-## Issue 2: Delivery Tasks Not Shifted
+## Fix (2 changes in TimelineEditor.tsx)
 
-**Root cause:** When using "From date onward" scope, the filter is:
-```
-affectedTasks = tasks.filter(t => t.start_date >= fromStr)
-```
-If the selected "from date" is after the Delivery tasks' start dates (e.g., Feb 20), those tasks are excluded from the shift. This is technically correct behavior -- the filter only shifts tasks that START on or after the chosen date.
+### 1. Don't directly update task dates for tasks that have segments
 
-However, this is confusing UX because you'd expect tasks in later phases (like Delivery) to always move when shifting "from date onward." The fix is to also include tasks whose **end date** falls on or after the from-date, ensuring Delivery tasks at the end of the timeline are always captured.
+For tasks with segments, the database trigger is the single source of truth. Directly updating task dates creates a race. Only update task dates for tasks **without** segments.
 
-**Fix:** Change the filter in both `ShiftTimelineDialog.tsx` (preview) and `TimelineEditor.tsx` (actual shift) from:
 ```
-t.start_date >= fromStr
-```
-to:
-```
-t.start_date >= fromStr || t.end_date >= fromStr
+Change lines 1087-1095:
+- Update ALL affected tasks
++ Only update tasks that have NO segments (segmentless tasks)
 ```
 
-This ensures that any task overlapping or following the chosen date is included.
+### 2. Update segments sequentially, THEN refresh
+
+Instead of firing all segment updates concurrently in `Promise.all` (which causes trigger races), update segments first, then segmentless tasks, then refresh. Also remove the immediate `onRefresh()` since the local state is already correct -- or at minimum, add a small delay so triggers finish before refetch.
+
+```
+Change lines 1087-1119:
+1. First: await all segment updates (triggers will sync task dates)
+2. Then: await all segmentless task updates
+3. Update local state
+4. Remove onRefresh() -- local state is already correct
+```
+
+### 3. Remove duplicate filter logic
+
+The filtering logic for "from date onward" is duplicated between `ShiftTimelineDialog.tsx` (preview, lines 66-70) and `TimelineEditor.tsx` (actual shift, lines 1033-1038). This is a maintenance risk -- if one changes the other might not. We'll extract this into a shared utility or at minimum keep them consistent.
+
+## Summary
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| Correct dates flash then scramble | Race between direct task update and segment trigger | Don't update task dates for segmented tasks |
+| Long loading | `onRefresh()` refetches everything from DB unnecessarily | Remove `onRefresh()` after shift -- local state is already correct |
+| Duplicate filter code | Same filter in dialog preview and handler | Keep consistent, add comment linking them |
 
 ## Files to Change
 
-### 1. `src/components/timeline/TimelineEditor.tsx`
-- **handleUndo** (line ~149): Add `segment_type: seg.segment_type` to the segment re-insert object
-- **handleShiftTimeline** (line ~1036): Change filter from `start_date >= fromStr` to `start_date >= fromStr || end_date >= fromStr`
+- `src/components/timeline/TimelineEditor.tsx`: Fix the `handleShiftTimeline` function (lines 1087-1119)
 
-### 2. `src/components/timeline/ShiftTimelineDialog.tsx`
-- **Preview calculation** (line ~67): Same filter change -- use `start_date >= fromStr || end_date >= fromStr` so the preview count matches actual behavior
-
-## Summary
-Two small, surgical fixes:
-1. One field added to undo's segment re-insert (prevents review segments from losing their type)
-2. One filter condition widened (ensures Delivery and late-phase tasks are always included when shifting "from date onward")
