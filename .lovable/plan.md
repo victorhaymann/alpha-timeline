@@ -1,70 +1,52 @@
 
 
-# Shift All Tasks by X Days
+# Fix: Shift Timeline - Undo Failure and Delivery Tasks Not Shifted
 
-## The Problem
-When a client delays feedback, the entire timeline needs to slide forward. Currently, you'd have to manually drag each task one by one -- tedious and error-prone.
+## Issue 1: Undo Fails After Shift
 
-## Proposed UX: "Shift Timeline" Dialog
+**Root cause:** The undo logic (line 148-155 of `TimelineEditor.tsx`) re-inserts segments but omits the `segment_type` field. While the column defaults to `'work'`, any `review` segments lose their type on undo, causing data inconsistency. More critically, the undo deletes ALL segments for each task and re-inserts them, but this triggers the `sync_task_dates_on_segment_change` database trigger repeatedly during the batch operation, which can cause timeouts or race conditions -- especially for a large shift operation affecting many tasks and segments simultaneously.
 
-A single dialog accessible from the timeline toolbar (next to Undo / Regenerate) that shifts all tasks and segments forward or backward by a specified number of working days.
+**Fix:** Include `segment_type` in the segment re-insert during undo. The fix is a single line addition in the `handleUndo` function.
 
-### How it works
+```text
+Current insert (line 149-155):
+  { id, task_id, start_date, end_date, order_index }
 
-1. **Trigger**: A new "Shift Timeline" button in the toolbar (with a calendar/arrow icon)
-2. **Dialog**: Opens with:
-   - A numeric input for "Number of days" (working days)
-   - Direction toggle: "Forward" (default) or "Backward"
-   - A scope selector: "All tasks" or "From a specific date onward" (with a date picker)
-   - A preview summary: "This will move 12 tasks and 8 segments forward by 5 working days"
-   - A warning if the shift would push tasks beyond the project end date, with an option to auto-extend the deadline
-3. **Confirmation**: "Shift Timeline" button applies the change
-4. **Undo**: The entire shift is saved as a single undo step ("Shift timeline +5 days")
+Fixed insert:
+  { id, task_id, start_date, end_date, order_index, segment_type }
+```
 
-### Scope Options
+## Issue 2: Delivery Tasks Not Shifted
 
-| Scope | Use Case |
-|-------|----------|
-| **All tasks** | The whole project slipped -- move everything |
-| **From date onward** | Only the remaining tasks need to shift (e.g., client was late on Phase 2 feedback, but Phase 1 is already done) |
+**Root cause:** When using "From date onward" scope, the filter is:
+```
+affectedTasks = tasks.filter(t => t.start_date >= fromStr)
+```
+If the selected "from date" is after the Delivery tasks' start dates (e.g., Feb 20), those tasks are excluded from the shift. This is technically correct behavior -- the filter only shifts tasks that START on or after the chosen date.
 
-### What gets shifted
-- All task start/end dates (or only those matching the scope)
-- All task segments (preserving their relative positions)
-- Weekly call / meeting dates
-- Dates are snapped to working days after shifting (skipping weekends)
-- Dates are clamped to project boundaries (or the project end date is auto-extended)
+However, this is confusing UX because you'd expect tasks in later phases (like Delivery) to always move when shifting "from date onward." The fix is to also include tasks whose **end date** falls on or after the from-date, ensuring Delivery tasks at the end of the timeline are always captured.
 
-### Edge Cases Handled
-- Tasks already completed or in the past: optionally skip them
-- Project end date overflow: warn and offer to extend
-- Single undo step for the entire batch operation
+**Fix:** Change the filter in both `ShiftTimelineDialog.tsx` (preview) and `TimelineEditor.tsx` (actual shift) from:
+```
+t.start_date >= fromStr
+```
+to:
+```
+t.start_date >= fromStr || t.end_date >= fromStr
+```
 
----
+This ensures that any task overlapping or following the chosen date is included.
 
-## Technical Approach
+## Files to Change
 
-### New Component
-- `src/components/timeline/ShiftTimelineDialog.tsx` -- the dialog UI
+### 1. `src/components/timeline/TimelineEditor.tsx`
+- **handleUndo** (line ~149): Add `segment_type: seg.segment_type` to the segment re-insert object
+- **handleShiftTimeline** (line ~1036): Change filter from `start_date >= fromStr` to `start_date >= fromStr || end_date >= fromStr`
 
-### Changes to TimelineEditor
-- Add a "Shift Timeline" button to the toolbar
-- Add a `handleShiftTimeline` function that:
-  1. Saves current state to undo stack
-  2. Calculates new dates for all affected tasks/segments using `addWorkingDays` from `workingDays.ts`
-  3. Batch-updates tasks and segments in the database
-  4. Updates local state
-  5. Shows a success toast
+### 2. `src/components/timeline/ShiftTimelineDialog.tsx`
+- **Preview calculation** (line ~67): Same filter change -- use `start_date >= fromStr || end_date >= fromStr` so the preview count matches actual behavior
 
-### Database
-- No schema changes needed -- we're just updating existing `start_date` / `end_date` fields on `tasks` and `task_segments` tables
-
-### Working Days
-- Uses the existing `addWorkingDays()` utility from `src/lib/workingDays.ts` to skip weekends
-- Uses `snapTaskToWorkingDays()` to ensure all resulting dates land on working days
-- Respects the project's `working_days_mask`
-
-### Undo Support
-- The entire shift operation is saved as a single undo entry
-- Ctrl+Z / Cmd+Z reverts all tasks back to their pre-shift positions
-
+## Summary
+Two small, surgical fixes:
+1. One field added to undo's segment re-insert (prevents review segments from losing their type)
+2. One filter condition widened (ensures Delivery and late-phase tasks are always included when shifting "from date onward")
