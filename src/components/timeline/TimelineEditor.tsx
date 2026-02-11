@@ -19,12 +19,14 @@ import {
   RefreshCw,
   Loader2,
   Undo2,
-  Wrench
+  Wrench,
+  CalendarRange
 } from 'lucide-react';
+import { ShiftTimelineDialog } from './ShiftTimelineDialog';
 import { format, parse, addDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
-import { snapTaskToWorkingDays, hasEndpointsOnNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat } from '@/lib/workingDays';
+import { snapTaskToWorkingDays, hasEndpointsOnNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat, addWorkingDays } from '@/lib/workingDays';
 import { normalizeSegmentDates } from '@/lib/segmentUtils';
 
 // Maximum number of undo states to keep
@@ -72,6 +74,7 @@ export function TimelineEditor({
   const [addMeetingDialogOpen, setAddMeetingDialogOpen] = useState(false);
   const [newMeetingDate, setNewMeetingDate] = useState<Date | undefined>(undefined);
   const [isUndoing, setIsUndoing] = useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const hasRunWeekendFixRef = useRef(false);
   
   // Segment dialog state
@@ -1010,6 +1013,120 @@ export function TimelineEditor({
     }
   }, [tasks, getLibMask, handleFixWeekends]);
 
+  // Handle shift timeline
+  const handleShiftTimeline = async (params: {
+    days: number;
+    direction: 'forward' | 'backward';
+    scope: 'all' | 'from_date';
+    fromDate?: Date;
+    autoExtend: boolean;
+  }) => {
+    const { days: shiftDays, direction, scope, fromDate, autoExtend } = params;
+    const signedDays = direction === 'forward' ? shiftDays : -shiftDays;
+    const libMask = getLibMask();
+
+    // Save current state for undo
+    saveToUndoStack(`Shift timeline ${direction === 'forward' ? '+' : '-'}${shiftDays} days`);
+
+    try {
+      // Determine affected tasks
+      let affectedTasks = tasks.filter(t => t.start_date && t.end_date);
+      if (scope === 'from_date' && fromDate) {
+        const fromStr = format(fromDate, 'yyyy-MM-dd');
+        affectedTasks = affectedTasks.filter(t => t.start_date! >= fromStr);
+      }
+      const affectedTaskIds = new Set(affectedTasks.map(t => t.id));
+      const affectedSegments = segments.filter(s => affectedTaskIds.has(s.task_id));
+
+      // Shift tasks
+      const updatedTasks = tasks.map(t => {
+        if (!affectedTaskIds.has(t.id) || !t.start_date || !t.end_date) return t;
+        const newStart = addWorkingDays(new Date(t.start_date), signedDays, libMask);
+        const newEnd = addWorkingDays(new Date(t.end_date), signedDays, libMask);
+        return {
+          ...t,
+          start_date: format(newStart, 'yyyy-MM-dd'),
+          end_date: format(newEnd, 'yyyy-MM-dd'),
+        };
+      });
+
+      // Shift segments
+      const updatedSegments = segments.map(s => {
+        if (!affectedTaskIds.has(s.task_id)) return s;
+        const newStart = addWorkingDays(new Date(s.start_date), signedDays, libMask);
+        const newEnd = addWorkingDays(new Date(s.end_date), signedDays, libMask);
+        return {
+          ...s,
+          start_date: format(newStart, 'yyyy-MM-dd'),
+          end_date: format(newEnd, 'yyyy-MM-dd'),
+        };
+      });
+
+      // Auto-extend project end date if needed
+      if (autoExtend) {
+        let latestEnd = projectEndDate;
+        for (const t of updatedTasks) {
+          if (t.end_date && new Date(t.end_date) > latestEnd) {
+            latestEnd = new Date(t.end_date);
+          }
+        }
+        for (const s of updatedSegments) {
+          if (new Date(s.end_date) > latestEnd) {
+            latestEnd = new Date(s.end_date);
+          }
+        }
+        if (latestEnd > projectEndDate) {
+          await supabase
+            .from('projects')
+            .update({ end_date: format(latestEnd, 'yyyy-MM-dd') })
+            .eq('id', project.id);
+        }
+      }
+
+      // Batch update tasks in DB
+      const taskUpdatePromises = updatedTasks
+        .filter(t => affectedTaskIds.has(t.id))
+        .map(t =>
+          supabase
+            .from('tasks')
+            .update({ start_date: t.start_date, end_date: t.end_date })
+            .eq('id', t.id)
+        );
+
+      // Batch update segments in DB
+      const segmentUpdatePromises = updatedSegments
+        .filter(s => affectedTaskIds.has(s.task_id))
+        .map(s =>
+          supabase
+            .from('task_segments')
+            .update({ start_date: s.start_date, end_date: s.end_date })
+            .eq('id', s.id)
+        );
+
+      await Promise.all([...taskUpdatePromises, ...segmentUpdatePromises]);
+
+      // Update local state
+      onTasksChange(updatedTasks);
+      onSegmentsChange(updatedSegments);
+
+      toast({
+        title: 'Timeline shifted',
+        description: `Moved ${affectedTasks.length} task${affectedTasks.length !== 1 ? 's' : ''} ${direction} by ${shiftDays} working day${shiftDays !== 1 ? 's' : ''}.`,
+      });
+
+      // Refresh to pick up any trigger-based changes
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error shifting timeline:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to shift timeline.',
+        variant: 'destructive',
+      });
+      onRefresh();
+    }
+  };
+
   // If a render prop is provided, call it with the handler; otherwise render default button
   const regenerateButtonElement = renderRegenerateButton 
     ? renderRegenerateButton({ onClick: handleRegenerate, isLoading: isRegenerating })
@@ -1028,6 +1145,15 @@ export function TimelineEditor({
             <Undo2 className="w-4 h-4" />
           )}
           Undo
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setShiftDialogOpen(true)}
+          className="gap-2"
+          title="Shift all tasks forward or backward"
+        >
+          <CalendarRange className="w-4 h-4" />
+          Shift Timeline
         </Button>
         <Button
           variant="outline"
@@ -1082,6 +1208,15 @@ export function TimelineEditor({
       {renderRegenerateButton ? (
         <div className="flex items-center justify-end gap-2">
           {undoButton}
+          <Button
+            variant="outline"
+            onClick={() => setShiftDialogOpen(true)}
+            className="gap-2"
+            title="Shift all tasks forward or backward"
+          >
+            <CalendarRange className="w-4 h-4" />
+            Shift Timeline
+          </Button>
         </div>
       ) : (
         regenerateButtonElement
@@ -1175,6 +1310,17 @@ export function TimelineEditor({
           onSaveStart={saveToUndoStack}
         />
       )}
+
+      <ShiftTimelineDialog
+        open={shiftDialogOpen}
+        onOpenChange={setShiftDialogOpen}
+        tasks={tasks}
+        segments={segments}
+        projectStartDate={projectStartDate}
+        projectEndDate={projectEndDate}
+        workingDaysMask={project.working_days_mask}
+        onShift={handleShiftTimeline}
+      />
     </div>
   );
 }
