@@ -1,48 +1,70 @@
 
 
-# Forgot Password Flow
+# Shift All Tasks by X Days
 
-## What will be added
+## The Problem
+When a client delays feedback, the entire timeline needs to slide forward. Currently, you'd have to manually drag each task one by one -- tedious and error-prone.
 
-A complete "Forgot Password" flow with three parts:
+## Proposed UX: "Shift Timeline" Dialog
 
-1. **"Forgot password?" link** on the sign-in form that switches to a reset request view
-2. **Password reset request** -- the user enters their email and receives a reset link via the built-in authentication email system
-3. **Password update page** (`/reset-password`) -- when the user clicks the link in their email, they land on a page where they set a new password
+A single dialog accessible from the timeline toolbar (next to Undo / Regenerate) that shifts all tasks and segments forward or backward by a specified number of working days.
 
-## How it works
+### How it works
 
-1. User clicks "Forgot password?" on the sign-in tab
-2. A new view appears asking for their email address
-3. The system sends a password reset email with a link pointing to `https://tnfproject.com/reset-password` (or the preview URL)
-4. User clicks the link, lands on the reset page, and enters a new password
-5. Password is updated and user is redirected to the projects dashboard
+1. **Trigger**: A new "Shift Timeline" button in the toolbar (with a calendar/arrow icon)
+2. **Dialog**: Opens with:
+   - A numeric input for "Number of days" (working days)
+   - Direction toggle: "Forward" (default) or "Backward"
+   - A scope selector: "All tasks" or "From a specific date onward" (with a date picker)
+   - A preview summary: "This will move 12 tasks and 8 segments forward by 5 working days"
+   - A warning if the shift would push tasks beyond the project end date, with an option to auto-extend the deadline
+3. **Confirmation**: "Shift Timeline" button applies the change
+4. **Undo**: The entire shift is saved as a single undo step ("Shift timeline +5 days")
 
-## Changes
+### Scope Options
 
-### 1. Auth page (`src/pages/Auth.tsx`)
-- Add a `forgotPassword` state to toggle between sign-in form and forgot-password form
-- Add a "Forgot password?" button below the sign-in button
-- Forgot password view: email input + "Send Reset Link" button
-- Uses `supabase.auth.resetPasswordForEmail()` with redirect URL pointing to `/reset-password`
-- Success toast confirms email was sent; error toast on failure
+| Scope | Use Case |
+|-------|----------|
+| **All tasks** | The whole project slipped -- move everything |
+| **From date onward** | Only the remaining tasks need to shift (e.g., client was late on Phase 2 feedback, but Phase 1 is already done) |
 
-### 2. New Reset Password page (`src/pages/ResetPassword.tsx`)
-- Standalone page with the TNF branding (logo, card layout matching Auth page)
-- Two password fields: "New Password" and "Confirm Password"
-- Validates passwords match and minimum 6 characters
-- Calls `supabase.auth.updateUser({ password })` to set the new password
-- On success, redirects to `/projects` with a success toast
+### What gets shifted
+- All task start/end dates (or only those matching the scope)
+- All task segments (preserving their relative positions)
+- Weekly call / meeting dates
+- Dates are snapped to working days after shifting (skipping weekends)
+- Dates are clamped to project boundaries (or the project end date is auto-extended)
 
-### 3. Router update (`src/App.tsx`)
-- Add `/reset-password` as a public route (accessible without being logged in, since the auth token comes from the URL hash)
+### Edge Cases Handled
+- Tasks already completed or in the past: optionally skip them
+- Project end date overflow: warn and offer to extend
+- Single undo step for the entire batch operation
 
-### 4. Auth hook (`src/hooks/useAuth.tsx`)
-- No changes needed -- `resetPasswordForEmail` and `updateUser` are called directly via the Supabase client, and the auth state listener already handles the session from the reset link
+---
 
-## Technical Details
+## Technical Approach
 
-- `resetPasswordForEmail` sends the email using the built-in authentication email system (no extra API key needed)
-- The reset link includes a token in the URL hash that the Supabase client automatically picks up via `onAuthStateChange` with a `PASSWORD_RECOVERY` event
-- The redirect URL will use `window.location.origin` to work in both preview and production environments
+### New Component
+- `src/components/timeline/ShiftTimelineDialog.tsx` -- the dialog UI
+
+### Changes to TimelineEditor
+- Add a "Shift Timeline" button to the toolbar
+- Add a `handleShiftTimeline` function that:
+  1. Saves current state to undo stack
+  2. Calculates new dates for all affected tasks/segments using `addWorkingDays` from `workingDays.ts`
+  3. Batch-updates tasks and segments in the database
+  4. Updates local state
+  5. Shows a success toast
+
+### Database
+- No schema changes needed -- we're just updating existing `start_date` / `end_date` fields on `tasks` and `task_segments` tables
+
+### Working Days
+- Uses the existing `addWorkingDays()` utility from `src/lib/workingDays.ts` to skip weekends
+- Uses `snapTaskToWorkingDays()` to ensure all resulting dates land on working days
+- Respects the project's `working_days_mask`
+
+### Undo Support
+- The entire shift operation is saved as a single undo entry
+- Ctrl+Z / Cmd+Z reverts all tasks back to their pre-shift positions
 
