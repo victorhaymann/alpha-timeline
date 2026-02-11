@@ -1084,17 +1084,13 @@ export function TimelineEditor({
         }
       }
 
-      // Batch update tasks in DB
-      const taskUpdatePromises = updatedTasks
-        .filter(t => affectedTaskIds.has(t.id))
-        .map(t =>
-          supabase
-            .from('tasks')
-            .update({ start_date: t.start_date, end_date: t.end_date })
-            .eq('id', t.id)
-        );
+      // Identify tasks with vs without segments
+      const taskIdsWithSegments = new Set(affectedSegments.map(s => s.task_id));
+      const segmentlessTasks = updatedTasks.filter(
+        t => affectedTaskIds.has(t.id) && !taskIdsWithSegments.has(t.id)
+      );
 
-      // Batch update segments in DB
+      // 1. Update all segments first (triggers will sync parent task dates)
       const segmentUpdatePromises = updatedSegments
         .filter(s => affectedTaskIds.has(s.task_id))
         .map(s =>
@@ -1103,10 +1099,20 @@ export function TimelineEditor({
             .update({ start_date: s.start_date, end_date: s.end_date })
             .eq('id', s.id)
         );
+      await Promise.all(segmentUpdatePromises);
 
-      await Promise.all([...taskUpdatePromises, ...segmentUpdatePromises]);
+      // 2. Then update only segmentless tasks (no trigger race)
+      if (segmentlessTasks.length > 0) {
+        const taskUpdatePromises = segmentlessTasks.map(t =>
+          supabase
+            .from('tasks')
+            .update({ start_date: t.start_date, end_date: t.end_date })
+            .eq('id', t.id)
+        );
+        await Promise.all(taskUpdatePromises);
+      }
 
-      // Update local state
+      // 3. Update local state — no onRefresh() needed, local state is already correct
       onTasksChange(updatedTasks);
       onSegmentsChange(updatedSegments);
 
@@ -1114,9 +1120,6 @@ export function TimelineEditor({
         title: 'Timeline shifted',
         description: `Moved ${affectedTasks.length} task${affectedTasks.length !== 1 ? 's' : ''} ${direction} by ${shiftDays} working day${shiftDays !== 1 ? 's' : ''}.`,
       });
-
-      // Refresh to pick up any trigger-based changes
-      onRefresh();
     } catch (error: any) {
       console.error('Error shifting timeline:', error);
       toast({
