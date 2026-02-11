@@ -152,6 +152,7 @@ export function TimelineEditor({
               start_date: seg.start_date,
               end_date: seg.end_date,
               order_index: seg.order_index,
+              segment_type: seg.segment_type,
             }))
           );
         }
@@ -1033,7 +1034,7 @@ export function TimelineEditor({
       let affectedTasks = tasks.filter(t => t.start_date && t.end_date);
       if (scope === 'from_date' && fromDate) {
         const fromStr = format(fromDate, 'yyyy-MM-dd');
-        affectedTasks = affectedTasks.filter(t => t.start_date! >= fromStr);
+        affectedTasks = affectedTasks.filter(t => t.start_date! >= fromStr || t.end_date! >= fromStr);
       }
       const affectedTaskIds = new Set(affectedTasks.map(t => t.id));
       const affectedSegments = segments.filter(s => affectedTaskIds.has(s.task_id));

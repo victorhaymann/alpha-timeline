@@ -67,7 +67,7 @@ export function ShiftTimelineDialog({
     let filteredTasks = tasks.filter(t => t.start_date && t.end_date);
     if (scope === 'from_date' && fromDate) {
       const fromStr = format(fromDate, 'yyyy-MM-dd');
-      filteredTasks = filteredTasks.filter(t => t.start_date! >= fromStr);
+      filteredTasks = filteredTasks.filter(t => t.start_date! >= fromStr || t.end_date! >= fromStr);
     }
 
     const taskIds = new Set(filteredTasks.map(t => t.id));
