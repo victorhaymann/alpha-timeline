@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { FolderKanban, LayoutTemplate, Settings, LogOut, User, Building2 } from 'lucide-react';
+import { FolderKanban, LayoutTemplate, Settings, LogOut, User, Building2, LayoutDashboard, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,8 +14,10 @@ import { cn } from '@/lib/utils';
 import tnfLogo from '@/assets/tnf-logo-purple.png';
 
 const navItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/projects', label: 'Projects', icon: FolderKanban },
   { path: '/clients', label: 'Clients', icon: Building2 },
+  { path: '/staff', label: 'Staff', icon: Users },
   { path: '/templates', label: 'Templates', icon: LayoutTemplate },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
