@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { CanonicalStep, PHASE_CATEGORIES, PhaseCategory } from '@/types/database';
-import { CustomStep } from '@/components/steps/AddCustomStepDialog';
+import { PHASE_CATEGORIES, PhaseCategory, PHASE_CATEGORY_COLORS } from '@/types/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,11 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { StepLibrary } from '@/components/steps/StepLibrary';
-import { DependencyEditor, LocalDependency } from '@/components/steps/DependencyEditor';
-import { FeedbackConfig, FeedbackSettings, DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
-import { PhaseWeightsConfig, PhaseWeightConfig, DEFAULT_PHASE_WEIGHTS } from '@/components/steps/PhaseWeightsConfig';
-import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
+import { FeedbackSettings, DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
+import { PhaseWeightsConfig, PhaseWeightConfig, DEFAULT_PHASE_WEIGHTS, PhaseFeedbackRounds, DEFAULT_PHASE_FEEDBACK_ROUNDS } from '@/components/steps/PhaseWeightsConfig';
+import { addWorkingDays, countWorkingDays, convertLegacyMaskToLibFormat, nextWorkingDay } from '@/lib/workingDays';
 import { 
   Loader2, 
   ArrowLeft, 
@@ -24,15 +21,11 @@ import {
   Percent,
   Building2,
   Globe,
-  Layers,
   Video,
   CalendarDays,
-  RotateCcw,
-  Link2,
-  MessageSquare,
   Clock
 } from 'lucide-react';
-import { format, addMonths, addDays, parse } from 'date-fns';
+import { format, addMonths, parse } from 'date-fns';
 
 const WEEKDAYS = [
   { key: 0, label: 'Mon', bit: 1 },
@@ -59,7 +52,9 @@ const COMMON_TIMEZONES = [
   'Australia/Sydney',
 ];
 
-type WizardStep = 'basics' | 'phases' | 'steps' | 'feedback' | 'dependencies';
+type WizardStep = 'basics' | 'phases';
+
+const WEIGHTABLE_PHASES = ['Pre-Production', 'Production', 'Post-Production', 'Delivery'] as const;
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -67,12 +62,9 @@ export default function NewProject() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState<WizardStep>('basics');
-  const [canonicalSteps, setCanonicalSteps] = useState<CanonicalStep[]>([]);
-  const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
-  const [customSteps, setCustomSteps] = useState<CustomStep[]>([]);
-  const [dependencies, setDependencies] = useState<LocalDependency[]>([]);
   const [feedbackSettings, setFeedbackSettings] = useState<FeedbackSettings>(DEFAULT_FEEDBACK_SETTINGS);
   const [phaseWeights, setPhaseWeights] = useState<PhaseWeightConfig>({ ...DEFAULT_PHASE_WEIGHTS });
+  const [phaseFeedbackRounds, setPhaseFeedbackRounds] = useState<PhaseFeedbackRounds>({ ...DEFAULT_PHASE_FEEDBACK_ROUNDS });
   
   const today = new Date();
   const defaultEndDate = addMonths(today, 3);
@@ -84,8 +76,7 @@ export default function NewProject() {
     end_date: format(defaultEndDate, 'yyyy-MM-dd'),
     timezone_pm: Intl.DateTimeFormat().resolvedOptions().timeZone,
     timezone_client: 'UTC',
-    working_days_mask: 31, // Mon-Fri enabled (1+2+4+8+16), Sat/Sun disabled
-    default_review_rounds: 2,
+    working_days_mask: 31, // Mon-Fri
     buffer_percentage: 12,
     gmeet_link: '',
   });
@@ -99,10 +90,6 @@ export default function NewProject() {
 
   const isDayEnabled = (bit: number) => (formData.working_days_mask & bit) !== 0;
 
-  useEffect(() => {
-    fetchCanonicalSteps();
-  }, []);
-
   // Sync check-in timezone with client timezone by default
   useEffect(() => {
     if (formData.timezone_client && feedbackSettings.checkInTimezone === 'UTC') {
@@ -113,89 +100,27 @@ export default function NewProject() {
     }
   }, [formData.timezone_client]);
 
-  const fetchCanonicalSteps = async () => {
-    const { data, error } = await supabase
-      .from('canonical_steps')
-      .select('*')
-      .order('sort_order');
-
-    if (!error && data) {
-      setCanonicalSteps(data as CanonicalStep[]);
-      // Pre-select non-optional steps
-      const defaultSelected = new Set(
-        (data as CanonicalStep[])
-          .filter(s => !s.is_optional)
-          .map(s => s.id)
-      );
-      setSelectedStepIds(defaultSelected);
-    }
-  };
-
-  const handleStepToggle = (stepId: string, included: boolean) => {
-    setSelectedStepIds(prev => {
-      const next = new Set(prev);
-      if (included) {
-        next.add(stepId);
-      } else {
-        next.delete(stepId);
-      }
-      return next;
-    });
-  };
-
-  const handleUpdateCustomStep = (stepId: string, updates: Partial<CustomStep>) => {
-    setCustomSteps(prev => prev.map(s => 
-      s.id === stepId ? { ...s, ...updates } : s
-    ));
-  };
-
-  const handleAddCustomStep = (step: CustomStep) => {
-    setCustomSteps(prev => [...prev, step]);
-  };
-
-  const handleRemoveCustomStep = (stepId: string) => {
-    setCustomSteps(prev => prev.filter(s => s.id !== stepId));
-  };
-
   const handleSubmit = async () => {
     if (!user) {
-      toast({
-        title: 'Error',
-        description: 'You must be logged in to create a project.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'You must be logged in to create a project.', variant: 'destructive' });
       return;
     }
 
     if (!formData.name.trim()) {
-      toast({
-        title: 'Validation error',
-        description: 'Project name is required.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation error', description: 'Project name is required.', variant: 'destructive' });
       setCurrentStep('basics');
       return;
     }
 
     if (new Date(formData.end_date) <= new Date(formData.start_date)) {
-      toast({
-        title: 'Validation error',
-        description: 'End date must be after start date.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation error', description: 'End date must be after start date.', variant: 'destructive' });
       setCurrentStep('basics');
       return;
     }
 
-    // Validate phase weights sum to 100%
-    const weightablePhases = ['Pre-Production', 'Production', 'Post-Production', 'Delivery'] as const;
-    const totalWeight = weightablePhases.reduce((sum, phase) => sum + (phaseWeights[phase] || 0), 0);
+    const totalWeight = WEIGHTABLE_PHASES.reduce((sum, phase) => sum + (phaseWeights[phase] || 0), 0);
     if (totalWeight !== 100) {
-      toast({
-        title: 'Validation error',
-        description: `Phase weights must sum to 100% (currently ${totalWeight}%).`,
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation error', description: `Phase weights must sum to 100% (currently ${totalWeight}%).`, variant: 'destructive' });
       setCurrentStep('phases');
       return;
     }
@@ -203,55 +128,14 @@ export default function NewProject() {
     setIsSubmitting(true);
     
     try {
-      // 1. Prepare schedule input from selected steps
-      const selectedCanonical = canonicalSteps.filter(s => selectedStepIds.has(s.id));
-      
-      const scheduleTasks: ScheduleTask[] = [
-        // Canonical steps
-        ...selectedCanonical.map(step => ({
-          _stepId: step.id,
-          name: step.name,
-          phaseCategory: step.phase_category as PhaseCategory,
-          taskType: step.task_type as 'task' | 'milestone' | 'meeting',
-          weightPercent: step.default_weight_percent || 0,
-          reviewRounds: step.default_review_rounds || formData.default_review_rounds,
-          clientVisible: true,
-        })),
-        // Custom steps
-        ...customSteps.map(step => ({
-          _stepId: step.id,
-          name: step.name,
-          phaseCategory: step.phase_category as PhaseCategory,
-          taskType: 'task' as const,
-          weightPercent: step.weight_percent || 0,
-          reviewRounds: step.review_rounds ?? formData.default_review_rounds,
-          clientVisible: step.client_visible,
-        })),
-      ];
+      const libMask = convertLegacyMaskToLibFormat(formData.working_days_mask);
+      const projectStart = parse(formData.start_date, 'yyyy-MM-dd', new Date());
+      const projectEnd = parse(formData.end_date, 'yyyy-MM-dd', new Date());
+      const totalWorkingDays = countWorkingDays(projectStart, projectEnd, libMask);
+      const bufferDays = Math.floor(totalWorkingDays * formData.buffer_percentage / 100);
+      const availableDays = totalWorkingDays - bufferDays;
 
-      const scheduleDependencies: ScheduleDependency[] = dependencies.map(dep => ({
-        predecessorId: dep.predecessorId,
-        successorId: dep.successorId,
-      }));
-
-      // 2. Run the schedule engine
-      const scheduleOutput = computeSchedule({
-        projectStartDate: parse(formData.start_date, 'yyyy-MM-dd', new Date()),
-        projectEndDate: parse(formData.end_date, 'yyyy-MM-dd', new Date()),
-        workingDaysMask: formData.working_days_mask,
-        bufferPercentage: formData.buffer_percentage,
-        tasks: scheduleTasks,
-        dependencies: scheduleDependencies,
-        feedbackSettings,
-        phaseWeightOverrides: phaseWeights,
-      });
-
-      // Log warnings if any
-      if (scheduleOutput.warnings.length > 0) {
-        console.warn('Schedule warnings:', scheduleOutput.warnings);
-      }
-
-      // 3. Create project with check-in settings
+      // 1. Create project
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -262,7 +146,7 @@ export default function NewProject() {
           timezone_pm: formData.timezone_pm,
           timezone_client: formData.timezone_client,
           working_days_mask: formData.working_days_mask,
-          default_review_rounds: formData.default_review_rounds,
+          default_review_rounds: 0,
           buffer_percentage: formData.buffer_percentage,
           zoom_link_default: formData.gmeet_link || null,
           checkin_time: feedbackSettings.checkInEnabled ? feedbackSettings.checkInTime : null,
@@ -278,157 +162,135 @@ export default function NewProject() {
 
       if (projectError) throw projectError;
 
-      // 4. Create project_steps for selected canonical steps
-      if (selectedStepIds.size > 0) {
-        const projectSteps = Array.from(selectedStepIds).map(stepId => ({
-          project_id: project.id,
-          canonical_step_id: stepId,
-          is_included: true,
-        }));
+      // 2. Create 4 phases
+      const phaseRecords = WEIGHTABLE_PHASES.map((name, index) => ({
+        project_id: project.id,
+        name,
+        order_index: index,
+        percentage_allocation: phaseWeights[name] || 0,
+        color: PHASE_CATEGORY_COLORS[name] || '#3B82F6',
+      }));
 
-        const { error: stepsError } = await supabase
-          .from('project_steps')
-          .insert(projectSteps);
+      const { data: createdPhases, error: phasesError } = await supabase
+        .from('phases')
+        .insert(phaseRecords)
+        .select('id, name');
 
-        if (stepsError) throw stepsError;
-      }
+      if (phasesError) throw phasesError;
 
-      // 5. Determine all phases needed (including generated tasks)
-      const allPhasesUsed = new Set<string>();
-      scheduleOutput.scheduledTasks.forEach(task => {
-        allPhasesUsed.add(task.phaseCategory);
-      });
+      const phaseMap = new Map((createdPhases || []).map(p => [p.name, p.id]));
 
-      const phaseRecords: { project_id: string; name: string; order_index: number }[] = [];
-      PHASE_CATEGORIES.forEach((category, index) => {
-        if (allPhasesUsed.has(category)) {
-          phaseRecords.push({
-            project_id: project.id,
-            name: category,
-            order_index: index,
-          });
-        }
-      });
-
-      let createdPhases: { id: string; name: string }[] = [];
-      if (phaseRecords.length > 0) {
-        const { data: phases, error: phasesError } = await supabase
-          .from('phases')
-          .insert(phaseRecords)
-          .select('id, name');
-
-        if (phasesError) throw phasesError;
-        createdPhases = phases || [];
-      }
-
-      const phaseMap = new Map(createdPhases.map(p => [p.name, p.id]));
-
-      // 6. Create tasks with scheduled dates
+      // 3. Compute dates and create tasks + segments
+      let cursor = nextWorkingDay(projectStart, libMask);
       const tasksToCreate: {
         project_id: string;
         phase_id: string;
         name: string;
-        task_type: 'task' | 'milestone' | 'meeting';
+        task_type: 'task';
         client_visible: boolean;
         weight_percent: number;
         review_rounds: number;
         order_index: number;
         start_date: string;
         end_date: string;
-        _stepId?: string;
       }[] = [];
 
-      let orderIndex = 0;
-      scheduleOutput.scheduledTasks.forEach(scheduledTask => {
-        const phaseId = phaseMap.get(scheduledTask.phaseCategory);
-        if (phaseId) {
-          tasksToCreate.push({
-            project_id: project.id,
-            phase_id: phaseId,
-            name: scheduledTask.name,
-            task_type: scheduledTask.taskType,
-            client_visible: scheduledTask.clientVisible,
-            weight_percent: scheduledTask.weightPercent,
-            review_rounds: scheduledTask.reviewRounds,
-            order_index: orderIndex++,
-            start_date: format(scheduledTask.startDate, 'yyyy-MM-dd'),
-            end_date: format(scheduledTask.endDate, 'yyyy-MM-dd'),
-            _stepId: scheduledTask._stepId,
-          });
+      // Store segment info per task index
+      const segmentPlans: { taskIndex: number; segments: { start: Date; end: Date; type: 'work' | 'review'; order: number }[] }[] = [];
+
+      WEIGHTABLE_PHASES.forEach((phase, idx) => {
+        const phaseId = phaseMap.get(phase);
+        if (!phaseId) return;
+
+        const weight = phaseWeights[phase] || 0;
+        const phaseDays = Math.max(1, Math.round(availableDays * weight / 100));
+        const phaseStart = cursor;
+        const phaseEnd = addWorkingDays(phaseStart, phaseDays - 1, libMask);
+
+        tasksToCreate.push({
+          project_id: project.id,
+          phase_id: phaseId,
+          name: phase,
+          task_type: 'task',
+          client_visible: true,
+          weight_percent: weight,
+          review_rounds: phaseFeedbackRounds[phase] ?? 0,
+          order_index: idx,
+          start_date: format(phaseStart, 'yyyy-MM-dd'),
+          end_date: format(phaseEnd, 'yyyy-MM-dd'),
+        });
+
+        // Plan segments
+        const N = phaseFeedbackRounds[phase] ?? 0;
+        if (N > 0) {
+          const workCount = N + 1;
+          const reviewCount = N;
+          const reviewTotalDays = Math.max(reviewCount, Math.round(phaseDays * 0.2));
+          const workTotalDays = Math.max(workCount, phaseDays - reviewTotalDays);
+
+          const workDaysEach = Math.floor(workTotalDays / workCount);
+          const reviewDaysEach = Math.floor(reviewTotalDays / reviewCount);
+
+          const segments: { start: Date; end: Date; type: 'work' | 'review'; order: number }[] = [];
+          let segCursor = phaseStart;
+          let orderIdx = 0;
+
+          for (let i = 0; i < workCount; i++) {
+            // Work segment
+            const isLast = i === workCount - 1;
+            const wDays = isLast
+              ? (i < reviewCount ? workDaysEach : Math.max(1, phaseDays - (workDaysEach * (workCount - 1)) - (reviewDaysEach * reviewCount)))
+              : workDaysEach;
+            const segEnd = addWorkingDays(segCursor, Math.max(1, wDays) - 1, libMask);
+            segments.push({ start: segCursor, end: segEnd, type: 'work', order: orderIdx++ });
+            segCursor = addWorkingDays(segEnd, 1, libMask);
+
+            // Review segment (if not the last work segment)
+            if (i < reviewCount) {
+              const rDays = reviewDaysEach;
+              const rEnd = addWorkingDays(segCursor, Math.max(1, rDays) - 1, libMask);
+              segments.push({ start: segCursor, end: rEnd, type: 'review', order: orderIdx++ });
+              segCursor = addWorkingDays(rEnd, 1, libMask);
+            }
+          }
+
+          segmentPlans.push({ taskIndex: tasksToCreate.length - 1, segments });
         }
+
+        // Advance cursor past this phase
+        cursor = addWorkingDays(phaseEnd, 1, libMask);
       });
 
-      // Map step IDs to their index for dependency creation
-      const stepIdToIndex = new Map<string, number>();
-      tasksToCreate.forEach((task, idx) => {
-        if (task._stepId) {
-          stepIdToIndex.set(task._stepId, idx);
-        }
-      });
+      // Insert tasks
+      const { data: createdTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .insert(tasksToCreate)
+        .select('id');
 
-      // Remove temporary _stepId before inserting
-      const tasksForInsert = tasksToCreate.map(({ _stepId, ...task }) => task);
+      if (tasksError) throw tasksError;
 
-      let createdTasks: { id: string }[] = [];
-      if (tasksForInsert.length > 0) {
-        const { data: insertedTasks, error: tasksError } = await supabase
-          .from('tasks')
-          .insert(tasksForInsert)
-          .select('id');
-
-        if (tasksError) throw tasksError;
-        createdTasks = insertedTasks || [];
-      }
-
-      // 7. Create inline review segments for selected milestone steps
-      // Instead of separate "Task Review" rows, we now create work + review segments on the same task
+      // 4. Create segments
       const segmentsToCreate: {
         task_id: string;
         start_date: string;
         end_date: string;
-        segment_type: 'work' | 'review';
+        segment_type: string;
         order_index: number;
       }[] = [];
 
-      if (feedbackSettings.milestoneAtSelectedSteps && feedbackSettings.milestoneStepNames.length > 0) {
-        tasksToCreate.forEach((taskDef, idx) => {
-          const taskId = createdTasks[idx]?.id;
-          if (!taskId) return;
-          
-          // Check if this task should have an inline review segment
-          if (feedbackSettings.milestoneStepNames.includes(taskDef.name)) {
-            const startDate = parse(taskDef.start_date, 'yyyy-MM-dd', new Date());
-            const endDate = parse(taskDef.end_date, 'yyyy-MM-dd', new Date());
-            const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-            
-            // Allocate ~80% for work, ~20% for review (min 1 day each)
-            const workDays = Math.max(1, Math.floor(totalDays * 0.8));
-            const reviewDays = Math.max(1, totalDays - workDays);
-            
-            const workEnd = addDays(startDate, workDays - 1);
-            const reviewStart = addDays(workEnd, 1);
-            const reviewEnd = addDays(reviewStart, reviewDays - 1);
-            
-            // Work segment
-            segmentsToCreate.push({
-              task_id: taskId,
-              start_date: format(startDate, 'yyyy-MM-dd'),
-              end_date: format(workEnd, 'yyyy-MM-dd'),
-              segment_type: 'work',
-              order_index: 0,
-            });
-            
-            // Review segment  
-            segmentsToCreate.push({
-              task_id: taskId,
-              start_date: format(reviewStart, 'yyyy-MM-dd'),
-              end_date: format(reviewEnd, 'yyyy-MM-dd'),
-              segment_type: 'review',
-              order_index: 1,
-            });
-          }
+      segmentPlans.forEach(({ taskIndex, segments }) => {
+        const taskId = createdTasks?.[taskIndex]?.id;
+        if (!taskId) return;
+        segments.forEach(seg => {
+          segmentsToCreate.push({
+            task_id: taskId,
+            start_date: format(seg.start, 'yyyy-MM-dd'),
+            end_date: format(seg.end, 'yyyy-MM-dd'),
+            segment_type: seg.type,
+            order_index: seg.order,
+          });
         });
-      }
+      });
 
       if (segmentsToCreate.length > 0) {
         const { error: segmentsError } = await supabase
@@ -436,42 +298,45 @@ export default function NewProject() {
           .insert(segmentsToCreate);
 
         if (segmentsError) {
-          console.warn('Failed to create review segments:', segmentsError);
+          console.warn('Failed to create segments:', segmentsError);
         }
       }
 
-      // 8. Create dependencies (original user dependencies only - generated review/rework dependencies removed)
-      const stepIdToTaskId = new Map<string, string>();
-      tasksToCreate.forEach((task, idx) => {
-        if (task._stepId && createdTasks[idx]) {
-          stepIdToTaskId.set(task._stepId, createdTasks[idx].id);
+      // 5. Create check-in phase + task if enabled
+      if (feedbackSettings.checkInEnabled) {
+        const { data: checkinPhase } = await supabase
+          .from('phases')
+          .insert({
+            project_id: project.id,
+            name: 'Client Check-ins',
+            order_index: -1,
+            percentage_allocation: 0,
+            color: PHASE_CATEGORY_COLORS['Client Check-ins'] || '#9CA3AF',
+            collapsed_by_default: true,
+          })
+          .select('id')
+          .single();
+
+        if (checkinPhase) {
+          await supabase.from('tasks').insert({
+            project_id: project.id,
+            phase_id: checkinPhase.id,
+            name: `${feedbackSettings.checkInFrequency === 'weekly' ? 'Weekly' : 'Bi-weekly'} Client Call`,
+            task_type: 'meeting',
+            client_visible: true,
+            weight_percent: 0,
+            review_rounds: 0,
+            order_index: 0,
+            start_date: formData.start_date,
+            end_date: formData.end_date,
+            is_feedback_meeting: true,
+          });
         }
-      });
-
-      const dependenciesToCreate = dependencies
-        .map(dep => ({
-          predecessor_task_id: stepIdToTaskId.get(dep.predecessorId),
-          successor_task_id: stepIdToTaskId.get(dep.successorId),
-        }))
-        .filter(dep => dep.predecessor_task_id && dep.successor_task_id) as {
-          predecessor_task_id: string;
-          successor_task_id: string;
-        }[];
-
-      if (dependenciesToCreate.length > 0) {
-        const { error: depsError } = await supabase
-          .from('dependencies')
-          .insert(dependenciesToCreate);
-
-        if (depsError) throw depsError;
       }
-
-      const totalTasks = scheduleOutput.scheduledTasks.length;
-      const generatedTasks = scheduleOutput.scheduledTasks.filter(t => t.isGenerated).length;
 
       toast({
         title: 'Project created!',
-        description: `${formData.name} created with ${totalTasks} tasks (${generatedTasks} auto-generated). Schedule spans ${scheduleOutput.totalWorkingDays} working days with ${scheduleOutput.bufferDays} buffer days.`,
+        description: `${formData.name} created with ${WEIGHTABLE_PHASES.length} phases and ${segmentsToCreate.length} segments.`,
       });
 
       navigate(`/projects/${project.id}`);
@@ -489,36 +354,12 @@ export default function NewProject() {
 
   const wizardSteps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
     { key: 'basics', label: 'Basics', icon: <Building2 className="w-4 h-4" /> },
-    { key: 'phases', label: 'Phase Weights', icon: <Clock className="w-4 h-4" /> },
-    { key: 'steps', label: 'Select Steps', icon: <Layers className="w-4 h-4" /> },
-    { key: 'feedback', label: 'Feedback', icon: <MessageSquare className="w-4 h-4" /> },
-    { key: 'dependencies', label: 'Dependencies', icon: <Link2 className="w-4 h-4" /> },
+    { key: 'phases', label: 'Phases & Check-ins', icon: <Clock className="w-4 h-4" /> },
   ];
 
   const currentStepIndex = wizardSteps.findIndex(s => s.key === currentStep);
-  const canGoNext = currentStep !== 'dependencies';
+  const canGoNext = currentStep !== 'phases';
   const canGoBack = currentStep !== 'basics';
-
-  // Get available step names for milestone selection
-  const availableStepNames = [
-    ...canonicalSteps.filter(s => selectedStepIds.has(s.id)).map(s => s.name),
-    ...customSteps.map(s => s.name),
-  ];
-
-  const handleAddDependency = (predecessorId: string, successorId: string) => {
-    setDependencies(prev => [
-      ...prev,
-      {
-        id: `dep-${Date.now()}`,
-        predecessorId,
-        successorId,
-      }
-    ]);
-  };
-
-  const handleRemoveDependency = (dependencyId: string) => {
-    setDependencies(prev => prev.filter(d => d.id !== dependencyId));
-  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
@@ -562,17 +403,11 @@ export default function NewProject() {
         <CardHeader>
           <CardTitle className="text-2xl">
             {currentStep === 'basics' && 'Project Basics'}
-            {currentStep === 'phases' && 'Phase Time Allocation'}
-            {currentStep === 'steps' && 'Select Steps'}
-            {currentStep === 'feedback' && 'Feedback Configuration'}
-            {currentStep === 'dependencies' && 'Task Dependencies'}
+            {currentStep === 'phases' && 'Phases, Feedbacks & Check-ins'}
           </CardTitle>
           <CardDescription>
-            {currentStep === 'basics' && 'Define your VFX project details and settings'}
-            {currentStep === 'phases' && 'Configure how project time is distributed across phases'}
-            {currentStep === 'steps' && 'Choose which steps to include from the library'}
-            {currentStep === 'feedback' && 'Configure client check-ins, milestone reviews, and rework buffers'}
-            {currentStep === 'dependencies' && 'Define which tasks must complete before others can start'}
+            {currentStep === 'basics' && 'Define your project details and settings'}
+            {currentStep === 'phases' && 'Configure phase durations, feedback rounds, and client check-ins'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -702,26 +537,8 @@ export default function NewProject() {
                 </p>
               </div>
 
-              {/* Settings Row */}
+              {/* Buffer */}
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="review_rounds" className="flex items-center gap-2">
-                    <RotateCcw className="w-4 h-4 text-muted-foreground" />
-                    Default Review Rounds
-                  </Label>
-                  <Input
-                    id="review_rounds"
-                    type="number"
-                    min={0}
-                    max={10}
-                    value={formData.default_review_rounds}
-                    onChange={(e) => setFormData({ ...formData, default_review_rounds: parseInt(e.target.value) || 0 })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Default review cycles per task (default: 2)
-                  </p>
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="buffer" className="flex items-center gap-2">
                     <Percent className="w-4 h-4 text-muted-foreground" />
@@ -742,79 +559,36 @@ export default function NewProject() {
                     Reserved buffer time (0-20%, default: 12%)
                   </p>
                 </div>
-              </div>
 
-              {/* Gmeet Link */}
-              <div className="space-y-2">
-                <Label htmlFor="gmeet_link" className="flex items-center gap-2">
-                  <Video className="w-4 h-4 text-muted-foreground" />
-                  Default Google Meet Link (optional)
-                </Label>
-                <Input
-                  id="gmeet_link"
-                  value={formData.gmeet_link}
-                  onChange={(e) => setFormData({ ...formData, gmeet_link: e.target.value })}
-                  placeholder="https://meet.google.com/..."
-                />
+                {/* Gmeet Link */}
+                <div className="space-y-2">
+                  <Label htmlFor="gmeet_link" className="flex items-center gap-2">
+                    <Video className="w-4 h-4 text-muted-foreground" />
+                    Default Meet Link (optional)
+                  </Label>
+                  <Input
+                    id="gmeet_link"
+                    value={formData.gmeet_link}
+                    onChange={(e) => setFormData({ ...formData, gmeet_link: e.target.value })}
+                    placeholder="https://meet.google.com/..."
+                  />
+                </div>
               </div>
             </div>
           )}
 
-          {/* Phase Weights Configuration */}
+          {/* Phase Weights + Feedback Rounds + Check-in Settings */}
           {currentStep === 'phases' && (
             <PhaseWeightsConfig
               weights={phaseWeights}
               onChange={setPhaseWeights}
               startDate={formData.start_date ? new Date(formData.start_date) : undefined}
               endDate={formData.end_date ? new Date(formData.end_date) : undefined}
-            />
-          )}
-
-          {/* Steps Selection */}
-          {currentStep === 'steps' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>Select the steps to include in this project</span>
-                <span className="font-medium text-foreground">
-                  {selectedStepIds.size + customSteps.length} steps selected
-                  {customSteps.length > 0 && (
-                    <span className="text-primary ml-1">
-                      ({customSteps.length} custom)
-                    </span>
-                  )}
-                </span>
-              </div>
-              <StepLibrary 
-                selectedSteps={selectedStepIds}
-                onStepToggle={handleStepToggle}
-                customSteps={customSteps}
-                onAddCustomStep={handleAddCustomStep}
-                onRemoveCustomStep={handleRemoveCustomStep}
-                onUpdateCustomStep={handleUpdateCustomStep}
-              />
-            </div>
-          )}
-
-          {/* Feedback Configuration Step */}
-          {currentStep === 'feedback' && (
-            <FeedbackConfig
-              settings={feedbackSettings}
-              onChange={setFeedbackSettings}
+              phaseFeedbackRounds={phaseFeedbackRounds}
+              onFeedbackRoundsChange={setPhaseFeedbackRounds}
+              feedbackSettings={feedbackSettings}
+              onFeedbackChange={setFeedbackSettings}
               defaultZoomLink={formData.gmeet_link}
-              clientTimezone={formData.timezone_client}
-              availableStepNames={availableStepNames}
-            />
-          )}
-
-          {/* Dependencies Step */}
-          {currentStep === 'dependencies' && (
-            <DependencyEditor
-              canonicalSteps={canonicalSteps}
-              selectedStepIds={selectedStepIds}
-              customSteps={customSteps}
-              dependencies={dependencies}
-              onAddDependency={handleAddDependency}
-              onRemoveDependency={handleRemoveDependency}
             />
           )}
 
