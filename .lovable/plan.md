@@ -1,40 +1,94 @@
 
 
-# Project Status Indicator on Dashboard
+# Review Notes for Client Feedback Segments
 
-## What We're Building
+## Problem
 
-Add a visible **status badge** to each project row in the Projects Gantt (left column), and a **status filter** in the header so the Head of Planning can toggle between showing "In Production" vs "Delivered" projects. The existing database enum already has `active` and `completed` -- we'll map these to user-friendly labels: **In Production** = `active`, **Delivered** = `completed`.
+When a review segment appears on the timeline, the client has no context on **what** they need to review. The admin/PM writes nothing, and the client sees a dashed "Review" bar with no actionable information.
 
-No database changes needed -- the `project_status` enum already supports this.
+## Solution
 
-## Changes
+Add a `review_notes` text field to each review segment. PMs can write instructions (e.g., "Please review the 3D model textures and provide feedback on lighting"). Clients see a clickable review bar that opens a dialog with the instructions.
 
-### 1. Dashboard.tsx -- Fetch all statuses, not just active/draft
+---
 
-Currently filters to `['active', 'draft']`. Change to `['active', 'draft', 'completed']` so delivered projects are available when the filter is toggled.
+## Database Change
 
-### 2. ProjectsGantt.tsx -- Add status badge + filter
+### Alter `task_segments` table
 
-**Left column**: Add a small colored badge next to each project name:
-- `active` → green "In Production" badge
-- `draft` → amber "Draft" badge  
-- `completed` → blue "Delivered" badge
+Add a nullable `review_notes` column:
 
-**Header bar**: Add a status filter (segmented buttons or select) with options:
-- **In Production** (default) -- shows `active` + `draft` projects
-- **Delivered** -- shows `completed` projects
-- **All** -- shows everything
+```sql
+ALTER TABLE task_segments ADD COLUMN review_notes text;
+```
 
-### 3. ProjectDetail.tsx -- Add status toggle
+No RLS changes needed -- the existing policies already cover read/write access for segments.
 
-Add a clickable status badge or dropdown on the project detail page header so PMs can mark a project as "Delivered" (sets `status = 'completed'`) or back to "In Production" (`status = 'active'`). This replaces the current read-only badge.
+---
 
-### Files to modify
+## UI Changes
+
+### 1. Admin Side -- Edit review notes inline
+
+**File: `src/components/timeline/GanttChart.tsx`**
+
+When a PM clicks on a **review segment** bar (not drag), open a small dialog/popover where they can type review instructions. This reuses the existing click flow (currently only opens the popover menu via the `...` button).
+
+Add a new callback prop `onEditReviewNotes` and a new dialog component.
+
+**File: `src/components/timeline/ReviewNotesDialog.tsx`** (NEW)
+
+A simple dialog with:
+- Title: "Review Instructions for [Task Name]"
+- A `<Textarea>` for the PM to write what the client should review
+- Save button that updates `task_segments.review_notes` via Supabase
+- Character indicator (optional)
+
+**File: `src/components/timeline/TaskPopoverMenu.tsx`**
+
+Add a new menu item "Edit Review Notes..." that only appears for review segments. This triggers the new dialog.
+
+### 2. Admin Side -- Visual indicator
+
+When a review segment has notes written, show a small document icon or filled dot on the review badge to indicate instructions exist. This helps PMs see at a glance which reviews have instructions.
+
+### 3. Client Side -- Click to view review notes
+
+**File: `src/components/timeline/GanttChart.tsx`**
+
+When `readOnly={true}` and a client clicks on a review segment bar:
+- If the segment has `review_notes`, open a read-only dialog showing the instructions
+- If no notes exist, show nothing (or a brief "No instructions yet" tooltip)
+
+**File: `src/components/timeline/ReviewNotesViewDialog.tsx`** (NEW)
+
+A read-only dialog with:
+- Title: "Review Instructions"
+- Task name and review period dates
+- The review notes text rendered as formatted content
+- A subtle "If you have questions, contact your PM" footer
+
+This dialog is used in both `ClientProjectView.tsx` and `SharedProjectView.tsx` since both render the GanttChart with `readOnly={true}`.
+
+### 4. Data flow
+
+**File: `src/pages/ProjectDetail.tsx`**
+
+Pass the segments (already fetched) to GanttChart -- no change needed since segments already include all columns.
+
+**File: `src/pages/ClientProjectView.tsx`** and `src/pages/SharedProjectView.tsx`**
+
+Segments are already fetched. The new `review_notes` column will automatically be included in `SELECT *` queries. No code changes needed for data fetching.
+
+---
+
+## Files Summary
 
 | File | Change |
 |------|--------|
-| `src/pages/Dashboard.tsx` | Expand status filter in query to include `completed` |
-| `src/components/dashboard/ProjectsGantt.tsx` | Add status badge per row + status filter buttons in header |
-| `src/pages/ProjectDetail.tsx` | Make status badge clickable to toggle between active/completed |
+| Migration SQL | Add `review_notes text` column to `task_segments` |
+| `src/components/timeline/ReviewNotesDialog.tsx` | NEW -- Edit dialog for PMs |
+| `src/components/timeline/ReviewNotesViewDialog.tsx` | NEW -- Read-only dialog for clients |
+| `src/components/timeline/TaskPopoverMenu.tsx` | Add "Edit Review Notes..." menu item for review segments |
+| `src/components/timeline/GanttChart.tsx` | Handle click on review segments to open view/edit dialog; add visual indicator for segments with notes |
 
