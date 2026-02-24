@@ -1,67 +1,95 @@
 
 
-# Fix: Shift Timeline Shows Correct Dates Then Scrambles
+# Simplified Project Creation with Per-Phase Feedback Rounds
 
-## Root Cause
+## Current State
+The wizard has 5 steps: Basics → Phase Weights → Select Steps → Feedback → Dependencies. The approved plan reduces this to 2 steps (Basics → Phase Weights & Check-ins). Now we need to add **per-phase feedback round counts** to the Phase Weights step.
 
-There's a **race condition** between two competing database operations happening in `Promise.all`:
+## What "Feedbacks per Phase" Means
 
-1. **Direct task updates** (lines 1088-1095): explicitly sets `tasks.start_date` and `tasks.end_date`
-2. **Segment updates** (lines 1098-1105): updates `task_segments` dates, which **triggers the `sync_task_dates_on_segment_change` database trigger** that ALSO updates `tasks.start_date` and `tasks.end_date`
+Each phase (Pre-Production, Production, Post-Production, Delivery) gets a configurable number of client feedback rounds (0, 1, 2, 3...). When the project is created, the single phase task is split into alternating **work** and **review** segments:
 
-Since all these fire concurrently in `Promise.all`, the trigger from segment update #1 might run before segment update #2 completes, causing it to calculate task dates from a mix of **old and new segment dates** -- producing "random" intermediate values.
+```text
+Example: Production with 2 feedbacks
 
-Then `onRefresh()` (line 1119) immediately fetches from the database, which may return these intermediate/wrong trigger-computed dates, overwriting the correct local state that was briefly visible.
+┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐
+│              │  │          │  │              │  │          │  │              │
+└──────────────┘  └──────────┘  └──────────────┘  └──────────┘  └──────────────┘
+     seg 0            seg 1          seg 2            seg 3          seg 4
 
-### The sequence:
-```
-1. Local state updated (correct dates shown briefly)
-2. Promise.all fires:
-   - Segment A update -> trigger: task.dates = f(newA, oldB) = WRONG
-   - Segment B update -> trigger: task.dates = f(newA, newB) = correct
-   - Direct task update -> task.dates = correct
-   (These race against each other)
-3. onRefresh() fetches from DB -> may get intermediate wrong values
-4. UI shows wrong dates
+2 feedbacks = 3 work segments + 2 review segments = 5 total segments
 ```
 
-## Fix (2 changes in TimelineEditor.tsx)
+Work segments get ~80% of the phase's time, review segments get ~20%. These segments are fully draggable/resizable on the Gantt chart after creation.
 
-### 1. Don't directly update task dates for tasks that have segments
+## UX Design
 
-For tasks with segments, the database trigger is the single source of truth. Directly updating task dates creates a race. Only update task dates for tasks **without** segments.
+### Phase Weights Step (Step 2)
+Below the existing timeline slider, each phase gets a small row with a +/- stepper for feedback count:
 
+```text
+┌─────────────────────────────────────────────────────┐
+│  Phase Time Allocation                    [Reset]   │
+│  ┌──────┬──────────────────────────┬────────┬──┐    │
+│  │ Pre  │      Production          │  Post  │🏁│    │
+│  └──────┴──────────────────────────┴────────┴──┘    │
+│                                                     │
+│  Client Feedback Rounds                             │
+│  ┌──────────────────────────────────────────────┐   │
+│  │ Pre-Production     [ - ]  1  [ + ]           │   │
+│  │ Production         [ - ]  2  [ + ]           │   │
+│  │ Post-Production    [ - ]  1  [ + ]           │   │
+│  │ Delivery           [ - ]  0  [ + ]           │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                     │
+│  ▶ Weekly Check-in Settings                         │
+│    (collapsible: frequency, day, time, timezone)    │
+└─────────────────────────────────────────────────────┘
 ```
-Change lines 1087-1095:
-- Update ALL affected tasks
-+ Only update tasks that have NO segments (segmentless tasks)
-```
 
-### 2. Update segments sequentially, THEN refresh
+## Technical Plan
 
-Instead of firing all segment updates concurrently in `Promise.all` (which causes trigger races), update segments first, then segmentless tasks, then refresh. Also remove the immediate `onRefresh()` since the local state is already correct -- or at minimum, add a small delay so triggers finish before refetch.
+### Files to Change
 
-```
-Change lines 1087-1119:
-1. First: await all segment updates (triggers will sync task dates)
-2. Then: await all segmentless task updates
-3. Update local state
-4. Remove onRefresh() -- local state is already correct
-```
+**`src/components/steps/PhaseWeightsConfig.tsx`**
+- Add `phaseFeedbackRounds` prop: `Record<string, number>` (e.g., `{ 'Pre-Production': 1, 'Production': 2, ... }`)
+- Add `onFeedbackRoundsChange` callback
+- Render a stepper (minus / count / plus) for each of the 4 phases below the slider
+- Add `feedbackSettings` and `onFeedbackChange` props for the collapsible check-in section
+- Import and embed the check-in UI (frequency, weekday, time, timezone, zoom link) as a collapsible section
 
-### 3. Remove duplicate filter logic
+**`src/pages/NewProject.tsx`**
+- Reduce `WizardStep` to `'basics' | 'phases'`
+- Remove wizard steps 3-5 (steps, feedback, dependencies) from the array and their UI sections
+- Remove `canonicalSteps`, `selectedStepIds`, `customSteps`, `dependencies` state and related handlers
+- Remove `fetchCanonicalSteps` useEffect
+- Add `phaseFeedbackRounds` state: `{ 'Pre-Production': 1, 'Production': 2, 'Post-Production': 1, 'Delivery': 0 }`
+- Keep `feedbackSettings` state (for check-in config only)
+- Pass `phaseFeedbackRounds`, `feedbackSettings`, and their setters to `PhaseWeightsConfig`
+- Hide "Default Review Rounds" input from the basics step (no longer relevant)
+- **Simplify `handleSubmit`**:
+  1. Create project record
+  2. Create 4 phases (Pre-Production, Production, Post-Production, Delivery)
+  3. Create 4 tasks (one per phase), with dates computed from phase weights
+  4. For each task, create work+review segments based on `phaseFeedbackRounds[phase]`
+  5. Create weekly call task if check-ins are enabled
+  6. Skip `project_steps`, `dependencies`, and `canonical_steps` insertions entirely
+  7. No need to call `computeSchedule()` -- direct date math using `addWorkingDays`
 
-The filtering logic for "from date onward" is duplicated between `ShiftTimelineDialog.tsx` (preview, lines 66-70) and `TimelineEditor.tsx` (actual shift, lines 1033-1038). This is a maintenance risk -- if one changes the other might not. We'll extract this into a shared utility or at minimum keep them consistent.
+### Segment Creation Logic (in handleSubmit)
 
-## Summary
+For a phase with N feedback rounds:
+- Total segments = 2N + 1 (alternating work/review, starting and ending with work)
+- Work gets ~80% of phase days, split equally across N+1 work segments
+- Review gets ~20% of phase days, split equally across N review segments
+- If N = 0, create a single work segment spanning the full phase
+- All dates snap to working days using existing `addWorkingDays` utility
 
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| Correct dates flash then scramble | Race between direct task update and segment trigger | Don't update task dates for segmented tasks |
-| Long loading | `onRefresh()` refetches everything from DB unnecessarily | Remove `onRefresh()` after shift -- local state is already correct |
-| Duplicate filter code | Same filter in dialog preview and handler | Keep consistent, add comment linking them |
+### No Database Changes
+Same tables: `phases`, `tasks`, `task_segments`. We're just inserting fewer rows with a simpler pattern.
 
-## Files to Change
-
-- `src/components/timeline/TimelineEditor.tsx`: Fix the `handleShiftTimeline` function (lines 1087-1119)
+### Backward Compatibility
+- Existing projects with step-level detail are unaffected
+- All removed components (`StepLibrary`, `FeedbackConfig`, `DependencyEditor`) remain in the codebase
+- The `computeSchedule` engine remains available for potential future "advanced mode"
 
