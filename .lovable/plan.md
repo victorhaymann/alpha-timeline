@@ -1,172 +1,58 @@
 
 
-# Production Control Center & Staff Management
+# Staff Categories System
 
-## Overview
+## What We're Building
 
-Two interconnected features: (1) a **Staff directory** with skills/software, and (2) a **Dashboard** that gives a bird's-eye view of all active projects and staff allocation across them. Staff are assigned to project phases, and the dashboard shows who is working on what, when.
+A `staff_categories` table to classify staff members (e.g., "3D Artist", "Compositor", "VFX"). Each staff member gets assigned a category. Categories are manageable from the Settings page, and the Staff page/assignment popover can filter by category.
 
----
+## Database
 
-## Data Model
+### New Table: `staff_categories`
 
-### New Tables
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| name | text NOT NULL UNIQUE | Category name |
+| created_by | uuid NOT NULL | PM who created it |
+| created_at | timestamptz | |
 
-```text
-┌─────────────────────────────┐       ┌──────────────────────────────────┐
-│ staff_members               │       │ phase_staff_assignments          │
-├─────────────────────────────┤       ├──────────────────────────────────┤
-│ id          uuid PK         │──┐    │ id           uuid PK            │
-│ full_name   text NOT NULL   │  │    │ phase_id     uuid FK → phases   │
-│ email       text            │  └───▶│ staff_id     uuid FK → staff    │
-│ role_title  text            │       │ created_at   timestamptz        │
-│ skills      text[]          │       └──────────────────────────────────┘
-│ softwares   text[]          │
-│ avatar_url  text            │
-│ is_active   boolean = true  │
-│ created_by  uuid            │
-│ created_at  timestamptz     │
-│ updated_at  timestamptz     │
-└─────────────────────────────┘
-```
+RLS: PMs can CRUD their own (or admin all). Same pattern as `staff_members`.
 
-**Key design decisions:**
-- **Staff are NOT users** -- they don't log into the app. They're resources managed by the PM. No FK to `auth.users`.
-- **Assignment is per-phase**, not per-task. A staff member assigned to the "Production" phase of Project X is implicitly working on it for the phase's full date range (derived from its tasks' segments).
-- `created_by` links to the PM who created the staff record (for RLS).
-- `skills` and `softwares` are text arrays (e.g. `['3D Animation', 'Compositing']`, `['After Effects', 'Nuke', 'Houdini']`).
+### Modify `staff_members`
 
-### RLS Policies
-- **staff_members**: PMs/admins can CRUD their own staff. Admins can see all.
-- **phase_staff_assignments**: Same access as the parent project (reuse `has_project_access` pattern).
+Add a `category_id` column (uuid, nullable, FK to `staff_categories`).
 
----
+### Seed Data
 
-## UX Flow
+Insert all 22 categories from the screenshots:
+3D Artist, 3D Asset, 3D Scan, AI Artists, Animator, Artistic Direction, Bank Assets, Color Grader, Compositing, Executive Production, Modeling & Texturing, Models, Motion Designer, Other, Photograph, Rendering, Simulation Work, Sound Designer, UI Designer Unreal, Unreal Developer, VFX, Video Editor, Web Developer
 
-### 1. Staff Management Page (`/staff`)
+## UI Changes
 
-New top-nav item between "Clients" and "Templates".
+### 1. Settings Page -- New "Staff Categories" Tab
 
-```text
-┌──────────────────────────────────────────────────────────┐
-│  Staff                                    [+ Add Staff]  │
-│  ┌──────────────────────────────────────────────────────┐│
-│  │ Name          Role           Skills        Software  ││
-│  │ ─────────────────────────────────────────────────────││
-│  │ Alice M.      3D Artist      Animation     Maya, C4D ││
-│  │ Bob T.        Compositor     Comp, Roto    Nuke, AE  ││
-│  │ Clara S.      Editor         Editing       Premiere  ││
-│  └──────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────┘
-```
+Add a new tab to `SettingsPage.tsx` with a simple list of categories, each with a delete button (trash icon), and an "Add Category" input at the top. Matches the reference screenshots exactly.
 
-- Simple table/card view with inline edit
-- Add/edit dialog: name, email, role title, skills (tag input), softwares (tag input)
-- Delete with confirmation
+### 2. Staff Dialog -- Category Dropdown
 
-### 2. Staff Assignment on Project Detail
+Replace the free-text "Role" input in `StaffDialog.tsx` with a `<Select>` dropdown populated from `staff_categories`. Keep the field optional.
 
-On the project's **Timeline tab**, each phase row in the Gantt chart gets a subtle "assign staff" affordance. Clicking it opens a popover/dialog to select staff members for that phase.
+### 3. Staff Page -- Show Category Column
 
-```text
-Phase: Production  [Alice M., Bob T.]  [+ Assign]
-  ┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐
-```
+Replace the "Role" column in the staff table with "Category", showing the category name from the joined data.
 
-Staff avatars/initials appear as small badges next to the phase name in the Gantt left column.
+### 4. Staff Assignment Popover -- Group by Category
 
-### 3. Dashboard / Control Center (`/dashboard`)
+In `StaffAssignmentPopover.tsx`, group staff by their category for easier selection when assigning to phases.
 
-New page, accessible from top-nav (first item, before "Projects").
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│  Dashboard                                   [Today: Feb 24]    │
-│                                                                  │
-│  ┌── Active Projects Overview ─────────────────────────────────┐│
-│  │                                                              ││
-│  │  ◉ Project Alpha     ██████████░░░░░░░  62%  ·  Production  ││
-│  │    Staff: Alice, Bob                                         ││
-│  │                                                              ││
-│  │  ◉ Project Beta      ████░░░░░░░░░░░░░  28%  ·  Pre-Prod   ││
-│  │    Staff: Clara                                              ││
-│  │                                                              ││
-│  │  ◉ Project Gamma     █████████████████  100% ·  Delivered   ││
-│  │    Staff: —                                                  ││
-│  └──────────────────────────────────────────────────────────────┘│
-│                                                                  │
-│  ┌── Staff Allocation ─────────────────────────────────────────┐│
-│  │         Feb 17   Feb 24   Mar 3    Mar 10   Mar 17          ││
-│  │  Alice  ═══════════════════════                              ││
-│  │         Project Alpha (Production)                           ││
-│  │                                                              ││
-│  │  Bob    ═══════════════════════                              ││
-│  │         Project Alpha (Production)                           ││
-│  │                    ════════════════════                      ││
-│  │                    Project Beta (Post-Prod)                  ││
-│  │                                                              ││
-│  │  Clara  ════════                                             ││
-│  │         Project Beta (Pre-Prod)                              ││
-│  │                                                              ││
-│  │  ⚠ Bob has overlapping assignments Mar 3-10                 ││
-│  └──────────────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Two sections:**
-
-1. **Active Projects Overview**: For each active project, show a mini progress bar, current phase (based on today's date vs phase date ranges), and assigned staff. Click → goes to project detail.
-
-2. **Staff Allocation Timeline**: A simplified horizontal bar chart showing each staff member's assignments across all projects over the coming weeks. Color-coded by project. Highlights **conflicts** (a person assigned to overlapping phases on different projects).
-
----
-
-## Technical Plan
-
-### Database Migration
-- Create `staff_members` table with RLS (PM/admin access via `created_by` or `is_admin()`)
-- Create `phase_staff_assignments` table with RLS (inherit project access)
-- Unique constraint on `(phase_id, staff_id)` to prevent duplicates
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `src/pages/Staff.tsx` | Staff directory CRUD page |
-| `src/pages/Dashboard.tsx` | Control center with project overview + allocation timeline |
-| `src/components/staff/StaffDialog.tsx` | Add/edit staff member dialog |
-| `src/components/staff/StaffAssignmentPopover.tsx` | Assign staff to a phase (used in Gantt) |
-| `src/components/dashboard/ProjectOverviewCard.tsx` | Single project summary card |
-| `src/components/dashboard/StaffAllocationChart.tsx` | Horizontal timeline showing staff across projects |
-
-### Modified Files
+## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/layout/TopNav.tsx` | Add "Dashboard" and "Staff" nav items |
-| `src/App.tsx` | Add `/dashboard` and `/staff` routes |
-| `src/components/timeline/GanttChart.tsx` | Show assigned staff badges in phase rows |
-| `src/types/database.ts` | Add `StaffMember` and `PhaseStaffAssignment` types |
-
-### Implementation Order
-
-1. **Database**: Migration for `staff_members` + `phase_staff_assignments` tables with RLS
-2. **Staff page**: CRUD for staff directory
-3. **Staff assignment**: Popover on Gantt phase rows to assign/remove staff
-4. **Dashboard**: Projects overview + staff allocation timeline
-5. **Navigation**: Add both new pages to TopNav and router
-
-### Conflict Detection Logic
-
-For the staff allocation chart, query all `phase_staff_assignments` joined with phases and tasks to get date ranges. For each staff member, check if any assignments overlap in time. Flag overlaps with a warning icon.
-
----
-
-## What This Does NOT Change
-
-- Existing project creation flow (unchanged)
-- Existing Gantt chart functionality (only adds staff badges)
-- No changes to the schedule engine or segment logic
-- No changes to client portal or shared views
+| Migration SQL | Create `staff_categories` table + add `category_id` to `staff_members` + seed 22 categories |
+| `src/pages/SettingsPage.tsx` | Add "Staff Categories" tab with list + add + delete |
+| `src/components/staff/StaffDialog.tsx` | Replace role text input with category select dropdown |
+| `src/pages/Staff.tsx` | Join category name, show in table |
+| `src/components/staff/StaffAssignmentPopover.tsx` | Group staff list by category |
 
