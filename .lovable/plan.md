@@ -1,95 +1,172 @@
 
 
-# Simplified Project Creation with Per-Phase Feedback Rounds
+# Production Control Center & Staff Management
 
-## Current State
-The wizard has 5 steps: Basics → Phase Weights → Select Steps → Feedback → Dependencies. The approved plan reduces this to 2 steps (Basics → Phase Weights & Check-ins). Now we need to add **per-phase feedback round counts** to the Phase Weights step.
+## Overview
 
-## What "Feedbacks per Phase" Means
+Two interconnected features: (1) a **Staff directory** with skills/software, and (2) a **Dashboard** that gives a bird's-eye view of all active projects and staff allocation across them. Staff are assigned to project phases, and the dashboard shows who is working on what, when.
 
-Each phase (Pre-Production, Production, Post-Production, Delivery) gets a configurable number of client feedback rounds (0, 1, 2, 3...). When the project is created, the single phase task is split into alternating **work** and **review** segments:
+---
 
-```text
-Example: Production with 2 feedbacks
+## Data Model
 
-┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐
-│              │  │          │  │              │  │          │  │              │
-└──────────────┘  └──────────┘  └──────────────┘  └──────────┘  └──────────────┘
-     seg 0            seg 1          seg 2            seg 3          seg 4
-
-2 feedbacks = 3 work segments + 2 review segments = 5 total segments
-```
-
-Work segments get ~80% of the phase's time, review segments get ~20%. These segments are fully draggable/resizable on the Gantt chart after creation.
-
-## UX Design
-
-### Phase Weights Step (Step 2)
-Below the existing timeline slider, each phase gets a small row with a +/- stepper for feedback count:
+### New Tables
 
 ```text
-┌─────────────────────────────────────────────────────┐
-│  Phase Time Allocation                    [Reset]   │
-│  ┌──────┬──────────────────────────┬────────┬──┐    │
-│  │ Pre  │      Production          │  Post  │🏁│    │
-│  └──────┴──────────────────────────┴────────┴──┘    │
-│                                                     │
-│  Client Feedback Rounds                             │
-│  ┌──────────────────────────────────────────────┐   │
-│  │ Pre-Production     [ - ]  1  [ + ]           │   │
-│  │ Production         [ - ]  2  [ + ]           │   │
-│  │ Post-Production    [ - ]  1  [ + ]           │   │
-│  │ Delivery           [ - ]  0  [ + ]           │   │
-│  └──────────────────────────────────────────────┘   │
-│                                                     │
-│  ▶ Weekly Check-in Settings                         │
-│    (collapsible: frequency, day, time, timezone)    │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────┐       ┌──────────────────────────────────┐
+│ staff_members               │       │ phase_staff_assignments          │
+├─────────────────────────────┤       ├──────────────────────────────────┤
+│ id          uuid PK         │──┐    │ id           uuid PK            │
+│ full_name   text NOT NULL   │  │    │ phase_id     uuid FK → phases   │
+│ email       text            │  └───▶│ staff_id     uuid FK → staff    │
+│ role_title  text            │       │ created_at   timestamptz        │
+│ skills      text[]          │       └──────────────────────────────────┘
+│ softwares   text[]          │
+│ avatar_url  text            │
+│ is_active   boolean = true  │
+│ created_by  uuid            │
+│ created_at  timestamptz     │
+│ updated_at  timestamptz     │
+└─────────────────────────────┘
 ```
+
+**Key design decisions:**
+- **Staff are NOT users** -- they don't log into the app. They're resources managed by the PM. No FK to `auth.users`.
+- **Assignment is per-phase**, not per-task. A staff member assigned to the "Production" phase of Project X is implicitly working on it for the phase's full date range (derived from its tasks' segments).
+- `created_by` links to the PM who created the staff record (for RLS).
+- `skills` and `softwares` are text arrays (e.g. `['3D Animation', 'Compositing']`, `['After Effects', 'Nuke', 'Houdini']`).
+
+### RLS Policies
+- **staff_members**: PMs/admins can CRUD their own staff. Admins can see all.
+- **phase_staff_assignments**: Same access as the parent project (reuse `has_project_access` pattern).
+
+---
+
+## UX Flow
+
+### 1. Staff Management Page (`/staff`)
+
+New top-nav item between "Clients" and "Templates".
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│  Staff                                    [+ Add Staff]  │
+│  ┌──────────────────────────────────────────────────────┐│
+│  │ Name          Role           Skills        Software  ││
+│  │ ─────────────────────────────────────────────────────││
+│  │ Alice M.      3D Artist      Animation     Maya, C4D ││
+│  │ Bob T.        Compositor     Comp, Roto    Nuke, AE  ││
+│  │ Clara S.      Editor         Editing       Premiere  ││
+│  └──────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────┘
+```
+
+- Simple table/card view with inline edit
+- Add/edit dialog: name, email, role title, skills (tag input), softwares (tag input)
+- Delete with confirmation
+
+### 2. Staff Assignment on Project Detail
+
+On the project's **Timeline tab**, each phase row in the Gantt chart gets a subtle "assign staff" affordance. Clicking it opens a popover/dialog to select staff members for that phase.
+
+```text
+Phase: Production  [Alice M., Bob T.]  [+ Assign]
+  ┌──── work ────┐  ┌─ review ─┐  ┌──── work ────┐
+```
+
+Staff avatars/initials appear as small badges next to the phase name in the Gantt left column.
+
+### 3. Dashboard / Control Center (`/dashboard`)
+
+New page, accessible from top-nav (first item, before "Projects").
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  Dashboard                                   [Today: Feb 24]    │
+│                                                                  │
+│  ┌── Active Projects Overview ─────────────────────────────────┐│
+│  │                                                              ││
+│  │  ◉ Project Alpha     ██████████░░░░░░░  62%  ·  Production  ││
+│  │    Staff: Alice, Bob                                         ││
+│  │                                                              ││
+│  │  ◉ Project Beta      ████░░░░░░░░░░░░░  28%  ·  Pre-Prod   ││
+│  │    Staff: Clara                                              ││
+│  │                                                              ││
+│  │  ◉ Project Gamma     █████████████████  100% ·  Delivered   ││
+│  │    Staff: —                                                  ││
+│  └──────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌── Staff Allocation ─────────────────────────────────────────┐│
+│  │         Feb 17   Feb 24   Mar 3    Mar 10   Mar 17          ││
+│  │  Alice  ═══════════════════════                              ││
+│  │         Project Alpha (Production)                           ││
+│  │                                                              ││
+│  │  Bob    ═══════════════════════                              ││
+│  │         Project Alpha (Production)                           ││
+│  │                    ════════════════════                      ││
+│  │                    Project Beta (Post-Prod)                  ││
+│  │                                                              ││
+│  │  Clara  ════════                                             ││
+│  │         Project Beta (Pre-Prod)                              ││
+│  │                                                              ││
+│  │  ⚠ Bob has overlapping assignments Mar 3-10                 ││
+│  └──────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Two sections:**
+
+1. **Active Projects Overview**: For each active project, show a mini progress bar, current phase (based on today's date vs phase date ranges), and assigned staff. Click → goes to project detail.
+
+2. **Staff Allocation Timeline**: A simplified horizontal bar chart showing each staff member's assignments across all projects over the coming weeks. Color-coded by project. Highlights **conflicts** (a person assigned to overlapping phases on different projects).
+
+---
 
 ## Technical Plan
 
-### Files to Change
+### Database Migration
+- Create `staff_members` table with RLS (PM/admin access via `created_by` or `is_admin()`)
+- Create `phase_staff_assignments` table with RLS (inherit project access)
+- Unique constraint on `(phase_id, staff_id)` to prevent duplicates
 
-**`src/components/steps/PhaseWeightsConfig.tsx`**
-- Add `phaseFeedbackRounds` prop: `Record<string, number>` (e.g., `{ 'Pre-Production': 1, 'Production': 2, ... }`)
-- Add `onFeedbackRoundsChange` callback
-- Render a stepper (minus / count / plus) for each of the 4 phases below the slider
-- Add `feedbackSettings` and `onFeedbackChange` props for the collapsible check-in section
-- Import and embed the check-in UI (frequency, weekday, time, timezone, zoom link) as a collapsible section
+### New Files
 
-**`src/pages/NewProject.tsx`**
-- Reduce `WizardStep` to `'basics' | 'phases'`
-- Remove wizard steps 3-5 (steps, feedback, dependencies) from the array and their UI sections
-- Remove `canonicalSteps`, `selectedStepIds`, `customSteps`, `dependencies` state and related handlers
-- Remove `fetchCanonicalSteps` useEffect
-- Add `phaseFeedbackRounds` state: `{ 'Pre-Production': 1, 'Production': 2, 'Post-Production': 1, 'Delivery': 0 }`
-- Keep `feedbackSettings` state (for check-in config only)
-- Pass `phaseFeedbackRounds`, `feedbackSettings`, and their setters to `PhaseWeightsConfig`
-- Hide "Default Review Rounds" input from the basics step (no longer relevant)
-- **Simplify `handleSubmit`**:
-  1. Create project record
-  2. Create 4 phases (Pre-Production, Production, Post-Production, Delivery)
-  3. Create 4 tasks (one per phase), with dates computed from phase weights
-  4. For each task, create work+review segments based on `phaseFeedbackRounds[phase]`
-  5. Create weekly call task if check-ins are enabled
-  6. Skip `project_steps`, `dependencies`, and `canonical_steps` insertions entirely
-  7. No need to call `computeSchedule()` -- direct date math using `addWorkingDays`
+| File | Purpose |
+|------|---------|
+| `src/pages/Staff.tsx` | Staff directory CRUD page |
+| `src/pages/Dashboard.tsx` | Control center with project overview + allocation timeline |
+| `src/components/staff/StaffDialog.tsx` | Add/edit staff member dialog |
+| `src/components/staff/StaffAssignmentPopover.tsx` | Assign staff to a phase (used in Gantt) |
+| `src/components/dashboard/ProjectOverviewCard.tsx` | Single project summary card |
+| `src/components/dashboard/StaffAllocationChart.tsx` | Horizontal timeline showing staff across projects |
 
-### Segment Creation Logic (in handleSubmit)
+### Modified Files
 
-For a phase with N feedback rounds:
-- Total segments = 2N + 1 (alternating work/review, starting and ending with work)
-- Work gets ~80% of phase days, split equally across N+1 work segments
-- Review gets ~20% of phase days, split equally across N review segments
-- If N = 0, create a single work segment spanning the full phase
-- All dates snap to working days using existing `addWorkingDays` utility
+| File | Change |
+|------|--------|
+| `src/components/layout/TopNav.tsx` | Add "Dashboard" and "Staff" nav items |
+| `src/App.tsx` | Add `/dashboard` and `/staff` routes |
+| `src/components/timeline/GanttChart.tsx` | Show assigned staff badges in phase rows |
+| `src/types/database.ts` | Add `StaffMember` and `PhaseStaffAssignment` types |
 
-### No Database Changes
-Same tables: `phases`, `tasks`, `task_segments`. We're just inserting fewer rows with a simpler pattern.
+### Implementation Order
 
-### Backward Compatibility
-- Existing projects with step-level detail are unaffected
-- All removed components (`StepLibrary`, `FeedbackConfig`, `DependencyEditor`) remain in the codebase
-- The `computeSchedule` engine remains available for potential future "advanced mode"
+1. **Database**: Migration for `staff_members` + `phase_staff_assignments` tables with RLS
+2. **Staff page**: CRUD for staff directory
+3. **Staff assignment**: Popover on Gantt phase rows to assign/remove staff
+4. **Dashboard**: Projects overview + staff allocation timeline
+5. **Navigation**: Add both new pages to TopNav and router
+
+### Conflict Detection Logic
+
+For the staff allocation chart, query all `phase_staff_assignments` joined with phases and tasks to get date ranges. For each staff member, check if any assignments overlap in time. Flag overlaps with a warning icon.
+
+---
+
+## What This Does NOT Change
+
+- Existing project creation flow (unchanged)
+- Existing Gantt chart functionality (only adds staff badges)
+- No changes to the schedule engine or segment logic
+- No changes to client portal or shared views
 
