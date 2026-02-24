@@ -1129,6 +1129,7 @@ export type Database = {
           end_date: string
           id: string
           order_index: number
+          review_notes: string | null
           segment_type: string | null
           start_date: string
           task_id: string
@@ -1138,6 +1139,7 @@ export type Database = {
           end_date: string
           id?: string
           order_index?: number
+          review_notes?: string | null
           segment_type?: string | null
           start_date: string
           task_id: string
@@ -1147,6 +1149,7 @@ export type Database = {
           end_date?: string
           id?: string
           order_index?: number
+          review_notes?: string | null
           segment_type?: string | null
           start_date?: string
           task_id?: string

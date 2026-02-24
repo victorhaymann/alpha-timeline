@@ -1,0 +1,1 @@
+ALTER TABLE task_segments ADD COLUMN review_notes text;
