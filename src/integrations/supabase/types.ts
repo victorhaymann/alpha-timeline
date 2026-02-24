@@ -502,6 +502,42 @@ export type Database = {
           },
         ]
       }
+      phase_staff_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          phase_id: string
+          staff_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          phase_id: string
+          staff_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          phase_id?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "phase_staff_assignments_phase_id_fkey"
+            columns: ["phase_id"]
+            isOneToOne: false
+            referencedRelation: "phases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "phase_staff_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "staff_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           collapsed_by_default: boolean | null
@@ -973,6 +1009,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      staff_members: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          created_by: string
+          email: string | null
+          full_name: string
+          id: string
+          is_active: boolean
+          role_title: string | null
+          skills: string[]
+          softwares: string[]
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by: string
+          email?: string | null
+          full_name: string
+          id?: string
+          is_active?: boolean
+          role_title?: string | null
+          skills?: string[]
+          softwares?: string[]
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          created_by?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          role_title?: string | null
+          skills?: string[]
+          softwares?: string[]
+          updated_at?: string
+        }
+        Relationships: []
       }
       step_templates: {
         Row: {

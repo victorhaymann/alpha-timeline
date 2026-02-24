@@ -22,6 +22,7 @@ import { InlineDatePicker } from './InlineDatePicker';
 import { GanttHeader } from './GanttHeader';
 import { useTaskPopover } from './useTaskPopover';
 import { TaskPopoverMenu } from './TaskPopoverMenu';
+import { StaffAssignmentPopover } from '@/components/staff/StaffAssignmentPopover';
 import { 
   useGanttCalculations, 
   isValidDate, 
@@ -809,16 +810,19 @@ export function GanttChart({
                           : section.tasks.length}
                       </span>
                       {section.type === 'phase' && !readOnly && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAddTask(section.phase.id);
-                          }}
-                          className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-                          title="Add task"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                        <>
+                          <StaffAssignmentPopover phaseId={section.phase.id} projectId={projectId} />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddTask(section.phase.id);
+                            }}
+                            className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                            title="Add task"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </>
                       )}
                       {isWeeklyCall && !readOnly && onAddMeeting && (
                         <button
