@@ -1,58 +1,133 @@
 
 
-# Staff Categories System
+# Dashboard Overhaul: Dual Gantt Planning View
 
-## What We're Building
+## Vision
 
-A `staff_categories` table to classify staff members (e.g., "3D Artist", "Compositor", "VFX"). Each staff member gets assigned a category. Categories are manageable from the Settings page, and the Staff page/assignment popover can filter by category.
+Replace the current card-based dashboard with a proper **Head of Planning** command center featuring two full-width Gantt charts:
 
-## Database
+1. **Projects Gantt** -- Every active project as a row, with phase bars showing real-time progress
+2. **Staff Gantt** -- Every staff member as a row (grouped by category), showing their assignments across projects, with an **availability checker** to find who's free on a given date
 
-### New Table: `staff_categories`
+Both Gantts share the same timeline scale and have search/filter controls.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | uuid PK | |
-| name | text NOT NULL UNIQUE | Category name |
-| created_by | uuid NOT NULL | PM who created it |
-| created_at | timestamptz | |
+---
 
-RLS: PMs can CRUD their own (or admin all). Same pattern as `staff_members`.
+## UX Design
 
-### Modify `staff_members`
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│  Dashboard                                        Mon, Feb 24 2026  │
+│                                                                      │
+│  ┌── Projects Timeline ─────────────────────────────────────────────┐│
+│  │ [Search project...]  [Category: All ▾]                           ││
+│  │        Feb 17   Feb 24   Mar 3    Mar 10   Mar 17   Mar 24      ││
+│  │  ──────────────────────────────────────────────────────────      ││
+│  │  Project Alpha                                                   ││
+│  │   ▓▓▓▓Pre▓▓▓▓  ▓▓▓▓▓▓Production▓▓▓▓▓▓  ▓▓Post▓▓  ▓Del▓       ││
+│  │                                                                  ││
+│  │  Project Beta                                                    ││
+│  │           ▓▓Pre▓▓  ▓▓▓▓▓▓▓Production▓▓▓▓▓▓▓  ▓Post▓            ││
+│  └──────────────────────────────────────────────────────────────────┘│
+│                                                                      │
+│  ┌── Staff Allocation ──────────────────────────────────────────────┐│
+│  │ [Search name...]  [Category: All ▾]  [📅 Check availability]    ││
+│  │        Feb 17   Feb 24   Mar 3    Mar 10   Mar 17   Mar 24      ││
+│  │                                                                  ││
+│  │  ── 3D Artist ──────────────────────────────────────────────     ││
+│  │  Alice M.    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                                   ││
+│  │              Project Alpha (Production)                          ││
+│  │                                                                  ││
+│  │  ── Compositor ─────────────────────────────────────────────     ││
+│  │  Bob T.      ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                                   ││
+│  │              ⚠ Overlap                ▓▓▓▓▓▓▓▓▓▓               ││
+│  │                                                                  ││
+│  │  ── Editor ─────────────────────────────────────────────────     ││
+│  │  Clara S.    ✅ Available on Mar 10                              ││
+│  └──────────────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-Add a `category_id` column (uuid, nullable, FK to `staff_categories`).
+### Availability Checker
+- A date picker button opens a calendar. Select a date.
+- Staff members available on that date get a green "Available" badge.
+- Staff with assignments on that date show the project name.
+- The list auto-sorts: available staff first.
 
-### Seed Data
+---
 
-Insert all 22 categories from the screenshots:
-3D Artist, 3D Asset, 3D Scan, AI Artists, Animator, Artistic Direction, Bank Assets, Color Grader, Compositing, Executive Production, Modeling & Texturing, Models, Motion Designer, Other, Photograph, Rendering, Simulation Work, Sound Designer, UI Designer Unreal, Unreal Developer, VFX, Video Editor, Web Developer
+## Technical Plan
 
-## UI Changes
+### New Components
 
-### 1. Settings Page -- New "Staff Categories" Tab
+| File | Purpose |
+|------|---------|
+| `src/components/dashboard/ProjectsGantt.tsx` | Full-width Gantt with one row per project, phase bars color-coded, today marker, week headers, search input, status filter |
+| `src/components/dashboard/StaffGantt.tsx` | Full-width Gantt with staff rows grouped by category, project assignment bars, search, category filter, availability date picker |
 
-Add a new tab to `SettingsPage.tsx` with a simple list of categories, each with a delete button (trash icon), and an "Add Category" input at the top. Matches the reference screenshots exactly.
-
-### 2. Staff Dialog -- Category Dropdown
-
-Replace the free-text "Role" input in `StaffDialog.tsx` with a `<Select>` dropdown populated from `staff_categories`. Keep the field optional.
-
-### 3. Staff Page -- Show Category Column
-
-Replace the "Role" column in the staff table with "Category", showing the category name from the joined data.
-
-### 4. Staff Assignment Popover -- Group by Category
-
-In `StaffAssignmentPopover.tsx`, group staff by their category for easier selection when assigning to phases.
-
-## Files to Change
+### Modified Files
 
 | File | Change |
-|------|--------|
-| Migration SQL | Create `staff_categories` table + add `category_id` to `staff_members` + seed 22 categories |
-| `src/pages/SettingsPage.tsx` | Add "Staff Categories" tab with list + add + delete |
-| `src/components/staff/StaffDialog.tsx` | Replace role text input with category select dropdown |
-| `src/pages/Staff.tsx` | Join category name, show in table |
-| `src/components/staff/StaffAssignmentPopover.tsx` | Group staff list by category |
+|------|---------|
+| `src/pages/Dashboard.tsx` | Replace card grid + basic allocation chart with the two new Gantt components. Keep data fetching but add `staff_categories` query and pass `category_id` with staff data. |
+
+### Removed Components (no longer needed on dashboard)
+- `ProjectOverviewCard` -- no longer rendered (keep file, might be useful elsewhere)
+- `StaffAllocationChart` -- replaced by `StaffGantt` (keep file)
+
+### Data Flow
+
+**Dashboard.tsx** fetches:
+- `projects` (active/draft) -- already done
+- `phases` per project -- already done
+- `tasks` with dates -- already done
+- `task_segments` -- NEW, needed to show work/review within phases
+- `phase_staff_assignments` -- already done
+- `staff_members` with `category_id` -- extend existing query
+- `staff_categories` -- NEW query
+
+Passes pre-processed data to each Gantt component.
+
+### ProjectsGantt Component
+
+**Props**: projects array with their phases and date ranges
+
+**Features**:
+- Search input filters projects by name (case-insensitive)
+- Each project = 1 row, with colored phase bars (Pre-Prod, Production, Post-Prod, Delivery)
+- Phase bars show segment-level detail (work vs review using dashed pattern for review)
+- Today marker (red vertical line)
+- Week column headers
+- Click on a project row navigates to `/projects/:id`
+- Horizontal scroll for timeline, frozen left column with project names
+- Timeline range: 2 weeks back to 10 weeks ahead (adjustable)
+
+### StaffGantt Component
+
+**Props**: staff members with their assignments, categories
+
+**Features**:
+- Search input filters by staff name
+- Category dropdown filters by job category
+- Staff rows grouped under category headers (collapsible)
+- Each assignment = colored bar (color per project, same palette as ProjectsGantt)
+- Tooltip on hover: project name, phase, date range
+- Conflict detection (overlapping bars get warning icon)
+- **Availability checker**: date picker button. When a date is selected:
+  - Each staff row shows a badge: "Available" (green) or the project name (muted)
+  - Available staff sort to the top within their category group
+  - A summary count appears: "X staff available on [date]"
+
+### Timeline Rendering (shared logic)
+
+Both Gantts use the same time axis:
+- Fixed left column (~180px) for names
+- Scrollable right area with day columns
+- Week header labels (Mon dates)
+- Today marker
+- Working days only (Mon-Fri) -- reuse `workingDays.ts`
+
+### No Database Changes
+
+All data already exists. We just query `staff_categories` and join `category_id` from `staff_members`, both of which are already in the schema.
 
