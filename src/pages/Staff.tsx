@@ -21,10 +21,12 @@ interface StaffMember {
   full_name: string;
   email: string | null;
   role_title: string | null;
+  category_id: string | null;
   skills: string[];
   softwares: string[];
   is_active: boolean;
   created_by: string;
+  staff_categories?: { name: string } | null;
 }
 
 export default function Staff() {
@@ -40,14 +42,13 @@ export default function Staff() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('staff_members')
-        .select('*')
+        .select('*, staff_categories(name)')
         .order('full_name');
       if (error) throw error;
       return data as StaffMember[];
     },
   });
 
-  // Collect all existing skills/softwares for autocomplete
   const existingSkills = useMemo(() => {
     const all = new Set<string>();
     staffMembers.forEach(s => s.skills?.forEach(sk => all.add(sk)));
@@ -61,29 +62,20 @@ export default function Staff() {
   }, [staffMembers]);
 
   const createMutation = useMutation({
-    mutationFn: async (data: { full_name: string; email: string; role_title: string; skills: string[]; softwares: string[] }) => {
-      const { error } = await supabase.from('staff_members').insert({
-        ...data,
-        created_by: user!.id,
-      });
+    mutationFn: async (data: { full_name: string; email: string; role_title: string; category_id: string | null; skills: string[]; softwares: string[] }) => {
+      const { error } = await supabase.from('staff_members').insert({ ...data, created_by: user!.id });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff_members'] });
-      toast.success('Staff member added');
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['staff_members'] }); toast.success('Staff member added'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { full_name: string; email: string; role_title: string; skills: string[]; softwares: string[] } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { full_name: string; email: string; role_title: string; category_id: string | null; skills: string[]; softwares: string[] } }) => {
       const { error } = await supabase.from('staff_members').update(data).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff_members'] });
-      toast.success('Staff member updated');
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['staff_members'] }); toast.success('Staff member updated'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -92,19 +84,19 @@ export default function Staff() {
       const { error } = await supabase.from('staff_members').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff_members'] });
-      toast.success('Staff member removed');
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['staff_members'] }); toast.success('Staff member removed'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const filtered = staffMembers.filter(s =>
-    !search || s.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    s.role_title?.toLowerCase().includes(search.toLowerCase()) ||
-    s.skills?.some(sk => sk.toLowerCase().includes(search.toLowerCase())) ||
-    s.softwares?.some(sw => sw.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = staffMembers.filter(s => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return s.full_name.toLowerCase().includes(q) ||
+      s.staff_categories?.name?.toLowerCase().includes(q) ||
+      s.role_title?.toLowerCase().includes(q) ||
+      s.skills?.some(sk => sk.toLowerCase().includes(q)) ||
+      s.softwares?.some(sw => sw.toLowerCase().includes(q));
+  });
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -120,12 +112,7 @@ export default function Staff() {
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by name, role, skill..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="pl-9"
-        />
+        <Input placeholder="Search by name, category, skill..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
       </div>
 
       {isLoading ? (
@@ -141,7 +128,7 @@ export default function Staff() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead className="hidden md:table-cell">Skills</TableHead>
                 <TableHead className="hidden md:table-cell">Software</TableHead>
                 <TableHead className="w-20" />
@@ -153,20 +140,16 @@ export default function Staff() {
                   <TableCell>
                     <div>
                       <span className="font-medium">{member.full_name}</span>
-                      {member.email && (
-                        <p className="text-xs text-muted-foreground">{member.email}</p>
-                      )}
+                      {member.email && <p className="text-xs text-muted-foreground">{member.email}</p>}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{member.role_title || '—'}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{member.staff_categories?.name || '—'}</TableCell>
                   <TableCell className="hidden md:table-cell">
                     <div className="flex flex-wrap gap-1">
                       {member.skills?.slice(0, 3).map(s => (
                         <Badge key={s} variant="secondary" className="text-[10px]">{s}</Badge>
                       ))}
-                      {member.skills?.length > 3 && (
-                        <Badge variant="outline" className="text-[10px]">+{member.skills.length - 3}</Badge>
-                      )}
+                      {member.skills?.length > 3 && <Badge variant="outline" className="text-[10px]">+{member.skills.length - 3}</Badge>}
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
@@ -174,27 +157,15 @@ export default function Staff() {
                       {member.softwares?.slice(0, 3).map(s => (
                         <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>
                       ))}
-                      {member.softwares?.length > 3 && (
-                        <Badge variant="outline" className="text-[10px]">+{member.softwares.length - 3}</Badge>
-                      )}
+                      {member.softwares?.length > 3 && <Badge variant="outline" className="text-[10px]">+{member.softwares.length - 3}</Badge>}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
-                        onClick={() => { setEditingStaff(member); setDialogOpen(true); }}
-                      >
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => { setEditingStaff(member); setDialogOpen(true); }}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteId(member.id)}
-                      >
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive hover:text-destructive" onClick={() => setDeleteId(member.id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -225,16 +196,12 @@ export default function Staff() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove staff member?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will also remove all their project phase assignments. This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>This will also remove all their project phase assignments. This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => { if (deleteId) deleteMutation.mutate(deleteId); setDeleteId(null); }}
-            >
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteId) deleteMutation.mutate(deleteId); setDeleteId(null); }}>
               Remove
             </AlertDialogAction>
           </AlertDialogFooter>

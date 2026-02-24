@@ -1010,9 +1010,31 @@ export type Database = {
           },
         ]
       }
+      staff_categories: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       staff_members: {
         Row: {
           avatar_url: string | null
+          category_id: string | null
           created_at: string
           created_by: string
           email: string | null
@@ -1026,6 +1048,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          category_id?: string | null
           created_at?: string
           created_by: string
           email?: string | null
@@ -1039,6 +1062,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          category_id?: string | null
           created_at?: string
           created_by?: string
           email?: string | null
@@ -1050,7 +1074,15 @@ export type Database = {
           softwares?: string[]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "staff_members_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "staff_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       step_templates: {
         Row: {
