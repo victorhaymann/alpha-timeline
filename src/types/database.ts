@@ -105,6 +105,7 @@ export interface TaskSegment {
   end_date: string;
   order_index: number;
   segment_type: SegmentType;
+  review_notes?: string | null;
   created_at: string;
 }
 

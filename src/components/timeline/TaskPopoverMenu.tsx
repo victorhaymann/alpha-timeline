@@ -1,7 +1,7 @@
 import React from 'react';
 import { Task, TaskSegment, SegmentType } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
-import { Plus, RefreshCw, Layers, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Layers, Trash2, FileText } from 'lucide-react';
 
 interface TaskPopoverMenuProps {
   task: Task;
@@ -12,6 +12,7 @@ interface TaskPopoverMenuProps {
   onConvertSegmentType?: (segmentId: string, newType: SegmentType) => void;
   onDeleteSegment?: (segmentId: string, taskId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  onEditReviewNotes?: (segmentId: string, taskName: string, currentNotes: string) => void;
   onClose: () => void;
 }
 
@@ -24,6 +25,7 @@ export function TaskPopoverMenu({
   onConvertSegmentType,
   onDeleteSegment,
   onDeleteTask,
+  onEditReviewNotes,
   onClose,
 }: TaskPopoverMenuProps) {
   // Helper to render the convert option
@@ -123,7 +125,26 @@ export function TaskPopoverMenu({
       )}
       
       {renderConvertOption()}
-      
+
+      {/* Edit Review Notes - only for review segments */}
+      {onEditReviewNotes && (() => {
+        const targetSeg = hoveredSegmentId 
+          ? taskSegments.find(s => s.id === hoveredSegmentId)
+          : taskSegments.find(s => s.segment_type === 'review');
+        if (!targetSeg || targetSeg.segment_type !== 'review') return null;
+        return (
+          <button
+            onClick={() => {
+              onEditReviewNotes(targetSeg.id, task.name, targetSeg.review_notes || '');
+              onClose();
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left w-full"
+          >
+            <FileText className="w-4 h-4" />
+            Edit Review Notes...
+          </button>
+        );
+      })()}
       {/* Delete Period option - only if multiple segments and one is hovered */}
       {onDeleteSegment && taskSegments.length > 1 && hoveredSegmentId && (
         <button

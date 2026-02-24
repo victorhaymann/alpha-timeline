@@ -22,6 +22,8 @@ import { InlineDatePicker } from './InlineDatePicker';
 import { GanttHeader } from './GanttHeader';
 import { useTaskPopover } from './useTaskPopover';
 import { TaskPopoverMenu } from './TaskPopoverMenu';
+import { ReviewNotesDialog } from './ReviewNotesDialog';
+import { ReviewNotesViewDialog } from './ReviewNotesViewDialog';
 import { StaffAssignmentPopover } from '@/components/staff/StaffAssignmentPopover';
 import { 
   useGanttCalculations, 
@@ -58,6 +60,7 @@ import {
   MoreHorizontal,
   CalendarIcon,
   HelpCircle,
+  FileText,
 } from 'lucide-react';
 import { Calendar } from '@/components/ui/calendar';
 import { 
@@ -170,6 +173,26 @@ export function GanttChart({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskName, setEditingTaskName] = useState<string>('');
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Review notes dialog state
+  const [reviewNotesDialog, setReviewNotesDialog] = useState<{
+    open: boolean;
+    segmentId: string;
+    taskName: string;
+    notes: string;
+  } | null>(null);
+  
+  // Client-side review notes view dialog state
+  const [reviewNotesViewDialog, setReviewNotesViewDialog] = useState<{
+    open: boolean;
+    taskName: string;
+    notes: string;
+    startDate?: string;
+    endDate?: string;
+  } | null>(null);
+
+  // Local segments state for optimistic updates of review_notes
+  const [localSegmentNotes, setLocalSegmentNotes] = useState<Record<string, string>>({});
 
   // Handle starting task name edit (simplified - no cascade context needed)
   const handleStartEdit = useCallback((taskId: string, currentName: string) => {
@@ -570,6 +593,7 @@ export function GanttChart({
   });
 
   return (
+    <>
     <TooltipProvider delayDuration={200}>
     <div className="flex flex-col gap-2 md:gap-4">
       {/* Controls - Light Header */}
@@ -1387,7 +1411,7 @@ export function GanttChart({
                                               <div
                                                 className={cn(
                                                   "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
-                                                  readOnly ? "cursor-default" : "cursor-pointer",
+                                                  readOnly ? (isReviewSegment && (localSegmentNotes[seg.id] || (seg as any).review_notes) ? "cursor-pointer" : "cursor-default") : "cursor-pointer",
                                                   !isReviewSegment && "gantt-task-bar-base",
                                                   "hover:shadow-xl hover:ring-2 hover:ring-white/40",
                                                   (isFeedback || isReviewSegment) && "gantt-review-bar",
@@ -1400,14 +1424,29 @@ export function GanttChart({
                                                   // Enable segment-level dragging for all segments
                                                   handleDragStart(e, task, 'move', seg);
                                                 }}
+                                                onClick={readOnly && isReviewSegment ? () => {
+                                                  const notes = localSegmentNotes[seg.id] || (seg as any).review_notes;
+                                                  if (notes) {
+                                                    setReviewNotesViewDialog({
+                                                      open: true,
+                                                      taskName: task.name,
+                                                      notes,
+                                                      startDate: seg.start_date,
+                                                      endDate: seg.end_date,
+                                                    });
+                                                  }
+                                                } : undefined}
                                               >
                                                 {/* Review badge indicator */}
                                                 {isReviewSegment && segWidth > 50 && (
                                                   <span 
-                                                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-background border-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10"
+                                                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-background border-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10 flex items-center gap-1"
                                                     style={{ borderColor: sectionColor, color: sectionColor }}
                                                   >
                                                     Review
+                                                    {(localSegmentNotes[seg.id] || (seg as any).review_notes) && (
+                                                      <FileText className="w-2.5 h-2.5" />
+                                                    )}
                                                   </span>
                                                 )}
                                                 {/* Resize handles for segments */}
@@ -1531,9 +1570,12 @@ export function GanttChart({
                                           onAddSegment={onAddSegment}
                                           onEditSegments={onEditSegments}
                                           onConvertSegmentType={onConvertSegmentType}
-                                          onDeleteSegment={onDeleteSegment}
-                                          onDeleteTask={onDeleteTask}
-                                          onClose={closeTaskMenu}
+                                           onDeleteSegment={onDeleteSegment}
+                                           onDeleteTask={onDeleteTask}
+                                           onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
+                                             setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
+                                           } : undefined}
+                                           onClose={closeTaskMenu}
                                         />
                                       </PopoverContent>
                                     </Popover>
@@ -1671,9 +1713,12 @@ export function GanttChart({
                                     onAddSegment={onAddSegment}
                                     onEditSegments={onEditSegments}
                                     onConvertSegmentType={onConvertSegmentType}
-                                    onDeleteSegment={onDeleteSegment}
-                                    onDeleteTask={onDeleteTask}
-                                    onClose={closeTaskMenu}
+                                     onDeleteSegment={onDeleteSegment}
+                                     onDeleteTask={onDeleteTask}
+                                     onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
+                                       setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
+                                     } : undefined}
+                                     onClose={closeTaskMenu}
                                   />
                                 </PopoverContent>
                               </Popover>
@@ -1773,5 +1818,36 @@ export function GanttChart({
       )}
     </div>
     </TooltipProvider>
+
+    {/* Review Notes Edit Dialog (Admin) */}
+    {reviewNotesDialog && (
+      <ReviewNotesDialog
+        open={reviewNotesDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setReviewNotesDialog(null);
+        }}
+        segmentId={reviewNotesDialog.segmentId}
+        taskName={reviewNotesDialog.taskName}
+        initialNotes={reviewNotesDialog.notes}
+        onSaved={(segId, notes) => {
+          setLocalSegmentNotes(prev => ({ ...prev, [segId]: notes }));
+        }}
+      />
+    )}
+
+    {/* Review Notes View Dialog (Client) */}
+    {reviewNotesViewDialog && (
+      <ReviewNotesViewDialog
+        open={reviewNotesViewDialog.open}
+        onOpenChange={(open) => {
+          if (!open) setReviewNotesViewDialog(null);
+        }}
+        taskName={reviewNotesViewDialog.taskName}
+        reviewNotes={reviewNotesViewDialog.notes}
+        startDate={reviewNotesViewDialog.startDate}
+        endDate={reviewNotesViewDialog.endDate}
+      />
+    )}
+    </>
   );
 }
