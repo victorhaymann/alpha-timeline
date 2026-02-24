@@ -418,12 +418,30 @@ export default function ProjectDetail() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
-            <Badge variant="outline" className={cn(
-              project.status === 'active' && 'bg-status-in-progress/20 text-status-in-progress border-status-in-progress/30',
-              project.status === 'draft' && 'bg-status-pending/20 text-status-pending border-status-pending/30',
-              project.status === 'completed' && 'bg-status-completed/20 text-status-completed border-status-completed/30'
-            )}>
-              {project.status}
+            <Badge
+              variant="outline"
+              className={cn(
+                'cursor-pointer select-none transition-colors',
+                project.status === 'active' && 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/25',
+                project.status === 'draft' && 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+                project.status === 'completed' && 'bg-sky-500/15 text-sky-600 border-sky-500/30 hover:bg-sky-500/25'
+              )}
+              onClick={async () => {
+                if (project.status === 'draft') return; // Only toggle between active <-> completed
+                const newStatus = project.status === 'active' ? 'completed' : 'active';
+                const { error } = await supabase.from('projects').update({ status: newStatus }).eq('id', project.id);
+                if (error) {
+                  toast({ title: 'Error', description: 'Failed to update status.', variant: 'destructive' });
+                  return;
+                }
+                setProject(prev => prev ? { ...prev, status: newStatus } as Project : null);
+                toast({
+                  title: newStatus === 'completed' ? '🎉 Project delivered!' : 'Back in production',
+                  description: newStatus === 'completed' ? 'Project marked as delivered.' : 'Project is back in production.',
+                });
+              }}
+            >
+              {project.status === 'active' ? 'In Production' : project.status === 'completed' ? 'Delivered' : 'Draft'}
             </Badge>
           </div>
           <div className="flex items-center gap-4 ml-11 text-sm text-muted-foreground">

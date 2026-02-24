@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, differenceInCalendarDays, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -27,7 +29,7 @@ interface ProjectsGanttProps {
 }
 
 const ROW_H = 44;
-const LEFT_COL = 200;
+const LEFT_COL = 260;
 const DAY_W = 32;
 
 function getTimelineRange() {
@@ -62,8 +64,23 @@ function buildWeeks(days: Date[]): { label: string; startIdx: number; count: num
   return weeks;
 }
 
+type StatusFilter = 'production' | 'delivered' | 'all';
+
+const STATUS_LABELS: Record<string, string> = {
+  active: 'In Production',
+  draft: 'Draft',
+  completed: 'Delivered',
+};
+
+const STATUS_CLASSES: Record<string, string> = {
+  active: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
+  draft: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  completed: 'bg-sky-500/15 text-sky-600 border-sky-500/30',
+};
+
 export function ProjectsGantt({ projects }: ProjectsGanttProps) {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('production');
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -83,12 +100,22 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
   }, [days]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return projects;
-    const q = search.toLowerCase();
-    return projects.filter(p =>
-      p.name.toLowerCase().includes(q) || (p.clientName || '').toLowerCase().includes(q)
-    );
-  }, [projects, search]);
+    let list = projects;
+    // Status filter
+    if (statusFilter === 'production') {
+      list = list.filter(p => p.status === 'active' || p.status === 'draft');
+    } else if (statusFilter === 'delivered') {
+      list = list.filter(p => p.status === 'completed');
+    }
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(q) || (p.clientName || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [projects, search, statusFilter]);
 
   function dayIndex(date: Date): number {
     // find closest working day index
@@ -115,16 +142,31 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between p-3 border-b border-border">
+      <div className="flex items-center justify-between p-3 border-b border-border gap-3">
         <h2 className="text-sm font-semibold">Projects Timeline</h2>
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search project..."
-            className="pl-9 h-9 text-xs"
-          />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border border-border overflow-hidden">
+            {(['production', 'delivered', 'all'] as StatusFilter[]).map(f => (
+              <Button
+                key={f}
+                variant="ghost"
+                size="sm"
+                className={`h-8 rounded-none text-xs px-3 ${statusFilter === f ? 'bg-muted font-semibold' : ''}`}
+                onClick={() => setStatusFilter(f)}
+              >
+                {f === 'production' ? 'In Production' : f === 'delivered' ? 'Delivered' : 'All'}
+              </Button>
+            ))}
+          </div>
+          <div className="relative w-56">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search project..."
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
         </div>
       </div>
 
@@ -146,8 +188,13 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
               style={{ height: ROW_H }}
               onClick={() => navigate(`/projects/${p.id}`)}
             >
-              <div className="min-w-0">
-                <div className="text-xs font-medium truncate">{p.name}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium truncate">{p.name}</span>
+                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 shrink-0 ${STATUS_CLASSES[p.status] || ''}`}>
+                    {STATUS_LABELS[p.status] || p.status}
+                  </Badge>
+                </div>
                 {p.clientName && (
                   <div className="text-[10px] text-muted-foreground truncate">{p.clientName}</div>
                 )}
