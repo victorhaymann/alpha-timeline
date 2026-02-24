@@ -12,7 +12,7 @@ import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
 import NewProject from "./pages/NewProject";
 import ProjectDetail from "./pages/ProjectDetail";
-import Templates from "./pages/Templates";
+
 import SettingsPage from "./pages/SettingsPage";
 import Staff from "./pages/Staff";
 import Dashboard from "./pages/Dashboard";
@@ -75,7 +75,7 @@ function AppRoutes() {
         <Route path="/clients" element={<Clients />} />
         <Route path="/clients/:id" element={<ClientDetail />} />
         <Route path="/staff" element={<Staff />} />
-        <Route path="/templates" element={<Templates />} />
+        
         <Route path="/settings" element={<SettingsPage />} />
         
         {/* Client Portal routes */}
