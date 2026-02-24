@@ -14,7 +14,7 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('projects')
         .select('id, name, client_name, start_date, end_date, status')
-        .in('status', ['active', 'draft'])
+        .in('status', ['active', 'draft', 'completed'])
         .order('start_date', { ascending: false });
       if (error) throw error;
       return data;
