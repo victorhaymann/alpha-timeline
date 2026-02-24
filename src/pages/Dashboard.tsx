@@ -2,13 +2,12 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
-import { ProjectOverviewCard } from '@/components/dashboard/ProjectOverviewCard';
-import { StaffAllocationChart } from '@/components/dashboard/StaffAllocationChart';
+import { ProjectsGantt } from '@/components/dashboard/ProjectsGantt';
+import { StaffGantt } from '@/components/dashboard/StaffGantt';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { LayoutDashboard } from 'lucide-react';
 
 export default function Dashboard() {
-  // Fetch all active/draft projects
   const { data: projects = [] } = useQuery({
     queryKey: ['dashboard_projects'],
     queryFn: async () => {
@@ -22,15 +21,15 @@ export default function Dashboard() {
     },
   });
 
-  // Fetch all phases with tasks for these projects
   const { data: phases = [] } = useQuery({
     queryKey: ['dashboard_phases', projects.map(p => p.id)],
     enabled: projects.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('phases')
-        .select('id, name, project_id')
-        .in('project_id', projects.map(p => p.id));
+        .select('id, name, project_id, color, order_index')
+        .in('project_id', projects.map(p => p.id))
+        .order('order_index');
       if (error) throw error;
       return data;
     },
@@ -49,7 +48,6 @@ export default function Dashboard() {
     },
   });
 
-  // Fetch all phase staff assignments
   const { data: staffAssignments = [] } = useQuery({
     queryKey: ['phase_staff_assignments_all'],
     queryFn: async () => {
@@ -62,66 +60,94 @@ export default function Dashboard() {
   });
 
   const { data: staffMembers = [] } = useQuery({
-    queryKey: ['staff_members'],
+    queryKey: ['staff_members_with_category'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('staff_members')
-        .select('id, full_name')
+        .select('id, full_name, category_id')
         .eq('is_active', true);
       if (error) throw error;
       return data;
     },
   });
 
-  const staffMap = useMemo(() => new Map(staffMembers.map(s => [s.id, s.full_name])), [staffMembers]);
+  const { data: staffCategories = [] } = useQuery({
+    queryKey: ['staff_categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('staff_categories')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+  });
 
-  // Build project data with phases and staff
-  const projectData = useMemo(() => {
+  const categoryMap = useMemo(() => new Map(staffCategories.map(c => [c.id, c.name])), [staffCategories]);
+
+  // Build ProjectsGantt data
+  const projectRows = useMemo(() => {
     return projects.map(project => {
       const projectPhases = phases.filter(p => p.project_id === project.id);
-      const phaseData = projectPhases.map(phase => ({
-        name: phase.name,
-        tasks: tasks.filter(t => t.phase_id === phase.id).map(t => ({
-          start_date: t.start_date,
-          end_date: t.end_date,
-        })),
-      }));
+      const phaseBars = projectPhases.map(phase => {
+        const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
+        if (phaseTasks.length === 0) return null;
+        const startDate = phaseTasks.reduce((min, t) => {
+          const d = new Date(t.start_date!);
+          return d < min ? d : min;
+        }, new Date(phaseTasks[0].start_date!));
+        const endDate = phaseTasks.reduce((max, t) => {
+          const d = new Date(t.end_date!);
+          return d > max ? d : max;
+        }, new Date(phaseTasks[0].end_date!));
+        return {
+          name: phase.name,
+          color: phase.color || '',
+          startDate,
+          endDate,
+        };
+      }).filter(Boolean) as { name: string; color: string; startDate: Date; endDate: Date }[];
 
-      const phaseIds = new Set(projectPhases.map(p => p.id));
-      const projectStaffIds = new Set(
-        staffAssignments.filter(a => phaseIds.has(a.phase_id)).map(a => a.staff_id)
-      );
-      const assignedStaff = Array.from(projectStaffIds).map(id => staffMap.get(id) || 'Unknown');
-
-      return { project, phases: phaseData, assignedStaff };
+      return {
+        id: project.id,
+        name: project.name,
+        clientName: project.client_name,
+        status: project.status,
+        startDate: new Date(project.start_date),
+        endDate: new Date(project.end_date),
+        phases: phaseBars,
+      };
     });
-  }, [projects, phases, tasks, staffAssignments, staffMap]);
+  }, [projects, phases, tasks]);
 
-  // Build allocation chart data
-  const allocationAssignments = useMemo(() => {
+  // Build StaffGantt data
+  const staffData = useMemo(() => {
+    return staffMembers.map(s => ({
+      id: s.id,
+      fullName: s.full_name,
+      categoryId: s.category_id,
+      categoryName: s.category_id ? categoryMap.get(s.category_id) || null : null,
+    }));
+  }, [staffMembers, categoryMap]);
+
+  const staffAssignmentBars = useMemo(() => {
     return staffAssignments.map(a => {
       const phase = phases.find(p => p.id === a.phase_id);
       if (!phase) return null;
       const project = projects.find(p => p.id === phase.project_id);
       if (!project) return null;
-
-      // Get phase date range from tasks
       const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
       if (phaseTasks.length === 0) return null;
-
       const startDate = phaseTasks.reduce((min, t) => {
         const d = new Date(t.start_date!);
         return d < min ? d : min;
       }, new Date(phaseTasks[0].start_date!));
-
       const endDate = phaseTasks.reduce((max, t) => {
         const d = new Date(t.end_date!);
         return d > max ? d : max;
       }, new Date(phaseTasks[0].end_date!));
-
       return {
         staffId: a.staff_id,
-        staffName: staffMap.get(a.staff_id) || 'Unknown',
         projectId: project.id,
         projectName: project.name,
         phaseName: phase.name,
@@ -129,12 +155,20 @@ export default function Dashboard() {
         endDate,
         color: '',
       };
-    }).filter(Boolean) as NonNullable<ReturnType<typeof Array.prototype.map>[number]>[];
-  }, [staffAssignments, phases, projects, tasks, staffMap]);
+    }).filter(Boolean) as {
+      staffId: string;
+      projectId: string;
+      projectName: string;
+      phaseName: string;
+      startDate: Date;
+      endDate: Date;
+      color: string;
+    }[];
+  }, [staffAssignments, phases, projects, tasks]);
 
   return (
     <TooltipProvider>
-      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-8">
+      <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -146,32 +180,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Active Projects */}
-        <section>
-          <h2 className="text-lg font-semibold mb-4">Active Projects</h2>
-          {projectData.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No active projects</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {projectData.map(({ project, phases, assignedStaff }) => (
-                <ProjectOverviewCard
-                  key={project.id}
-                  project={project}
-                  phases={phases}
-                  assignedStaff={assignedStaff}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Staff Allocation */}
-        <section>
-          <h2 className="text-lg font-semibold mb-4">Staff Allocation</h2>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <StaffAllocationChart assignments={allocationAssignments as any} />
-          </div>
-        </section>
+        <ProjectsGantt projects={projectRows} />
+        <StaffGantt
+          staff={staffData}
+          assignments={staffAssignmentBars}
+          categories={staffCategories}
+        />
       </div>
     </TooltipProvider>
   );
