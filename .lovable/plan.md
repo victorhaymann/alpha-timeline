@@ -1,85 +1,123 @@
 
 
-# Analysis: Why Segmented Tasks (with Reviews) Drag Differently
+# Visual Alignment: Project Gantt → Dashboard Gantt Style
 
-## The Two Behaviors
+## Reference Analysis
 
-### Tasks WITHOUT review segments (works correctly)
-1. User clicks the main bar → `handleDragStart(e, task, 'move')` is called with **no segment**
-2. Hook reads `task.start_date` and `task.end_date` (line 169-170 of useDragAndResize.ts)
-3. These are the same dates used to position the bar visually (line 1205-1208 of GanttChart.tsx uses task dates when no segments exist)
-4. The bar follows the cursor perfectly because the **drag origin dates match the visual dates**
-5. On drop, `handleDragComplete` routes to `handleTaskUpdate` (simple task path)
+The dashboard Gantt (ProjectsGantt.tsx) has a clean, light, elegant aesthetic:
+- White card background (`bg-card`)
+- Very subtle grid lines (`border-border/10`)
+- Minimal 2-row header (week date + single day letter)
+- Flat-colored bars with `opacity: 0.9`, `rounded-sm`, small `shadow-sm`
+- Simple today marker (`w-0.5 bg-destructive/70`, no animation)
+- Light left-column header (`bg-muted/30`)
+- Understated hover states (`hover:bg-muted/20`)
+- `text-[10px]` and `text-[9px]` font sizes for header labels
+- No alternating week shading
+- `rounded-lg` container
 
-### Tasks WITH review segments (broken — bar moves further than cursor)
-1. User clicks the main bar → `handleDragStart(e, task, 'move')` is called with **no segment**
-2. Hook reads `task.start_date` and `task.end_date` (line 169-170)
-3. But the bar is **visually positioned** using segment-derived dates (lines 1203-1208):
-   ```
-   effectiveStartStr = min(all segment start_dates)
-   effectiveEndStr = max(all segment end_dates)
-   ```
-4. **`task.start_date` and segment-derived `effectiveStartStr` can be different** — the DB trigger syncs them, but there's a timing gap. After a drag, the task row gets updated by the trigger asynchronously. If the local `task.start_date` hasn't been refreshed yet, it's stale.
-5. The hook computes `deltaColumns` from the mouse movement, then shifts `originalStart` (which is `task.start_date`) by that delta
-6. But the bar's visual position is based on segment dates, not `task.start_date`
-7. **If `task.start_date` ≠ `min(segment start_dates)`, the preview jumps to the wrong position**
+The project Gantt (GanttChart.tsx) currently uses:
+- Grey muted background (`bg-muted`)
+- Heavy grid lines (`border-border/60`)
+- 3-row header with bold uppercase text (Month/Week/Day — 84px total)
+- Gradient bars with heavy shadows (`boxShadow: 0 4px 12px`)
+- Animated pulsing today marker with indicator dot
+- Dark left column (`bg-muted`)
+- Stronger hover states (`hover:bg-muted/40`)
+- `text-xs font-bold uppercase tracking-wider` header text
+- Alternating week shading (`bg-black/[0.04]`)
+- `rounded-xl` container
 
-## Concrete Example
+## Changes (UI only — no logic changes)
 
-```text
-Segments:        [Feb 10 ──── Feb 20]  [Feb 25 ──── Mar 5]
-Effective dates: Feb 10 → Mar 5 (used for visual bar position)
-task.start_date: Feb 12 (stale — hasn't been synced by trigger yet)
-task.end_date:   Mar 3  (also stale)
+### File: `src/components/timeline/GanttChart.tsx`
 
-User drags right by 2 columns (2 days):
-  Hook computes: newStart = Feb 12 + 2 = Feb 14, newEnd = Mar 3 + 2 = Mar 5
-  Preview shows: bar at Feb 14 → Mar 5
+**1. Main container (line 748)**
+- FROM: `rounded-xl bg-muted border border-border shadow-sm`
+- TO: `rounded-lg border border-border bg-card overflow-hidden`
 
-But the bar was visually at Feb 10 → Mar 5
-So the bar appears to jump 4 days right instead of 2
-```
+**2. Left pane background (line 751)**
+- FROM: `bg-muted border-r border-border`
+- TO: `bg-card border-r border-border`
 
-This is why the behavior is inconsistent — sometimes `task.start_date` matches the segment-derived dates (right after a refresh), and sometimes it doesn't (after a previous drag or when the trigger is slow).
+**3. Left pane header (line 753-758)**
+- FROM: `bg-muted/50 font-semibold text-xs md:text-sm tracking-wide uppercase`
+- TO: `bg-muted/30` with `text-[10px] font-medium text-muted-foreground uppercase tracking-wider` (matching dashboard's "PROJECT" header)
 
-## The Fix
+**4. Timeline header background (line 1036)**
+- FROM: `bg-muted/50`
+- TO: `bg-muted/30`
 
-The hook should use the **same dates that position the bar visually**. For tasks with segments, the main bar's `handleDragStart` should pass the segment-derived effective dates, not `task.start_date`/`task.end_date`.
+**5. Month row (line 1040-1049)**
+- FROM: `text-xs font-bold uppercase tracking-wider text-foreground`
+- TO: `text-[10px] font-medium text-muted-foreground` — subtler, matching dashboard week headers
 
-### Change in `GanttChart.tsx` (line 1389)
+**6. Week row (line 1053-1068)**
+- FROM: `text-xs font-bold uppercase tracking-wider text-foreground`
+- TO: `text-[10px] font-medium text-muted-foreground`
+- Remove alternating week background (`isAlternateWeek && "bg-black/[0.04]"`)
 
-Currently:
-```typescript
-onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
-```
+**7. Day row (line 1072-1091)**
+- FROM: 36px height, number + letter, `font-bold text-foreground` + `text-muted-foreground text-[10px]`
+- TO: Single line day letter only (like dashboard: `format(d, 'EEE').charAt(0)`), `text-[9px] text-muted-foreground`, reduce height
+- Remove alternating week background
 
-The hook then reads `task.start_date` / `task.end_date` (line 169-170 of useDragAndResize.ts).
+**8. Grid column borders throughout (all `border-r border-border/60`)**
+- FROM: `border-border/60`
+- TO: `border-border/10` (very subtle, like dashboard)
 
-**Fix**: Create a synthetic task object with the effective dates when segments exist, so the hook's `task.start_date` matches what's visually rendered:
+**9. Alternating week shading — remove all instances**
+- Remove `isAlternateWeek && "bg-black/[0.04]"` from grid backgrounds in:
+  - Phase separator grid
+  - Weekly call grid
+  - Task row grid
+  - Review sub-row grid
 
-```typescript
-// Before the bar JSX, compute the "drag task" with effective dates
-const dragTask = taskSegments.length > 0 
-  ? { ...task, start_date: effectiveStartStr, end_date: effectiveEndStr }
-  : task;
+**10. Task bar styling (line 1376-1391)**
+- FROM: `h-7 rounded-md` with `linear-gradient` and `boxShadow: 0 4px 12px ${color}66`
+- TO: `h-5 rounded-sm` with flat color and `shadow-sm`, `opacity: 0.9` (matching dashboard bars)
 
-// Then in onMouseDown:
-onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, dragTask, 'move')}
-```
+**11. Review segment bar styling (line 1526-1538)**
+- Reduce height from `h-5` to `h-4`
+- Lighten shadow
 
-This ensures the hook's `originalStart`/`originalEnd` always match the bar's visual position. The delta calculation then produces correct pixel-to-date mapping.
+**12. Today marker (line 1650-1677)**
+- FROM: Animated pulse with top indicator dot and heavy glow shadow
+- TO: Simple `w-0.5 bg-destructive/70 z-10` line (no animation, no dot)
 
-The same fix applies to:
-- The resize handles on the main bar (lines 1394-1397, 1419-1422) — should also use `dragTask`
-- The milestone bar (line 1306) — should also use `dragTask` if milestones ever have segments
+**13. Row hover states**
+- FROM: `hover:bg-muted/40`
+- TO: `hover:bg-muted/20`
 
-No changes needed for the review subrow bars — those already pass `seg` (the segment object) and use `seg.start_date`/`seg.end_date`, which is correct.
+**14. Phase separator row styling (line 1119-1135)**
+- FROM: `bg-muted/20`
+- TO: transparent (let card background show through)
 
-### Files Changed
+**15. Ghost bar during drag (line 1340-1347)**
+- Reduce height from `h-7` to `h-5` to match new bar height
 
-| File | Change |
-|------|--------|
-| `src/components/timeline/GanttChart.tsx` | Compute `dragTask` with segment-derived effective dates. Pass `dragTask` instead of `task` to all three `handleDragStart` calls on the main task bar (move + both resize handles). ~6 lines changed. |
+**16. Tooltip bar hover effects (line 1378)**
+- FROM: `hover:shadow-xl hover:ring-2 hover:ring-white/40`
+- TO: `hover:shadow-md` (subtler)
 
-No changes to `useDragAndResize.ts` or `TimelineEditor.tsx` — the hook and persistence layer are correct. The bug is purely that the wrong dates are passed into the hook at drag start.
+### File: `src/components/timeline/ganttTypes.ts`
+
+**17. Reduce DAY_ROW_HEIGHT**
+- FROM: `DAY_ROW_HEIGHT = 36`
+- TO: `DAY_ROW_HEIGHT = 24` (matching dashboard day row)
+- This changes `HEADER_HEIGHT` from 84 to 72
+
+### Summary of visual effect
+
+The project Gantt will shift from a heavy, dark, industrial look to the same clean, white-card, subtle-grid, flat-bar aesthetic as the dashboard. The 3-tier header (Month/Week/Day) is preserved for navigation but with lighter typography. All interactive functionality (drag, resize, reorder, popovers) remains untouched.
+
+| Area | Current | After |
+|------|---------|-------|
+| Container | Grey muted, rounded-xl | White card, rounded-lg |
+| Grid lines | Heavy (60% opacity) | Subtle (10% opacity) |
+| Header text | Bold, black, uppercase | Light, muted, smaller |
+| Task bars | 28px, gradient, heavy shadow | 20px, flat color, subtle shadow |
+| Today marker | Animated pulse + dot | Simple thin line |
+| Week shading | Alternating grey bands | None |
+| Hover states | Strong (40%) | Subtle (20%) |
 
