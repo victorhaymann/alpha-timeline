@@ -44,6 +44,7 @@ export const WEEK_ROW_HEIGHT = 24;
 export const DAY_ROW_HEIGHT = 36;
 export const HEADER_HEIGHT = MONTH_ROW_HEIGHT + WEEK_ROW_HEIGHT + DAY_ROW_HEIGHT; // 84
 export const PHASE_HEADER_HEIGHT = 36;
+export const PHASE_SEPARATOR_HEIGHT = 24;
 export const TASK_COLUMN_WIDTH_DESKTOP = 340;
 export const TASK_COLUMN_WIDTH_MOBILE = 160;
 export const MIN_COLUMN_WIDTH = 36;
