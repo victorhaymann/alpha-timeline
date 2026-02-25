@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment, SegmentType } from '@/types/database';
+import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment } from '@/types/database';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -14,7 +14,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { GanttChart } from './GanttChart';
 import { AddTaskDialog } from './AddTaskDialog';
-import { TaskSegmentDialog } from './TaskSegmentDialog';
 import { 
   RefreshCw,
   Loader2,
@@ -85,9 +84,7 @@ export function TimelineEditor({
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const hasRunWeekendFixRef = useRef(false);
   
-  // Segment dialog state
-  const [segmentDialogOpen, setSegmentDialogOpen] = useState(false);
-  const [selectedTaskForSegments, setSelectedTaskForSegments] = useState<Task | null>(null);
+  
   
   // Undo stack - stores previous task states
   const undoStackRef = useRef<UndoState[]>([]);
@@ -620,193 +617,6 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
-  // Handle convert segment type (work <-> review)
-  const handleConvertSegmentType = useCallback(async (segmentId: string, newType: SegmentType) => {
-    const segment = segments.find(s => s.id === segmentId);
-    if (!segment) return;
-    
-    const task = tasks.find(t => t.id === segment.task_id);
-    const typeLabel = newType === 'review' ? 'review' : 'work period';
-    saveToUndoStack(`Convert to ${typeLabel} for "${task?.name || 'task'}"`);
-    
-    try {
-      const { error } = await supabase
-        .from('task_segments')
-        .update({ segment_type: newType })
-        .eq('id', segmentId);
-
-      if (error) throw error;
-      
-      // Update local state
-      const updatedSegments = segments.map(s => 
-        s.id === segmentId ? { ...s, segment_type: newType } : s
-      );
-      onSegmentsChange(updatedSegments);
-      
-      toast({
-        title: 'Segment converted',
-        description: `Converted to ${newType === 'review' ? 'client review' : 'work period'}.`,
-      });
-    } catch (error: any) {
-      console.error('Error converting segment type:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to convert segment.',
-        variant: 'destructive',
-      });
-    }
-  }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
-
-  // Handle delete segment directly - parent task dates synced by DB trigger
-  const handleDeleteSegment = useCallback(async (segmentId: string, taskId: string) => {
-    const task = tasks.find(t => t.id === taskId);
-    const taskSegments = segments.filter(s => s.task_id === taskId);
-    
-    if (taskSegments.length <= 1) {
-      toast({
-        title: 'Cannot delete',
-        description: 'A task must have at least one period. Delete the task instead.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    saveToUndoStack(`Delete period from "${task?.name || 'task'}"`);
-    
-    try {
-      const { error } = await supabase
-        .from('task_segments')
-        .delete()
-        .eq('id', segmentId);
-      
-      if (error) throw error;
-      
-      // Update local state - parent task dates synced by DB trigger
-      onSegmentsChange(segments.filter(s => s.id !== segmentId));
-      
-      toast({
-        title: 'Period deleted',
-        description: 'The period has been removed.',
-      });
-    } catch (error: any) {
-      console.error('Error deleting segment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete period.',
-        variant: 'destructive',
-      });
-    }
-  }, [segments, tasks, saveToUndoStack, onSegmentsChange, toast]);
-
-  // Handle add segment to task - UNIFIED via normalizeSegmentDates
-  const handleAddSegment = async (taskId: string, position: 'before' | 'after', segmentType: SegmentType = 'work') => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    
-    const typeLabel = segmentType === 'review' ? 'client review' : 'period';
-    saveToUndoStack(`Add ${typeLabel} ${position} "${task.name}"`);
-    
-    try {
-      // Fetch current segments from DB to avoid race conditions
-      const { data: currentSegments } = await supabase
-        .from('task_segments')
-        .select('*')
-        .eq('task_id', taskId)
-        .order('order_index', { ascending: true });
-      
-      const taskSegments = currentSegments || [];
-      
-      let newStart: Date;
-      let newEnd: Date;
-      let initialSegmentCreated = false;
-      
-      if (taskSegments.length === 0) {
-        // No segments yet - create initial segment from task dates
-        if (task.start_date && task.end_date) {
-          const { error: initialError } = await supabase
-            .from('task_segments')
-            .insert({
-              task_id: taskId,
-              start_date: task.start_date,
-              end_date: task.end_date,
-              order_index: position === 'before' ? 1 : 0,
-              segment_type: 'work',
-            });
-          
-          if (initialError) throw initialError;
-          initialSegmentCreated = true;
-        }
-        
-        const taskEndDate = task.end_date ? new Date(task.end_date) : new Date();
-        const taskStartDate = task.start_date ? new Date(task.start_date) : new Date();
-        
-        if (position === 'after') {
-          newStart = addDays(taskEndDate, 2);
-          newEnd = addDays(newStart, 1);
-        } else {
-          newEnd = addDays(taskStartDate, -2);
-          newStart = addDays(newEnd, -1);
-        }
-      } else {
-        const sortedSegments = [...taskSegments].sort((a, b) => a.order_index - b.order_index);
-        
-        if (position === 'after') {
-          const lastSegment = sortedSegments[sortedSegments.length - 1];
-          newStart = addDays(new Date(lastSegment.end_date), 2);
-          newEnd = addDays(newStart, 1);
-        } else {
-          const firstSegment = sortedSegments[0];
-          newEnd = addDays(new Date(firstSegment.start_date), -2);
-          newStart = addDays(newEnd, -1);
-          
-          for (const seg of sortedSegments) {
-            await supabase
-              .from('task_segments')
-              .update({ order_index: seg.order_index + 1 })
-              .eq('id', seg.id);
-          }
-        }
-      }
-      
-      // Use centralized normalization (clamp + snap + re-clamp)
-      const normalized = normalizeSegmentDates(newStart, newEnd, {
-        projectStartDate,
-        projectEndDate,
-        workingDaysMask: project.working_days_mask ?? 31,
-      });
-      
-      const newOrderIndex = position === 'after' 
-        ? (initialSegmentCreated ? 1 : taskSegments.length)
-        : 0;
-      
-      const { error } = await supabase
-        .from('task_segments')
-        .insert({
-          task_id: taskId,
-          ...normalized,
-          order_index: newOrderIndex,
-          segment_type: segmentType,
-        });
-      
-      if (error) throw error;
-      
-      // Parent task dates synced automatically by database trigger
-      
-      toast({
-        title: `${segmentType === 'review' ? 'Client review' : 'Period'} added`,
-        description: `New ${segmentType === 'review' ? 'client review' : '2-day period'} added ${position} existing work.`,
-      });
-      
-      onRefresh();
-    } catch (error: any) {
-      console.error('Error adding segment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to add period.',
-        variant: 'destructive',
-      });
-    }
-  }
 
   // Regenerate schedule
   const handleRegenerate = async () => {
@@ -1261,14 +1071,7 @@ export function TimelineEditor({
         onDeleteTask={handleDeleteTask}
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
-        onAddSegment={handleAddSegment}
-        onEditSegments={(task) => {
-          setSelectedTaskForSegments(task);
-          setSegmentDialogOpen(true);
-        }}
         onUpdateSegment={handleUpdateSegment}
-        onConvertSegmentType={handleConvertSegmentType}
-        onDeleteSegment={handleDeleteSegment}
         hiddenMeetingDates={hiddenMeetingDates}
         onToggleMeetingVisibility={onToggleMeetingVisibility}
       />
@@ -1314,24 +1117,6 @@ export function TimelineEditor({
         </DialogContent>
       </Dialog>
 
-      {/* Segment Editor Dialog */}
-      {selectedTaskForSegments && (
-        <TaskSegmentDialog
-          open={segmentDialogOpen}
-          onOpenChange={setSegmentDialogOpen}
-          task={selectedTaskForSegments}
-          segments={segments.filter(s => s.task_id === selectedTaskForSegments.id)}
-          workingDaysMask={project.working_days_mask ?? 31}
-          onSegmentsChange={(newSegments) => {
-            const otherSegments = segments.filter(s => s.task_id !== selectedTaskForSegments.id);
-            onSegmentsChange([...otherSegments, ...newSegments]);
-            onRefresh();
-          }}
-          projectStartDate={projectStartDate}
-          projectEndDate={projectEndDate}
-          onSaveStart={saveToUndoStack}
-        />
-      )}
 
       <ShiftTimelineDialog
         open={shiftDialogOpen}
