@@ -67,7 +67,8 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { 
   format, 
-  addDays, 
+  addDays,
+  differenceInDays,
   startOfDay,
   startOfWeek,
   isSameDay,
@@ -305,6 +306,34 @@ export function GanttChart({
     }
   }, [onUpdateSegment]);
 
+  // Wrapper: when dragging a task that has segments, shift all segments by the
+  // same delta so the DB trigger keeps everything in sync. Without this, the
+  // trigger overwrites the task-row dates from unchanged segments → snap-back.
+  const handleTaskOrSegmentsDrag = useCallback((taskId: string, updates: Partial<Task>) => {
+    const taskSegs = segments.filter(s => s.task_id === taskId);
+    if (taskSegs.length > 0 && onUpdateSegment && updates.start_date) {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) { onTaskUpdate(taskId, updates); return; }
+
+      // Derive the current effective start from segments (source of truth)
+      const segStarts = taskSegs.map(s => new Date(s.start_date));
+      const oldStart = new Date(Math.min(...segStarts.map(d => d.getTime())));
+      const newStart = new Date(updates.start_date as string);
+      const daysDelta = differenceInDays(newStart, oldStart);
+
+      if (daysDelta === 0) return; // no change
+
+      for (const seg of taskSegs) {
+        onUpdateSegment(seg.id, {
+          start_date: format(addDays(new Date(seg.start_date), daysDelta), 'yyyy-MM-dd'),
+          end_date: format(addDays(new Date(seg.end_date), daysDelta), 'yyyy-MM-dd'),
+        });
+      }
+    } else {
+      onTaskUpdate(taskId, updates);
+    }
+  }, [segments, tasks, onUpdateSegment, onTaskUpdate]);
+
   // Drag and drop hook
   const {
     dragging,
@@ -321,7 +350,7 @@ export function GanttChart({
     getSegmentDragPreview,
   } = useDragAndResize({
     columnWidth,
-    onTaskUpdate,
+    onTaskUpdate: handleTaskOrSegmentsDrag,
     onSegmentUpdate: handleSegmentUpdate,
     readOnly,
     isWorkingDay,
