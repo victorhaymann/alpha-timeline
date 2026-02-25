@@ -1,50 +1,69 @@
 
 
-# Fix Gantt View Modes: Weekly, Monthly, Project
+# Add Horizontal Scroll Navigation to Gantt Timeline
 
 ## The Problem
 
-All three view modes (Weekly, Monthly, Project) set the date range to the **full project duration**. The only difference between them is how columns are grouped (days vs weeks), but the visible window is always the same. This means:
+The arrow buttons and keyboard arrows correctly shift the date window (±1 week or ±1 month). But the user cannot achieve the same by **scrolling horizontally** with a trackpad or mouse wheel. The timeline content fits exactly within the viewport, so there is nothing to scroll.
 
-- **Weekly** shows 6+ weeks of individual day columns instead of just 5 working days
-- **Monthly** shows the entire project range instead of ~1 month of days
-- **Project** works acceptably (shows full range with week-grouped columns) but the date picker shows a confusing range
+## The Solution
 
-## The Fix
+Render the **full project duration** as the underlying date range for all view modes, making the timeline physically wider than the viewport. Then auto-scroll to the "current window" position on mode change. The arrows and keyboard shortcuts become smooth-scroll shortcuts instead of date-range swaps.
 
-Change `handleViewModeChange` to set the correct date window per mode, and update `navigatePeriod` to shift by the correct amount.
+### How It Works
 
-### View Mode Behavior
+1. **All view modes set `dateRange` to full project** (`validStartDate` → `validEndDate`). The `viewMode` still controls column granularity (individual days vs week groups).
 
-| Mode | Date Window | Navigation Step | Columns |
-|------|------------|-----------------|---------|
-| **Weekly** | Monday of current week → Friday of current week (5 working days) | ±1 week (7 calendar days) | Individual days |
-| **Monthly** | Today → Today + 1 month | ±1 month | Individual days |
-| **Project** | Project start → Project end (full duration) | Navigation disabled | Week-grouped columns (W1, W2...) |
+2. **On mode change**, a `useEffect` scrolls the right pane to the correct initial position:
+   - Weekly: scroll so current week's Monday column is at the left edge
+   - Monthly: scroll so today's column is at the left edge
+   - Project: scroll to 0 (everything visible)
+
+3. **`navigatePeriod` becomes smooth-scroll**: Instead of changing `dateRange`, it calculates a pixel offset (1 week or ~1 month of columns) and calls `rightBodyRef.current.scrollBy({ left: offset, behavior: 'smooth' })`.
+
+4. **Remove slide animation**: The `slideDirection` state and CSS classes (`animate-slide-left/right`) are no longer needed since native scroll provides the visual transition.
+
+5. **Header date display**: The date range shown in the header picker updates dynamically based on `scrollLeft` position, so the user sees which dates are currently visible.
+
+## Technical Changes
 
 ### File: `src/components/timeline/GanttChart.tsx`
 
-**`handleViewModeChange` (lines 365-369):**
+**`handleViewModeChange`** — Set `dateRange` to full project for all modes. Store the `viewMode` so the scroll effect knows where to jump.
 
-Replace the single "set full project range" logic with mode-specific date windows:
+**New `useEffect` for initial scroll position** — After `groupedColumns` and `columnWidth` are computed, calculate the target scroll offset using `dateToX()`:
+- Weekly: `dateToX(startOfWeek(today, { weekStartsOn: 1 }))`
+- Monthly: `dateToX(today)`  
+- Project: `0`
 
-- `week`: Calculate Monday of the current week → Friday of the current week. Use `startOfWeek` and `endOfWeek` from date-fns (with `weekStartsOn: 1` for Monday). Then trim to Friday (5 working days).
-- `month`: Set from today → `addMonths(today, 1)`.
-- `project`: Set from `validStartDate` → `validEndDate` (full project, as it works today).
+Call `rightBodyRef.current.scrollLeft = targetX` (instant, no smooth for initial).
 
-**`navigatePeriod` (lines 372-403):**
+**`navigatePeriod`** — Replace `setDateRange(...)` with:
+- Weekly: `rightBodyRef.current.scrollBy({ left: direction === 'next' ? weekPixels : -weekPixels, behavior: 'smooth' })`  
+  where `weekPixels = 5 * columnWidth` (5 working day columns)
+- Monthly: `rightBodyRef.current.scrollBy({ left: direction === 'next' ? monthPixels : -monthPixels, behavior: 'smooth' })`  
+  where `monthPixels ≈ 22 * columnWidth` (working days in a month)
+- Project: no-op
 
-The weekly navigation already shifts by 7 days (correct). The monthly navigation already shifts by 1 month (correct). Project view already returns early (correct). No changes needed here -- the issue is purely in the initial date range set by `handleViewModeChange`.
+**Remove `slideDirection`** — Delete state, `setTimeout`, and the `animate-slide-left/right` class bindings on the right body div.
 
-**Initial state (line 146, 156-158):**
+**Keyboard arrows** — Already call `navigatePeriod`, so they'll automatically smooth-scroll.
 
-The default `viewMode` is `'month'` and the default `dateRange` is the full project range. Update the initial `dateRange` to reflect monthly: today → today + 1 month. This ensures the first render matches the selected mode.
+**Header date range display** — Add an `onScroll` handler (extend `handleRightBodyScroll`) that computes the visible date window from `scrollLeft` using `xToDate()`, and updates a `visibleDateRange` state. Pass this to `GanttHeader` for display.
 
-### Summary of Changes
+**Initial `dateRange` state** — Change from monthly window to full project: `{ from: validStartDate, to: validEndDate }`.
+
+**`useEffect` for project date sync** — Remove the `viewMode === 'project'` guard so all modes update when project dates change.
+
+### Performance Note
+
+A 6-month Mon-Fri project ≈ 130 day columns. A 12-month project ≈ 260 columns. At 36px minimum width, that is 4,680–9,360px — well within browser rendering limits.
+
+---
+
+## Files Summary
 
 | File | Change |
 |------|--------|
-| `src/components/timeline/GanttChart.tsx` | Fix `handleViewModeChange` to set mode-appropriate date windows. Fix initial `dateRange` state to match default `viewMode`. Add `startOfWeek`/`endOfWeek` imports from date-fns. |
-
-No other files need changes. The `useGanttCalculations` hook, `GanttHeader`, and all other components already work correctly with whatever date range is passed in.
+| `src/components/timeline/GanttChart.tsx` | Full project dateRange for all modes. navigatePeriod → scrollBy. Auto-scroll on mode change. Remove slideDirection animation. Dynamic visible date display. |
 
