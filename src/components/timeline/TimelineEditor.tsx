@@ -49,6 +49,13 @@ interface TimelineEditorProps {
   onRefresh: () => void;
   onTaskClick?: (task: Task) => void;
   renderRegenerateButton?: (props: { onClick: () => void; isLoading: boolean }) => React.ReactNode;
+  renderActionButtons?: (props: {
+    onUndo: () => void;
+    undoDisabled: boolean;
+    isUndoing: boolean;
+    undoCount: number;
+    onShiftTimeline: () => void;
+  }) => React.ReactNode;
   hiddenMeetingDates?: Set<string>;
   onToggleMeetingVisibility?: (date: string, hidden: boolean) => void;
 }
@@ -63,6 +70,7 @@ export function TimelineEditor({
   onSegmentsChange,
   onRefresh,
   renderRegenerateButton,
+  renderActionButtons,
   hiddenMeetingDates,
   onToggleMeetingVisibility,
 }: TimelineEditorProps) {
@@ -1210,18 +1218,28 @@ export function TimelineEditor({
   return (
     <div className="space-y-4">
       {renderRegenerateButton ? (
-        <div className="flex items-center justify-end gap-2">
-          {undoButton}
-          <Button
-            variant="outline"
-            onClick={() => setShiftDialogOpen(true)}
-            className="gap-2"
-            title="Shift all tasks forward or backward"
-          >
-            <CalendarRange className="w-4 h-4" />
-            Shift Timeline
-          </Button>
-        </div>
+        renderActionButtons ? (
+          renderActionButtons({
+            onUndo: handleUndo,
+            undoDisabled: undoStackLength === 0 || isUndoing,
+            isUndoing,
+            undoCount: undoStackLength,
+            onShiftTimeline: () => setShiftDialogOpen(true),
+          }) ?? null
+        ) : (
+          <div className="flex items-center justify-end gap-2">
+            {undoButton}
+            <Button
+              variant="outline"
+              onClick={() => setShiftDialogOpen(true)}
+              className="gap-2"
+              title="Shift all tasks forward or backward"
+            >
+              <CalendarRange className="w-4 h-4" />
+              Shift Timeline
+            </Button>
+          </div>
+        )
       ) : (
         regenerateButtonElement
       )}
