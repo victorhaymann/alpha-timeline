@@ -1207,6 +1207,11 @@ export function GanttChart({
                           ? taskSegments.reduce((max, s) => s.end_date > max ? s.end_date : max, taskSegments[0].end_date)
                           : task.end_date;
                         
+                        // Synthetic task with effective dates so drag hook uses visual position
+                        const dragTask = taskSegments.length > 0
+                          ? { ...task, start_date: effectiveStartStr, end_date: effectiveEndStr }
+                          : task;
+
                         const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : safeParseDate(effectiveStartStr);
                         const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : safeParseDate(effectiveEndStr);
 
@@ -1386,14 +1391,14 @@ export function GanttChart({
                                       }}
                                       onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id)}
                                       onMouseLeave={() => handleTaskBarMouseLeave(task.id)}
-                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
+                                      onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, dragTask, 'move')}
                                     >
                                       {!readOnly && (
                                         <div
                                           className={cn("gantt-resize-handle gantt-resize-handle-start", isCurrentlyDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
                                           onMouseDown={(e) => {
                                             e.stopPropagation();
-                                            handleDragStart(e, task, 'resize-start');
+                                            handleDragStart(e, dragTask, 'resize-start');
                                           }}
                                         />
                                       )}
@@ -1418,7 +1423,7 @@ export function GanttChart({
                                           className={cn("gantt-resize-handle gantt-resize-handle-end", isCurrentlyDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
                                           onMouseDown={(e) => {
                                             e.stopPropagation();
-                                            handleDragStart(e, task, 'resize-end');
+                                            handleDragStart(e, dragTask, 'resize-end');
                                           }}
                                         />
                                       )}
