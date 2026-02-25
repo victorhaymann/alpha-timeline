@@ -41,6 +41,7 @@ import {
   DAY_ROW_HEIGHT,
   HEADER_HEIGHT,
   PHASE_HEADER_HEIGHT,
+  PHASE_SEPARATOR_HEIGHT,
   TASK_COLUMN_WIDTH_DESKTOP,
   TASK_COLUMN_WIDTH_MOBILE,
   MIN_COLUMN_WIDTH,
@@ -163,9 +164,7 @@ export function GanttChart({
     setDateRange({ from: validStartDate, to: validEndDate });
   }, [validStartDate.getTime(), validEndDate.getTime()]);
   
-  // Track collapsed sections
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
-  
+  // Collapsed sections removed - flat layout, all tasks always visible
   // Slide animation state
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   
@@ -224,17 +223,7 @@ export function GanttChart({
     }
   }, [editingTaskId]);
 
-  const toggleSectionCollapse = useCallback((sectionKey: string) => {
-    setCollapsedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(sectionKey)) {
-        next.delete(sectionKey);
-      } else {
-        next.add(sectionKey);
-      }
-      return next;
-    });
-  }, []);
+  // toggleSectionCollapse removed - flat layout
 
   // View date range (use custom range or project range)
   const viewStart = dateRange?.from || validStartDate;
@@ -569,11 +558,9 @@ export function GanttChart({
   }, [phases, tasksByPhase, consolidatedWeeklyCall]);
 
 
-  // Calculate total chart height based on sections (simplified - all tasks are single rows)
+  // Calculate total chart height based on sections (flat layout with phase separators)
   let totalHeight = HEADER_HEIGHT;
-  orderedSections.forEach(section => {
-    const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
-    const isCollapsed = collapsedSections.has(sectionKey);
+  orderedSections.forEach((section, sectionIndex) => {
     const isWeeklyCall = section.type === 'weekly-call';
     const hasNoMeetings =
       isWeeklyCall && (!section.task?.recurring_dates || section.task.recurring_dates.length === 0);
@@ -581,14 +568,15 @@ export function GanttChart({
     // Skip sections that won't be rendered
     if (hasNoMeetings) return;
 
-    totalHeight += PHASE_HEADER_HEIGHT;
-    if (!isCollapsed) {
-      if (section.type === 'weekly-call') {
-        totalHeight += ROW_HEIGHT; // Single row for weekly call
-      } else {
-        // All tasks are now single rows (segments render inline)
-        totalHeight += section.tasks.length * ROW_HEIGHT;
-      }
+    // Phase separator (thin label row) - skip for first visible section and weekly calls
+    if (section.type === 'phase') {
+      totalHeight += PHASE_SEPARATOR_HEIGHT;
+    }
+
+    if (section.type === 'weekly-call') {
+      totalHeight += PHASE_SEPARATOR_HEIGHT + ROW_HEIGHT; // separator + single row
+    } else {
+      totalHeight += section.tasks.length * ROW_HEIGHT;
     }
   });
 
@@ -768,7 +756,6 @@ export function GanttChart({
               const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
               const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
               const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
-              const isCollapsed = collapsedSections.has(sectionKey);
               const isWeeklyCall = section.type === 'weekly-call';
               
               // Hide Client Check-ins section when it has no meetings
@@ -783,16 +770,15 @@ export function GanttChart({
                   key={sectionKey}
                   className={cn(
                     section.type === 'phase' && getDropTargetPhaseClasses(section.phase.id),
-                    "rounded-lg transition-all relative"
+                    "relative"
                   )}
                   onMouseEnter={() => {
                     if (isVerticalDragging && section.type === 'phase') {
-                      // Calculate the target index (insert at end of phase)
                       handlePhaseHover(section.phase.id, section.tasks.length);
                     }
                   }}
                 >
-                  {/* Drop indicator line - shows exactly where task will land */}
+                  {/* Drop indicator line */}
                   {dropIndicatorStyle && (
                     <div 
                       className="gantt-drop-indicator"
@@ -805,66 +791,56 @@ export function GanttChart({
                     <div 
                       className="gantt-vertical-ghost absolute left-2 right-2"
                       style={{ 
-                        height: ROW_HEIGHT * 2, // Account for review cycle rows
-                        top: PHASE_HEADER_HEIGHT + ghostInfo.originalIndex * ROW_HEIGHT * 2,
+                        height: ROW_HEIGHT,
+                        top: PHASE_SEPARATOR_HEIGHT + ghostInfo.originalIndex * ROW_HEIGHT,
                         zIndex: 1,
                       }}
                     />
                   )}
-                  {/* Section header */}
+
+                  {/* Phase separator label (subtle, thin) */}
                   <div 
-                    className="flex items-center gap-3 px-4 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
-                    style={{ height: PHASE_HEADER_HEIGHT }}
-                    onClick={() => toggleSectionCollapse(sectionKey)}
+                    className="flex items-center gap-2 px-3 md:px-4 group/separator"
+                    style={{ height: PHASE_SEPARATOR_HEIGHT }}
                   >
-                    {isCollapsed ? (
-                      <ChevronRight className="w-4 h-4 shrink-0" style={{ color: sectionColor }} />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 shrink-0" style={{ color: sectionColor }} />
-                    )}
                     <div 
-                      className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full shrink-0 shadow-sm"
+                      className="w-1 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: sectionColor }}
                     />
-                    <span className="font-semibold text-xs md:text-sm tracking-wide text-foreground truncate">{sectionName}</span>
-                    <div className="ml-auto flex items-center gap-2 md:gap-3">
-                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground">
-                        {section.type === 'weekly-call' 
-                          ? `${section.task.recurring_dates?.length || 0} mtgs`
-                          : section.tasks.length}
-                      </span>
-                      {section.type === 'phase' && !readOnly && (
-                        <>
-                          <StaffAssignmentPopover phaseId={section.phase.id} projectId={projectId} />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAddTask(section.phase.id);
-                            }}
-                            className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-                            title="Add task"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                      {isWeeklyCall && !readOnly && onAddMeeting && (
+                    <span className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground truncate">{sectionName}</span>
+                    {section.type === 'phase' && !readOnly && (
+                      <div className="ml-auto flex items-center gap-1.5 opacity-0 group-hover/separator:opacity-100 transition-opacity">
+                        <StaffAssignmentPopover phaseId={section.phase.id} projectId={projectId} />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddTask(section.phase.id);
+                          }}
+                          className="flex items-center justify-center w-5 h-5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                          title="Add task"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                    {isWeeklyCall && !readOnly && onAddMeeting && (
+                      <div className="ml-auto opacity-0 group-hover/separator:opacity-100 transition-opacity">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onAddMeeting();
                           }}
-                          className="flex items-center justify-center w-6 h-6 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                          className="flex items-center justify-center w-5 h-5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
                           title="Add meeting"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" />
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Weekly call row - single row with meeting count */}
-                  {isWeeklyCall && !isCollapsed && (
+                  {/* Weekly call row */}
+                  {isWeeklyCall && (
                     <div 
                       className="flex items-center gap-2 md:gap-3 px-2 md:px-4 group"
                       style={{ height: ROW_HEIGHT }}
@@ -879,73 +855,58 @@ export function GanttChart({
                     </div>
                   )}
 
-                  {/* All tasks rendered as single rows (with inline segments for reviews) */}
-                  {!isCollapsed && section.type === 'phase' && section.tasks.map((task, taskIndex) => {
-                    // Get segments for this task to derive effective dates
+                  {/* Task rows - flat, one per task */}
+                  {section.type === 'phase' && section.tasks.map((task, taskIndex) => {
                     const taskSegments = segments.filter(s => s.task_id === task.id).sort((a, b) => a.order_index - b.order_index);
                     
-                    // Use segment-derived dates if segments exist, otherwise fallback to task dates
                     const effectiveStartStr = taskSegments.length > 0 
                       ? taskSegments.reduce((min, s) => s.start_date < min ? s.start_date : min, taskSegments[0].start_date)
                       : task.start_date;
                     const effectiveEndStr = taskSegments.length > 0
                       ? taskSegments.reduce((max, s) => s.end_date > max ? s.end_date : max, taskSegments[0].end_date)
                       : task.end_date;
-                    
+
                     const startDate = safeParseDate(effectiveStartStr);
                     const endDate = safeParseDate(effectiveEndStr);
-                    // Use working days for duration to match Gantt chart grid
-                    const duration = (startDate && endDate) ? getWorkingDaysDuration(startDate, endDate) : null;
+                    const workingDuration = startDate && endDate ? getWorkingDaysDuration(startDate, endDate) : null;
 
-                    const isBeingDragged = verticalDrag?.taskId === task.id;
+                    const insertionGap = shouldShowInsertionGap(taskIndex, section.phase.id);
 
                     return (
-                      <div 
+                      <div
                         key={task.id}
                         className={cn(
-                          "flex items-center gap-1.5 md:gap-2 px-2 md:px-3 group hover:bg-muted/30 transition-colors",
+                          "flex items-center gap-1 md:gap-2 px-2 md:px-4 group hover:bg-muted/40 transition-colors border-b border-border/30",
                           getVerticalDragClasses(task.id),
                           getSwapTargetClasses(task.id, taskIndex, section.phase.id),
-                          isBeingDragged && "bg-card"
+                          insertionGap && "gantt-insertion-gap"
                         )}
                         style={{ 
                           height: ROW_HEIGHT,
-                          ...getVerticalDragStyles(task.id, taskIndex, section.phase.id)
-                        }}
-                        onMouseEnter={() => {
-                          if (isVerticalDragging && verticalDrag?.taskId !== task.id) {
-                            handlePhaseHover(section.phase.id, taskIndex);
-                          }
+                          ...getVerticalDragStyles(task.id, taskIndex, section.phase.id),
                         }}
                       >
+                        {/* Grip handle for reordering */}
                         {!readOnly && (
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <div onMouseDown={(e) => handleVerticalDragStart(e, task.id, task.name, section.phase.id, taskIndex)}>
-                              <GripVertical className="w-3.5 md:w-4 h-3.5 md:h-4 text-muted-foreground opacity-0 group-hover:opacity-100 gantt-grip-handle transition-opacity" />
-                            </div>
-                            {onDeleteTask && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteTask(task.id);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-destructive/20 rounded transition-all"
-                                title="Delete task"
-                              >
-                                <Trash2 className="w-3 md:w-3.5 h-3 md:h-3.5 text-destructive" />
-                              </button>
-                            )}
+                          <div 
+                            className="flex items-center justify-center w-4 md:w-5 h-full cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground shrink-0"
+                            onMouseDown={(e) => handleVerticalDragStart(e, task.id, task.name, section.phase.id, taskIndex)}
+                          >
+                            <GripVertical className="w-3 md:w-3.5 h-3 md:h-3.5" />
                           </div>
                         )}
-                        
-                        {task.task_type === 'milestone' && <Flag className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />}
-                        {task.task_type === 'meeting' && <Users className="w-3 md:w-3.5 h-3 md:h-3.5 text-amber-500 shrink-0" />}
-                        {task.task_type === 'task' && <div className="w-3 md:w-3.5 shrink-0" />}
-                        
+
+                        {/* Phase color dot */}
+                        <div 
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: sectionColor }}
+                        />
+
+                        {/* Task name - editable */}
                         {editingTaskId === task.id ? (
                           <input
                             ref={editInputRef}
-                            type="text"
+                            className="flex-1 min-w-0 text-xs md:text-sm font-medium bg-transparent border-b border-primary/50 outline-none text-foreground px-0.5"
                             value={editingTaskName}
                             onChange={(e) => setEditingTaskName(e.target.value)}
                             onBlur={handleSaveEdit}
@@ -953,32 +914,34 @@ export function GanttChart({
                               if (e.key === 'Enter') handleSaveEdit();
                               if (e.key === 'Escape') handleCancelEdit();
                             }}
-                            className="text-[10px] md:text-xs font-medium text-foreground bg-background border border-primary rounded px-1 py-0.5 min-w-0 flex-1 outline-none"
-                            onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <span 
-                            className="text-[10px] md:text-xs font-medium text-foreground truncate flex-1 min-w-0 cursor-pointer hover:text-primary transition-colors"
-                            onClick={() => handleStartEdit(task.id, task.name)}
-                            title="Click to edit"
+                            className={cn(
+                              "text-xs md:text-sm font-medium text-foreground truncate flex-1 min-w-0",
+                              !readOnly && "cursor-text hover:text-primary/80"
+                            )}
+                            onDoubleClick={() => handleStartEdit(task.id, task.name)}
                           >
                             {task.name}
                           </span>
                         )}
-                        
-                        <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground shrink-0 ml-auto">
-                          {duration !== null && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-muted">
-                              {duration}d
-                            </span>
-                          )}
+
+                        {/* Duration badge */}
+                        {workingDuration !== null && (
+                          <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold tracking-wide bg-muted text-muted-foreground shrink-0">
+                            {workingDuration}d
+                          </span>
+                        )}
+
+                        {/* Inline date pickers */}
+                        <div className="hidden md:flex items-center gap-1 shrink-0">
                           {startDate && (
                             <InlineDatePicker
                               date={startDate}
                               onDateChange={(newDate) => {
                                 const newDateStr = format(newDate, 'yyyy-MM-dd');
                                 if (taskSegments.length > 0 && onUpdateSegment) {
-                                  // Update earliest segment's start date
                                   const earliestSeg = taskSegments.reduce((min, s) => 
                                     s.start_date < min.start_date ? s : min, taskSegments[0]);
                                   onUpdateSegment(earliestSeg.id, { start_date: newDateStr });
@@ -993,7 +956,7 @@ export function GanttChart({
                             />
                           )}
                           {startDate && endDate && (
-                            <span className="opacity-50">→</span>
+                            <span className="text-muted-foreground text-[10px]">→</span>
                           )}
                           {endDate && (
                             <InlineDatePicker
@@ -1001,7 +964,6 @@ export function GanttChart({
                               onDateChange={(newDate) => {
                                 const newDateStr = format(newDate, 'yyyy-MM-dd');
                                 if (taskSegments.length > 0 && onUpdateSegment) {
-                                  // Update latest segment's end date
                                   const latestSeg = taskSegments.reduce((max, s) => 
                                     s.end_date > max.end_date ? s : max, taskSegments[0]);
                                   onUpdateSegment(latestSeg.id, { end_date: newDateStr });
@@ -1017,7 +979,16 @@ export function GanttChart({
                           )}
                         </div>
 
-                        {/* Legacy review round button removed - using inline segments */}
+                        {/* Delete button on hover */}
+                        {!readOnly && onDeleteTask && (
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-5 h-5 text-muted-foreground hover:text-destructive rounded shrink-0"
+                            onClick={() => onDeleteTask(task.id)}
+                            title="Delete task"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -1109,7 +1080,6 @@ export function GanttChart({
                   const sectionKey = section.type === 'phase' ? section.phase.id : 'weekly-call';
                   const sectionName = section.type === 'phase' ? section.phase.name : 'Client Check-ins';
                   const sectionColor = PHASE_CATEGORY_COLORS[sectionName as PhaseCategory] || '#9CA3AF';
-                  const isCollapsed = collapsedSections.has(sectionKey);
                   const isWeeklyCall = section.type === 'weekly-call';
                   
                   // Hide Client Check-ins section when it has no meetings
@@ -1118,11 +1088,10 @@ export function GanttChart({
 
                   return (
                     <div key={sectionKey}>
-                      {/* Section header row */}
+                      {/* Phase separator row (thin, matches left pane) */}
                       <div 
-                        className="cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
-                        style={{ height: PHASE_HEADER_HEIGHT }}
-                        onClick={() => toggleSectionCollapse(sectionKey)}
+                        className="bg-muted/20"
+                        style={{ height: PHASE_SEPARATOR_HEIGHT }}
                       >
                         <div className="flex h-full">
                           {groupedColumns.map((col) => {
@@ -1139,7 +1108,7 @@ export function GanttChart({
                       </div>
 
                       {/* Weekly call row with diamond markers */}
-                      {isWeeklyCall && !isCollapsed && (
+                      {isWeeklyCall && (
                         <div className="relative" style={{ height: ROW_HEIGHT }}>
                           {/* Grid background */}
                           <div className="absolute inset-0 flex">
@@ -1198,7 +1167,7 @@ export function GanttChart({
                       )}
 
                       {/* All task bars rendered as single rows with inline segments */}
-                      {!isCollapsed && section.type === 'phase' && section.tasks.map((task) => {
+                      {section.type === 'phase' && section.tasks.map((task) => {
                         const isCurrentlyDragging = dragging?.taskId === task.id;
                         const isJustDropped = justDropped === task.id;
                         
