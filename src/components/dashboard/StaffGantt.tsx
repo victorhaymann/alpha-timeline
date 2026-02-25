@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, CalendarIcon, ChevronRight, Check, AlertTriangle } from 'lucide-react';
+import { Search, CalendarIcon, ChevronRight, ChevronLeft, Check, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Assignment {
@@ -254,6 +254,12 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
     }
   }
 
+  function scrollByWeek(direction: 1 | -1) {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: direction * 5 * DAY_W, behavior: 'smooth' });
+    }
+  }
+
   function toggleCollapse(catId: string) {
     setCollapsed(prev => {
       const next = new Set(prev);
@@ -294,7 +300,15 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between p-3 border-b border-border flex-wrap gap-2">
-        <h2 className="text-sm font-semibold">Staff Allocation</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-sm font-semibold">Staff Allocation</h2>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => scrollByWeek(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => scrollByWeek(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative w-48">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
