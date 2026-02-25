@@ -1,79 +1,57 @@
 
 
-# Multi-Lane Rows for Overlapping Phases and Staff Assignments
+# Fix: Timezone-Induced Date Shift in Dashboard Gantt Charts
 
-## The Problem
+## Root Cause
 
-In both the Projects Gantt and Staff Gantt on the dashboard, when multiple phases (or assignments) overlap in time, they render on top of each other in a single fixed-height row. The head of planning cannot see concurrent work at a glance.
+The bug is a classic **UTC vs local timezone** mismatch. Here is the chain:
 
-## The Solution
+1. **Database** stores dates as strings like `"2026-03-09"` (a Monday).
+2. **`Dashboard.tsx`** (lines 96-102, 116-117) parses them with `new Date("2026-03-09")`, which JavaScript interprets as **UTC midnight** — i.e. `2026-03-09T00:00:00Z`.
+3. In UTC+1 (Paris), that becomes `2026-03-08T23:00:00` local time — **the previous day** (Sunday).
+4. **`dayIndex()`** in `ProjectsGantt.tsx` (line 191-196) and `StaffGantt.tsx` (line 231-236) uses `days[i] >= date`. The `days` array is built with `addDays()` which produces **local midnight** dates. So a UTC-midnight date that maps to the previous evening in local time gets matched to the wrong grid column.
 
-Compute **lanes** for each row. When bars overlap in time, they are stacked vertically into separate lanes within the same row. The row height grows dynamically to accommodate all lanes.
+This only affects dates where the UTC-to-local shift crosses midnight — which is why it hits some phases but not all.
 
-```text
-BEFORE (overlapping bars hidden behind each other):
-┌──────────────────────────────────────────────┐
-│ Project A   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ (only 1 visible) │  44px
-└──────────────────────────────────────────────┘
+## Fix (3 files, minimal changes)
 
-AFTER (stacked lanes):
-┌──────────────────────────────────────────────┐
-│ Project A   ▓▓▓▓ Pre-Prod ▓▓▓▓▓▓            │  lane 0
-│             ▓▓▓▓▓▓▓ Production ▓▓▓           │  lane 1
-└──────────────────────────────────────────────┘
+### 1. `src/pages/Dashboard.tsx`
+
+Add a `parseLocalDate` helper that splits `"YYYY-MM-DD"` and constructs `new Date(year, month-1, day)` (local midnight). Replace all 6 occurrences of `new Date(dateString)` for task/project dates with `parseLocalDate(dateString)`.
+
+Lines affected: ~96, 98, 99, 102, 116, 117 — plus the same pattern in the staff assignment builder (~140-155).
+
+### 2. `src/components/dashboard/ProjectsGantt.tsx`
+
+Fix `dayIndex` (lines 191-196) to compare by calendar date instead of timestamp:
+
+```typescript
+function dayIndex(date: Date): number {
+  for (let i = 0; i < days.length; i++) {
+    if (
+      days[i].getFullYear() === date.getFullYear() &&
+      days[i].getMonth() === date.getMonth() &&
+      days[i].getDate() === date.getDate()
+    ) return i;
+    if (days[i] > date) return i;
+  }
+  return days.length - 1;
+}
 ```
 
-### Lane Algorithm
+### 3. `src/components/dashboard/StaffGantt.tsx`
 
-A standard interval packing / greedy lane assignment:
+Same `dayIndex` fix (lines 231-236) — identical change.
 
-1. Sort bars by start date
-2. For each bar, find the first lane where no existing bar overlaps
-3. Assign it to that lane (or create a new lane)
+Also fix the staff assignment date parsing in `Dashboard.tsx` (lines ~140-155) where `new Date(t.start_date!)` and `new Date(t.end_date!)` are used for staff assignment bars.
 
-Row height = `BASE_ROW_H + (laneCount - 1) * LANE_H` where `LANE_H` is the height of one additional lane (~24px). Single-lane rows stay at the current height.
-
-## Technical Changes
-
-### File: `src/components/dashboard/ProjectsGantt.tsx`
-
-1. **Add lane computation function** `computeLanes(bars)` that returns each bar with a `lane` index and the total `laneCount`.
-
-2. **Per-project lane data**: In the rendering, compute lanes for each project's phases. Use `laneCount` to determine the row height dynamically.
-
-3. **Bar positioning**: Each bar's `top` offset becomes `padding + lane * LANE_H` instead of a fixed `top-2`.
-
-4. **Left pane sync**: The left column row heights must match the right pane. Compute a `rowHeights` map (project id -> height) and apply it to both sides.
-
-5. **`maxHeight` calculation**: Sum all dynamic row heights instead of `filtered.length * ROW_H`.
-
-### File: `src/components/dashboard/StaffGantt.tsx`
-
-Same approach:
-
-1. **Add the same `computeLanes` function** for staff assignment bars.
-
-2. **Per-staff lane data**: Compute lanes for each staff member's assignments. Row height grows with lane count.
-
-3. **Bar positioning**: Offset bars vertically by lane index.
-
-4. **Left pane sync**: Apply matching dynamic heights to the left column staff rows.
-
-5. **`maxHeight` calculation**: Sum all dynamic row heights including category headers.
-
-### Shared Constants
-
-- `LANE_H = 24` -- height per additional lane
-- `BAR_H = 20` -- individual bar height
-- `BAR_PAD = 6` -- top padding in each row
-- Base row height stays at current value for single-lane rows
-
-### No other files change
-
-The Dashboard page (`Dashboard.tsx`) passes data unchanged. The lane computation is purely a rendering concern inside each Gantt component.
+## Summary
 
 | File | Change |
 |------|--------|
-| `src/components/dashboard/ProjectsGantt.tsx` | Add lane computation, dynamic row heights, stacked bar positioning |
-| `src/components/dashboard/StaffGantt.tsx` | Add lane computation, dynamic row heights, stacked bar positioning |
+| `src/pages/Dashboard.tsx` | Add `parseLocalDate()` helper. Replace all `new Date(dateString)` with `parseLocalDate(dateString)` for task/project/assignment dates. |
+| `src/components/dashboard/ProjectsGantt.tsx` | Fix `dayIndex` to compare year/month/day instead of timestamp. |
+| `src/components/dashboard/StaffGantt.tsx` | Same `dayIndex` fix. |
+
+No logic duplication. No new dependencies. Just correcting how date strings are parsed and compared.
 
