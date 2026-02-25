@@ -484,6 +484,32 @@ export function TimelineEditor({
     }
   };
 
+  // Handle delete review segment
+  const handleDeleteReviewSegment = async (segmentId: string) => {
+    try {
+      const { error } = await supabase
+        .from('task_segments')
+        .delete()
+        .eq('id', segmentId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Review deleted',
+        description: 'The review period has been removed.',
+      });
+
+      onRefresh();
+    } catch (error: any) {
+      console.error('Error deleting review segment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete review.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Handle open add meeting dialog
   const handleOpenAddMeeting = () => {
     const today = new Date();
@@ -1303,6 +1329,7 @@ export function TimelineEditor({
         onTaskReorder={handleTaskReorder}
         onAddTask={handleAddTask}
         onDeleteTask={handleDeleteTask}
+        onDeleteReviewSegment={handleDeleteReviewSegment}
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
         onUpdateSegment={handleUpdateSegment}

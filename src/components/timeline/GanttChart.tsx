@@ -90,6 +90,7 @@ interface GanttChartProps {
   onTaskReorder: (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  onDeleteReviewSegment?: (segmentId: string) => void;
   onAddReviewSegment?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
@@ -122,6 +123,7 @@ export function GanttChart({
   onTaskReorder,
   onAddTask,
   onDeleteTask,
+  onDeleteReviewSegment,
   onAddReviewSegment,
   onAddMeeting,
   onDeleteMeeting,
@@ -1430,6 +1432,7 @@ export function GanttChart({
                                     taskSegments={taskSegments}
                                     hoveredSegmentId={hoveredSegmentId}
                                      onDeleteTask={onDeleteTask}
+                                     onDeleteReviewSegment={onDeleteReviewSegment}
                                      onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
                                        setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
                                      } : undefined}
