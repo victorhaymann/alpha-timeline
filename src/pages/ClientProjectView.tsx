@@ -354,6 +354,7 @@ export default function ClientProjectView() {
             onTaskUpdate={() => {}}
             onTaskReorder={() => {}}
             onAddTask={() => {}}
+            onDragComplete={() => {}}
             readOnly={true}
           />
         </TabsContent>

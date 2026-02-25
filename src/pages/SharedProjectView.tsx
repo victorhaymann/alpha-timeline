@@ -1293,6 +1293,7 @@ export default function SharedProjectView() {
                   onTaskUpdate={() => {}}
                   onTaskReorder={() => {}}
                   onAddTask={() => {}}
+                  onDragComplete={() => {}}
                   readOnly
                 />
               </ErrorBoundary>
