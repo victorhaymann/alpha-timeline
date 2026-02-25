@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -79,8 +79,8 @@ function rowHeight(laneCount: number): number {
 
 function getTimelineRange() {
   const today = new Date();
-  const start = startOfWeek(addDays(today, -14), { weekStartsOn: 1 });
-  const end = addDays(start, 12 * 7);
+  const start = startOfWeek(addDays(today, -8 * 7), { weekStartsOn: 1 });
+  const end = addDays(today, 12 * 7);
   return { start, end };
 }
 
@@ -141,6 +141,14 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
       d.getDate() === today.getDate()
     );
   }, [days]);
+
+  // Auto-scroll to today on mount
+  useEffect(() => {
+    if (scrollRef.current && todayIdx >= 0) {
+      const targetX = Math.max(0, todayIdx * DAY_W - scrollRef.current.clientWidth / 3);
+      scrollRef.current.scrollLeft = targetX;
+    }
+  }, [todayIdx]);
 
   const filtered = useMemo(() => {
     let list = projects;

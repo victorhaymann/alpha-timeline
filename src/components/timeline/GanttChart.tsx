@@ -225,8 +225,10 @@ export function GanttChart({
 
   // toggleSectionCollapse removed - flat layout
 
-  // View date range (use custom range or project range)
-  const viewStart = dateRange?.from || validStartDate;
+  // View date range (use custom range or project range) — add 7-day buffer before start
+  const viewStart = dateRange?.from
+    ? addDays(dateRange.from, -7)
+    : addDays(validStartDate, -7);
   const viewEnd = dateRange?.to || validEndDate;
 
   // Observe container width for responsive columns
