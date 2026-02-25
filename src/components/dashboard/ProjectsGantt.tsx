@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -105,17 +105,6 @@ function buildWeeks(days: Date[]): { label: string; startIdx: number; count: num
 
 type StatusFilter = 'production' | 'delivered' | 'all';
 
-const STATUS_LABELS: Record<string, string> = {
-  active: 'In Production',
-  draft: 'Draft',
-  completed: 'Delivered',
-};
-
-const STATUS_CLASSES: Record<string, string> = {
-  active: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30',
-  draft: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
-  completed: 'bg-sky-500/15 text-sky-600 border-sky-500/30',
-};
 
 const PHASE_COLORS = [
   'hsl(var(--primary))',
@@ -258,9 +247,6 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium truncate">{p.name}</span>
-                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 shrink-0 ${STATUS_CLASSES[p.status] || ''}`}>
-                      {STATUS_LABELS[p.status] || p.status}
-                    </Badge>
                   </div>
                   {p.clientName && (
                     <div className="text-[10px] text-muted-foreground truncate">{p.clientName}</div>

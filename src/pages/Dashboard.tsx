@@ -5,7 +5,9 @@ import { format } from 'date-fns';
 import { ProjectsGantt } from '@/components/dashboard/ProjectsGantt';
 import { StaffGantt } from '@/components/dashboard/StaffGantt';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { LayoutDashboard } from 'lucide-react';
+import { LayoutDashboard, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -183,6 +185,12 @@ export default function Dashboard() {
               Production overview · {format(new Date(), 'EEEE, MMMM d, yyyy')}
             </p>
           </div>
+          <Link to="/projects/new">
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              New Project
+            </Button>
+          </Link>
         </div>
 
         <ProjectsGantt projects={projectRows} />
