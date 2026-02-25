@@ -618,6 +618,93 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
+  // ── Add a new review segment to a task ──────────────────────────────────
+  const handleAddReviewSegment = useCallback(async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    saveToUndoStack(`Add review to "${task.name}"`);
+
+    const mask = project.working_days_mask ?? 31;
+    const libMask = convertLegacyMaskToLibFormat(mask);
+    const taskSegs = segments.filter(s => s.task_id === taskId).sort((a, b) => a.order_index - b.order_index);
+
+    try {
+      const newSegments: Array<{
+        task_id: string;
+        start_date: string;
+        end_date: string;
+        order_index: number;
+        segment_type: string;
+      }> = [];
+
+      if (taskSegs.length === 0) {
+        // No segments yet — create a "work" segment for the task's current range
+        if (!task.start_date || !task.end_date) return;
+        const workNorm = normalizeSegmentDates(new Date(task.start_date), new Date(task.end_date), {
+          projectStartDate,
+          projectEndDate,
+          workingDaysMask: mask,
+        });
+        newSegments.push({
+          task_id: taskId,
+          start_date: workNorm.start_date,
+          end_date: workNorm.end_date,
+          order_index: 0,
+          segment_type: 'work',
+        });
+
+        // Review starts next working day after work segment
+        const reviewStart = nextWorkingDayLib(addDays(new Date(workNorm.end_date), 1), libMask);
+        const reviewNorm = normalizeSegmentDates(reviewStart, reviewStart, {
+          projectStartDate,
+          projectEndDate,
+          workingDaysMask: mask,
+        });
+        newSegments.push({
+          task_id: taskId,
+          start_date: reviewNorm.start_date,
+          end_date: reviewNorm.end_date,
+          order_index: 1,
+          segment_type: 'review',
+        });
+      } else {
+        // Segments exist — append review after the last one
+        const lastSeg = taskSegs[taskSegs.length - 1];
+        const maxOrder = Math.max(...taskSegs.map(s => s.order_index));
+        const reviewStart = nextWorkingDayLib(addDays(new Date(lastSeg.end_date), 1), libMask);
+        const reviewNorm = normalizeSegmentDates(reviewStart, reviewStart, {
+          projectStartDate,
+          projectEndDate,
+          workingDaysMask: mask,
+        });
+        newSegments.push({
+          task_id: taskId,
+          start_date: reviewNorm.start_date,
+          end_date: reviewNorm.end_date,
+          order_index: maxOrder + 1,
+          segment_type: 'review',
+        });
+      }
+
+      const { data, error } = await supabase
+        .from('task_segments')
+        .insert(newSegments)
+        .select();
+
+      if (error) throw error;
+
+      if (data) {
+        onSegmentsChange([...segments, ...data as TaskSegment[]]);
+      }
+
+      toast({ title: 'Review added', description: `Added review period to "${task.name}".` });
+    } catch (error: any) {
+      console.error('Error adding review segment:', error);
+      toast({ title: 'Error', description: 'Failed to add review segment.', variant: 'destructive' });
+    }
+  }, [tasks, segments, saveToUndoStack, project.working_days_mask, projectStartDate, projectEndDate, onSegmentsChange, toast]);
+
   // Batch update segments — single undo save, batch DB writes, single local state update.
   // Used by GanttChart when dragging/resizing the main task bar of a segmented task,
   // to avoid stale-closure clobbering when calling onUpdateSegment in a loop.
@@ -1200,6 +1287,7 @@ export function TimelineEditor({
         onDeleteMeeting={handleDeleteMeeting}
         onUpdateSegment={handleUpdateSegment}
         onDragComplete={handleDragComplete}
+        onAddReviewSegment={handleAddReviewSegment}
         hiddenMeetingDates={hiddenMeetingDates}
         onToggleMeetingVisibility={onToggleMeetingVisibility}
       />

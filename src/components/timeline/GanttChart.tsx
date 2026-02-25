@@ -91,6 +91,7 @@ interface GanttChartProps {
   onTaskReorder: (sourcePhaseId: string, targetPhaseId: string, taskId: string, newIndex: number) => void;
   onAddTask: (phaseId: string) => void;
   onDeleteTask?: (taskId: string) => void;
+  onAddReviewSegment?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
@@ -122,6 +123,7 @@ export function GanttChart({
   onTaskReorder,
   onAddTask,
   onDeleteTask,
+  onAddReviewSegment,
   onAddMeeting,
   onDeleteMeeting,
   onUpdateSegment,
@@ -1436,6 +1438,7 @@ export function GanttChart({
                                      onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
                                        setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
                                      } : undefined}
+                                     onAddReview={!readOnly ? onAddReviewSegment : undefined}
                                      onClose={closeTaskMenu}
                                   />
                                 </PopoverContent>
