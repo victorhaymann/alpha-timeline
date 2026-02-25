@@ -1,104 +1,50 @@
 
 
-# Gantt Chart Simplification: One Row Per Task (Remove Phase Headers)
+# Fix Gantt View Modes: Weekly, Monthly, Project
 
 ## The Problem
 
-Currently each phase renders as **two visual rows**:
-1. A **phase header row** (36px) -- collapsible chevron, colored dot, phase name, task count badge, staff assignment icon, add button
-2. One or more **task rows** (40px each) -- grip handle, task name, duration badge, date pickers, and the actual bar on the timeline
+All three view modes (Weekly, Monthly, Project) set the date range to the **full project duration**. The only difference between them is how columns are grouped (days vs weeks), but the visible window is always the same. This means:
 
-When a phase has a single task (which is the common case -- e.g. "Pre-Production" phase contains a "Pre-Production" task), this produces a redundant double line where the same name appears twice. It looks heavy and complicated for no reason.
+- **Weekly** shows 6+ weeks of individual day columns instead of just 5 working days
+- **Monthly** shows the entire project range instead of ~1 month of days
+- **Project** works acceptably (shows full range with week-grouped columns) but the date picker shows a confusing range
 
-## The Proposal: Flat Task List with Phase Color Indicators
+## The Fix
 
-Remove the dedicated phase header row entirely. Each task becomes a single self-contained row that carries its phase identity via a **colored left border or dot**.
+Change `handleViewModeChange` to set the correct date window per mode, and update `navigatePeriod` to shift by the correct amount.
 
-```text
-BEFORE (current):
-┌─────────────────────────────────────────────────────────┐
-│ ▼ ● Pre-Production    1  👥  +                          │  ← phase header (36px)
-│     Pre-Production   4d  Feb 24 → Feb 27  ▓▓▓▓▓▓▓▓▓   │  ← task row (40px)
-│ ▼ ● Production        2  👥  +                          │  ← phase header
-│     Modeling         6d  Mar 3 → Mar 10   ▓▓▓▓▓▓▓▓▓   │  ← task row
-│     Texturing        4d  Mar 11 → Mar 14  ▓▓▓▓▓▓▓      │  ← task row
-└─────────────────────────────────────────────────────────┘
+### View Mode Behavior
 
-AFTER (proposed):
-┌─────────────────────────────────────────────────────────┐
-│ ● Pre-Production   4d  Feb 24 → Feb 27   ▓▓▓▓▓▓▓▓▓   │  ← single row
-│ ● Modeling         6d  Mar 3 → Mar 10    ▓▓▓▓▓▓▓▓▓   │  ← single row
-│ ● Texturing        4d  Mar 11 → Mar 14   ▓▓▓▓▓▓▓      │  ← single row
-│ ● Milestone        —   Mar 14            🚩            │  ← single row
-└─────────────────────────────────────────────────────────┘
-```
-
-### What Happens to Phase-Level Features
-
-| Feature | Current Location | New Location |
-|---------|-----------------|--------------|
-| Phase color dot | Phase header | Left of each task name (inherits phase color) |
-| Task count badge | Phase header | Removed (visible by counting rows) |
-| Staff assignment (👥) | Phase header | Moved to a subtle icon on task row hover, or accessible via right-click/popover |
-| Add task (+) | Phase header | Moved to a "+" button that appears at the bottom of each phase group on hover, or in the task popover menu |
-| Collapse/expand | Phase header chevron | Removed -- all tasks always visible (the chart is cleaner without nesting) |
-| Grip/reorder | Task row | Stays on task row |
-| Delete task | Task row | Stays on task row |
-
-### Phase Grouping (Subtle Visual Separator)
-
-To maintain phase awareness without a full header row, add a **thin horizontal divider line** with a small phase label between phase groups:
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│  PRE-PRODUCTION                                         │  ← subtle label (16px)
-│ ● Pre-Production   4d  Feb 24 → Feb 27   ▓▓▓▓▓▓▓▓▓   │
-│ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─   │
-│  PRODUCTION                                             │  ← subtle label (16px)
-│ ● Modeling         6d  Mar 3 → Mar 10    ▓▓▓▓▓▓▓▓▓   │
-│ ● Texturing        4d  Mar 11 → Mar 14   ▓▓▓▓▓▓▓      │
-└─────────────────────────────────────────────────────────┘
-```
-
-This label row is ~16-20px (half the old header), non-interactive, and purely decorative. It also carries the staff assignment icon and add-task button on hover.
-
----
-
-## Technical Changes
+| Mode | Date Window | Navigation Step | Columns |
+|------|------------|-----------------|---------|
+| **Weekly** | Monday of current week → Friday of current week (5 working days) | ±1 week (7 calendar days) | Individual days |
+| **Monthly** | Today → Today + 1 month | ±1 month | Individual days |
+| **Project** | Project start → Project end (full duration) | Navigation disabled | Week-grouped columns (W1, W2...) |
 
 ### File: `src/components/timeline/GanttChart.tsx`
 
-**Left pane changes:**
-- Replace the current two-level rendering (phase header → task rows) with a flat list
-- Add a **phase separator row** (~20px) between phase groups: shows uppercase phase name in muted text, colored left accent, and on-hover actions (staff assignment, add task)
-- Each task row keeps: colored dot (phase color), task name (editable), duration badge, inline date pickers, grip handle, delete button
-- Remove `collapsedSections` state and `toggleSectionCollapse` -- no more collapsing
-- Remove `PHASE_HEADER_HEIGHT` usage from height calculations
+**`handleViewModeChange` (lines 365-369):**
 
-**Right pane (timeline) changes:**
-- The phase separator row on the right side is just an empty thin row with the grid lines continuing through it
-- Task bar rows remain unchanged in rendering logic
-- Total height calculation simplifies: `HEADER_HEIGHT + (separatorCount * 20) + (taskCount * ROW_HEIGHT) + weeklyCallHeight`
+Replace the single "set full project range" logic with mode-specific date windows:
 
-**Height calculation update:**
-- Old: `HEADER_HEIGHT + sections * (PHASE_HEADER_HEIGHT + tasks.length * ROW_HEIGHT)`
-- New: `HEADER_HEIGHT + phases.length * PHASE_SEPARATOR_HEIGHT + totalTasks * ROW_HEIGHT`
+- `week`: Calculate Monday of the current week → Friday of the current week. Use `startOfWeek` and `endOfWeek` from date-fns (with `weekStartsOn: 1` for Monday). Then trim to Friday (5 working days).
+- `month`: Set from today → `addMonths(today, 1)`.
+- `project`: Set from `validStartDate` → `validEndDate` (full project, as it works today).
 
-### File: `src/components/timeline/ganttTypes.ts`
+**`navigatePeriod` (lines 372-403):**
 
-- Add `PHASE_SEPARATOR_HEIGHT = 20` constant
-- Keep `PHASE_HEADER_HEIGHT` for backward compat but it won't be used in GanttChart
+The weekly navigation already shifts by 7 days (correct). The monthly navigation already shifts by 1 month (correct). Project view already returns early (correct). No changes needed here -- the issue is purely in the initial date range set by `handleViewModeChange`.
 
-### No other file changes needed
+**Initial state (line 146, 156-158):**
 
-The data flow, props, segments, drag/resize, popover menu, review notes -- all stay the same. This is purely a rendering restructure within GanttChart.tsx.
+The default `viewMode` is `'month'` and the default `dateRange` is the full project range. Update the initial `dateRange` to reflect monthly: today → today + 1 month. This ensures the first render matches the selected mode.
 
----
-
-## Files Summary
+### Summary of Changes
 
 | File | Change |
 |------|--------|
-| `src/components/timeline/GanttChart.tsx` | Flatten phase header + task rows into single rows with phase separator labels. Remove collapse logic. |
-| `src/components/timeline/ganttTypes.ts` | Add `PHASE_SEPARATOR_HEIGHT` constant |
+| `src/components/timeline/GanttChart.tsx` | Fix `handleViewModeChange` to set mode-appropriate date windows. Fix initial `dateRange` state to match default `viewMode`. Add `startOfWeek`/`endOfWeek` imports from date-fns. |
+
+No other files need changes. The `useGanttCalculations` hook, `GanttHeader`, and all other components already work correctly with whatever date range is passed in.
 
