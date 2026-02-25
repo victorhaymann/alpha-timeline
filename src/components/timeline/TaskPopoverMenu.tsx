@@ -7,6 +7,7 @@ interface TaskPopoverMenuProps {
   taskSegments: TaskSegment[];
   hoveredSegmentId: string | null;
   onDeleteTask?: (taskId: string) => void;
+  onDeleteReviewSegment?: (segmentId: string) => void;
   onEditReviewNotes?: (segmentId: string, taskName: string, currentNotes: string) => void;
   onAddReview?: (taskId: string) => void;
   onClose: () => void;
@@ -17,12 +18,14 @@ export function TaskPopoverMenu({
   taskSegments,
   hoveredSegmentId,
   onDeleteTask,
+  onDeleteReviewSegment,
   onEditReviewNotes,
   onAddReview,
   onClose,
 }: TaskPopoverMenuProps) {
   // Determine if we're hovering a review segment
   const hoveredSeg = hoveredSegmentId ? taskSegments.find(s => s.id === hoveredSegmentId) : null;
+  const isReviewHovered = hoveredSeg?.segment_type === 'review';
 
   return (
     <div className="flex flex-col">
@@ -60,7 +63,25 @@ export function TaskPopoverMenu({
         </button>
       )}
 
-      {onDeleteTask && (
+      {/* Delete Review - only when hovering a review segment */}
+      {isReviewHovered && onDeleteReviewSegment && hoveredSeg && (
+        <>
+          <div className="h-px bg-border my-1" />
+          <button
+            onClick={() => {
+              onDeleteReviewSegment(hoveredSeg.id);
+              onClose();
+            }}
+            className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-destructive/10 text-destructive transition-colors text-left w-full"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Review
+          </button>
+        </>
+      )}
+
+      {/* Delete Task - only when NOT hovering a review segment */}
+      {!isReviewHovered && onDeleteTask && (
         <>
           <div className="h-px bg-border my-1" />
           <button
