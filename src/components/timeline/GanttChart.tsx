@@ -67,8 +67,6 @@ import { Calendar } from '@/components/ui/calendar';
 import { 
   format, 
   addDays, 
-  addMonths,
-  subMonths,
   startOfDay,
   startOfWeek,
   isSameDay,
@@ -153,24 +151,24 @@ export function GanttChart({
   // Responsive task column width
   const taskColumnWidth = isMobile ? TASK_COLUMN_WIDTH_MOBILE : TASK_COLUMN_WIDTH_DESKTOP;
   
-  // Default view: monthly window (today → today + 1 month)
+  // Always use full project range so the timeline is physically scrollable
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const today = new Date();
-    return { from: today, to: addMonths(today, 1) };
+    return { from: validStartDate, to: validEndDate };
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
-  // Sync dateRange when project dates change (e.g., deadline updated in settings)
-  // Only reset for project view; week/month views keep their user-navigated window
+  // Visible date range computed from scroll position (for header display)
+  const [visibleDateRange, setVisibleDateRange] = useState<DateRange | undefined>(undefined);
+  
+  // Track mode changes to trigger auto-scroll (start with 'month' to scroll to today on first render)
+  const [scrollTarget, setScrollTarget] = useState<ViewMode | null>('month');
+  
+  // Sync dateRange when project dates change
   useEffect(() => {
-    if (viewMode === 'project') {
-      setDateRange({ from: validStartDate, to: validEndDate });
-    }
-  }, [validStartDate.getTime(), validEndDate.getTime(), viewMode]);
+    setDateRange({ from: validStartDate, to: validEndDate });
+  }, [validStartDate.getTime(), validEndDate.getTime()]);
   
   // Collapsed sections removed - flat layout, all tasks always visible
-  // Slide animation state
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -296,8 +294,17 @@ export function GanttChart({
       rightHeaderRef.current.scrollLeft = rightBodyRef.current.scrollLeft;
     }
     
+    // Update visible date range from scroll position
+    if (rightBodyRef.current && groupedColumns.length > 0) {
+      const scrollLeft = rightBodyRef.current.scrollLeft;
+      const visibleWidth = rightBodyRef.current.clientWidth;
+      const fromDate = xToDate(scrollLeft);
+      const toDate = xToDate(scrollLeft + visibleWidth);
+      setVisibleDateRange({ from: fromDate, to: toDate });
+    }
+    
     requestAnimationFrame(() => { isSyncingScroll.current = false; });
-  }, []);
+  }, [groupedColumns, xToDate]);
 
   // Wrapper for segment updates that syncs task dates after segment change
   const handleSegmentUpdate = useCallback((segmentId: string, updates: Partial<TaskSegment>, taskId: string) => {
@@ -368,59 +375,58 @@ export function GanttChart({
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
-    const today = new Date();
-    if (mode === 'week') {
-      // Monday → Friday of current week
-      const monday = startOfWeek(today, { weekStartsOn: 1 });
-      const friday = addDays(monday, 4);
-      setDateRange({ from: monday, to: friday });
-    } else if (mode === 'month') {
-      // Today → today + 1 month
-      setDateRange({ from: today, to: addMonths(today, 1) });
-    } else {
-      // Project: full duration
-      setDateRange({ from: validStartDate, to: validEndDate });
-    }
+    // dateRange stays full project for all modes
+    setDateRange({ from: validStartDate, to: validEndDate });
+    // Trigger auto-scroll to appropriate position
+    setScrollTarget(mode);
   }, [validStartDate, validEndDate]);
 
   // Navigate to previous/next period based on view mode
   const navigatePeriod = useCallback((direction: 'prev' | 'next') => {
-    if (!dateRange?.from || !dateRange?.to) return;
+    if (!rightBodyRef.current) return;
     
-    setSlideDirection(direction === 'prev' ? 'right' : 'left');
+    if (viewMode === 'project') return; // No navigation in project view
     
-    // Clear slide direction after animation
-    setTimeout(() => setSlideDirection(null), 350);
-    
-    let newFrom: Date;
-    let newTo: Date;
+    const sign = direction === 'next' ? 1 : -1;
+    let pixelOffset: number;
     
     if (viewMode === 'week') {
-      // Move by 1 week
-      const shift = direction === 'prev' ? -7 : 7;
-      newFrom = addDays(dateRange.from, shift);
-      newTo = addDays(dateRange.to, shift);
-    } else if (viewMode === 'month') {
-      // Move by 1 month
-      if (direction === 'prev') {
-        newFrom = subMonths(dateRange.from, 1);
-        newTo = subMonths(dateRange.to, 1);
-      } else {
-        newFrom = addMonths(dateRange.from, 1);
-        newTo = addMonths(dateRange.to, 1);
-      }
+      // Scroll by 5 working day columns (1 week)
+      pixelOffset = 5 * columnWidth * sign;
     } else {
-      // Project view: no navigation needed, but allow scrolling if date range is custom
-      return;
+      // Scroll by ~22 working day columns (1 month)
+      pixelOffset = 22 * columnWidth * sign;
     }
     
-    setDateRange({ from: newFrom, to: newTo });
-  }, [dateRange, viewMode]);
+    rightBodyRef.current.scrollBy({ left: pixelOffset, behavior: 'smooth' });
+  }, [viewMode, columnWidth]);
+
+  // Auto-scroll to correct position on mode change
+  useEffect(() => {
+    if (!scrollTarget || !rightBodyRef.current || groupedColumns.length === 0) return;
+    
+    const today = new Date();
+    let targetX = 0;
+    
+    if (scrollTarget === 'week') {
+      const monday = startOfWeek(today, { weekStartsOn: 1 });
+      targetX = dateToX(monday);
+    } else if (scrollTarget === 'month') {
+      targetX = dateToX(today);
+    }
+    // project: scroll to 0
+    
+    rightBodyRef.current.scrollLeft = targetX;
+    // Also sync header
+    if (rightHeaderRef.current) {
+      rightHeaderRef.current.scrollLeft = targetX;
+    }
+    setScrollTarget(null);
+  }, [scrollTarget, groupedColumns, columnWidth, dateToX]);
 
   // Keyboard navigation for horizontal scrolling and period navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if Gantt chart is focused or no other input is focused
       const activeElement = document.activeElement;
       const isInputFocused = activeElement?.tagName === 'INPUT' || 
                             activeElement?.tagName === 'TEXTAREA' ||
@@ -436,21 +442,20 @@ export function GanttChart({
         navigatePeriod('next');
       } else if (e.key === 'Home') {
         e.preventDefault();
-        setSlideDirection('right');
-        setTimeout(() => setSlideDirection(null), 350);
-        // Use validated dates to avoid stale closure
-        setDateRange({ from: validStartDate, to: validEndDate });
+        if (rightBodyRef.current) {
+          rightBodyRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+        }
       } else if (e.key === 'End') {
         e.preventDefault();
-        if (containerRef.current) {
-          containerRef.current.scrollTo({ left: containerRef.current.scrollWidth, behavior: 'smooth' });
+        if (rightBodyRef.current) {
+          rightBodyRef.current.scrollTo({ left: rightBodyRef.current.scrollWidth, behavior: 'smooth' });
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigatePeriod, validStartDate, validEndDate]);
+  }, [navigatePeriod]);
 
   // Helper to check if a task is a client check-in (legacy) or consolidated call
   const isClientCheckin = useCallback((task: Task) => {
@@ -664,17 +669,14 @@ export function GanttChart({
               >
                 <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-[10px] md:text-xs font-medium tracking-wide hidden sm:inline">
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <>
-                        {format(dateRange.from, 'MMM d')} - {format(dateRange.to, 'MMM d')}
-                      </>
-                    ) : (
-                      format(dateRange.from, 'MMM d')
-                    )
-                  ) : (
-                    'Dates'
-                  )}
+                  {(() => {
+                    const displayRange = visibleDateRange || dateRange;
+                    if (!displayRange?.from) return 'Dates';
+                    if (displayRange.to) {
+                      return `${format(displayRange.from, 'MMM d')} - ${format(displayRange.to, 'MMM d')}`;
+                    }
+                    return format(displayRange.from, 'MMM d');
+                  })()}
                 </span>
               </Button>
             </PopoverTrigger>
@@ -1083,8 +1085,6 @@ export function GanttChart({
               ref={rightBodyRef}
               className={cn(
                 "flex-1 overflow-auto relative",
-                slideDirection === 'left' && "animate-slide-left",
-                slideDirection === 'right' && "animate-slide-right",
                 isDraggingAny && "select-none"
               )}
               onScroll={handleRightBodyScroll}
