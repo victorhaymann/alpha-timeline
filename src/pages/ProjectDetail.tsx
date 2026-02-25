@@ -500,22 +500,22 @@ export default function ProjectDetail() {
       </div>
 
       {/* Project Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-[1fr_1fr_1.5fr]">
+        <Card className="h-[88px]">
+          <CardContent className="h-full flex items-center pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
                 <Calendar className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Duration</p>
-                <p className="text-lg font-semibold">{totalDays} days</p>
+                <p className="text-sm text-muted-foreground">Delivery Date</p>
+                <p className="text-lg font-semibold">{format(new Date(project.end_date), 'MMM d, yyyy')}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="h-[88px]">
+          <CardContent className="h-full flex items-center pt-5 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-status-review/10">
                 <Clock className="w-5 h-5 text-status-review" />
@@ -528,35 +528,37 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
         <Card 
-          className="cursor-pointer hover:shadow-md transition-shadow group"
+          className="h-[88px] cursor-pointer hover:shadow-md transition-shadow group"
           onClick={openPmDialog}
         >
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
+          <CardContent className="h-full flex items-center pt-5 pb-4">
+            <div className="flex items-center gap-3 w-full min-w-0">
               <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                 <User className="w-5 h-5 text-primary" />
               </div>
-              <div className="min-w-0 space-y-1 flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">Project Manager</p>
                   <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
                 {project.pm_name ? (
-                  <>
+                  <div>
                     <p className="text-sm font-semibold truncate">{project.pm_name}</p>
-                    {project.pm_email && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Mail className="w-3.5 h-3.5 text-[#0078D4]" />
-                        <span className="truncate">{project.pm_email}</span>
-                      </div>
-                    )}
-                    {project.pm_whatsapp && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Phone className="w-3.5 h-3.5 text-[#25D366]" />
-                        <span>{project.pm_whatsapp}</span>
-                      </div>
-                    )}
-                  </>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      {project.pm_email && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
+                          <Mail className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="truncate">{project.pm_email}</span>
+                        </div>
+                      )}
+                      {project.pm_whatsapp && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                          <Phone className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span>{project.pm_whatsapp}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">Not assigned</p>
                 )}
