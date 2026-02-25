@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Task, Phase, Dependency, Project, PhaseCategory, TaskSegment } from '@/types/database';
+import { DragResult } from '@/hooks/useDragAndResize';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -22,7 +23,7 @@ import {
   CalendarRange
 } from 'lucide-react';
 import { ShiftTimelineDialog } from './ShiftTimelineDialog';
-import { format, parse, addDays } from 'date-fns';
+import { format, parse, addDays, differenceInDays } from 'date-fns';
 import { computeSchedule, ScheduleTask, ScheduleDependency } from '@/lib/scheduleEngine';
 import { DEFAULT_FEEDBACK_SETTINGS } from '@/components/steps/FeedbackConfig';
 import { snapTaskToWorkingDays, hasEndpointsOnNonWorkingDays, DEFAULT_WORKING_DAYS_MASK, nextWorkingDay as nextWorkingDayLib, convertLegacyMaskToLibFormat, addWorkingDays } from '@/lib/workingDays';
@@ -664,6 +665,86 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
+  // ── Unified drag completion handler ─────────────────────────────────────
+  // All drag/resize operations from the Gantt hook flow through here.
+  // Routes to: task update, single segment update, or batch segment update.
+  const handleDragComplete = useCallback(async (result: DragResult) => {
+    const { type, taskId, segmentId, newStart, newEnd } = result;
+
+    // Individual segment drag/resize
+    if (segmentId) {
+      handleUpdateSegment(segmentId, { start_date: newStart, end_date: newEnd });
+      return;
+    }
+
+    // Task-level drag/resize
+    const taskSegs = segments.filter(s => s.task_id === taskId);
+
+    if (taskSegs.length === 0) {
+      // Simple task (no segments) — update task directly
+      handleTaskUpdate(taskId, { start_date: newStart, end_date: newEnd });
+      return;
+    }
+
+    // Segmented task — compute deltas and batch update all segments
+    const segStarts = taskSegs.map(s => new Date(s.start_date).getTime());
+    const segEnds = taskSegs.map(s => new Date(s.end_date).getTime());
+    const oldStart = new Date(Math.min(...segStarts));
+    const oldEnd = new Date(Math.max(...segEnds));
+    const startDelta = differenceInDays(new Date(newStart), oldStart);
+    const endDelta = differenceInDays(new Date(newEnd), oldEnd);
+
+    if (startDelta === 0 && endDelta === 0) return;
+
+    const sorted = [...taskSegs].sort((a, b) => a.order_index - b.order_index);
+    const batchUpdates: { segmentId: string; changes: { start_date?: string; end_date?: string } }[] = [];
+
+    if (startDelta === endDelta) {
+      // MOVE: shift all segments uniformly
+      for (const seg of taskSegs) {
+        batchUpdates.push({
+          segmentId: seg.id,
+          changes: {
+            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          },
+        });
+      }
+    } else if (startDelta === 0) {
+      // RESIZE-END: only adjust last segment's end_date
+      const lastSeg = sorted[sorted.length - 1];
+      batchUpdates.push({
+        segmentId: lastSeg.id,
+        changes: { end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd') },
+      });
+    } else if (endDelta === 0) {
+      // RESIZE-START: only adjust first segment's start_date
+      const firstSeg = sorted[0];
+      batchUpdates.push({
+        segmentId: firstSeg.id,
+        changes: { start_date: format(addDays(new Date(firstSeg.start_date), startDelta), 'yyyy-MM-dd') },
+      });
+    } else {
+      // Mixed delta: shift all, then override last segment's end
+      for (const seg of taskSegs) {
+        batchUpdates.push({
+          segmentId: seg.id,
+          changes: {
+            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          },
+        });
+      }
+      const lastSeg = sorted[sorted.length - 1];
+      const lastIdx = batchUpdates.findIndex(u => u.segmentId === lastSeg.id);
+      if (lastIdx >= 0) {
+        batchUpdates[lastIdx].changes.end_date = format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd');
+      }
+    }
+
+    handleBatchUpdateSegments(batchUpdates);
+  }, [segments, handleTaskUpdate, handleUpdateSegment, handleBatchUpdateSegments]);
+
   // Regenerate schedule
   const handleRegenerate = async () => {
     setIsRegenerating(true);
@@ -1118,7 +1199,7 @@ export function TimelineEditor({
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
         onUpdateSegment={handleUpdateSegment}
-        onBatchUpdateSegments={handleBatchUpdateSegments}
+        onDragComplete={handleDragComplete}
         hiddenMeetingDates={hiddenMeetingDates}
         onToggleMeetingVisibility={onToggleMeetingVisibility}
       />
