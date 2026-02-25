@@ -94,6 +94,7 @@ interface GanttChartProps {
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
+  onBatchUpdateSegments?: (updates: { segmentId: string; changes: { start_date?: string; end_date?: string } }[]) => void;
   hiddenMeetingDates?: Set<string>;
   onToggleMeetingVisibility?: (date: string, hidden: boolean) => void;
   readOnly?: boolean;
@@ -124,6 +125,7 @@ export function GanttChart({
   onAddMeeting,
   onDeleteMeeting,
   onUpdateSegment,
+  onBatchUpdateSegments,
   hiddenMeetingDates,
   onToggleMeetingVisibility,
   readOnly = false,
@@ -307,11 +309,11 @@ export function GanttChart({
   }, [onUpdateSegment]);
 
   // Wrapper: when dragging/resizing a task that has segments, detect the drag
-  // type from date deltas and update segments accordingly. The DB trigger then
-  // syncs parent task dates from the updated segments.
+  // type from date deltas and build a batch update array. Uses onBatchUpdateSegments
+  // to avoid stale-closure clobbering that happens when calling onUpdateSegment in a loop.
   const handleTaskOrSegmentsDrag = useCallback((taskId: string, updates: Partial<Task>) => {
     const taskSegs = segments.filter(s => s.task_id === taskId);
-    if (taskSegs.length > 0 && onUpdateSegment && updates.start_date && updates.end_date) {
+    if (taskSegs.length > 0 && onBatchUpdateSegments && updates.start_date && updates.end_date) {
       // Derive current effective boundaries from segments (source of truth)
       const segStarts = taskSegs.map(s => new Date(s.start_date).getTime());
       const segEnds = taskSegs.map(s => new Date(s.end_date).getTime());
@@ -327,44 +329,56 @@ export function GanttChart({
 
       // Sort segments by order_index for first/last identification
       const sorted = [...taskSegs].sort((a, b) => a.order_index - b.order_index);
+      const batchUpdates: { segmentId: string; changes: { start_date?: string; end_date?: string } }[] = [];
 
       if (startDelta === endDelta) {
         // MOVE: uniform shift — shift every segment
         for (const seg of taskSegs) {
-          onUpdateSegment(seg.id, {
-            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
-            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          batchUpdates.push({
+            segmentId: seg.id,
+            changes: {
+              start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+              end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+            },
           });
         }
-      } else if (startDelta === 0 && endDelta !== 0) {
+      } else if (startDelta === 0) {
         // RESIZE-END: only adjust last segment's end_date
         const lastSeg = sorted[sorted.length - 1];
-        onUpdateSegment(lastSeg.id, {
-          end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd'),
+        batchUpdates.push({
+          segmentId: lastSeg.id,
+          changes: { end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd') },
         });
-      } else if (endDelta === 0 && startDelta !== 0) {
+      } else if (endDelta === 0) {
         // RESIZE-START: only adjust first segment's start_date
         const firstSeg = sorted[0];
-        onUpdateSegment(firstSeg.id, {
-          start_date: format(addDays(new Date(firstSeg.start_date), startDelta), 'yyyy-MM-dd'),
+        batchUpdates.push({
+          segmentId: firstSeg.id,
+          changes: { start_date: format(addDays(new Date(firstSeg.start_date), startDelta), 'yyyy-MM-dd') },
         });
       } else {
-        // Mixed change — shift all segments by start delta, then adjust last end
+        // Mixed: shift all segments by startDelta, then adjust last segment's end
         for (const seg of taskSegs) {
-          onUpdateSegment(seg.id, {
-            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
-            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          batchUpdates.push({
+            segmentId: seg.id,
+            changes: {
+              start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+              end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+            },
           });
         }
         const lastSeg = sorted[sorted.length - 1];
-        onUpdateSegment(lastSeg.id, {
-          end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd'),
-        });
+        const lastIdx = batchUpdates.findIndex(u => u.segmentId === lastSeg.id);
+        if (lastIdx >= 0) {
+          batchUpdates[lastIdx].changes.end_date = format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd');
+        }
       }
+
+      onBatchUpdateSegments(batchUpdates);
     } else {
       onTaskUpdate(taskId, updates);
     }
-  }, [segments, onUpdateSegment, onTaskUpdate]);
+  }, [segments, onBatchUpdateSegments, onTaskUpdate]);
 
   // Drag and drop hook
   const {

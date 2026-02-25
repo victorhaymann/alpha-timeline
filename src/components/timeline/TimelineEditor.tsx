@@ -617,6 +617,52 @@ export function TimelineEditor({
     }
   }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
+  // Batch update segments — single undo save, batch DB writes, single local state update.
+  // Used by GanttChart when dragging/resizing the main task bar of a segmented task,
+  // to avoid stale-closure clobbering when calling onUpdateSegment in a loop.
+  const handleBatchUpdateSegments = useCallback(async (
+    updates: { segmentId: string; changes: { start_date?: string; end_date?: string } }[]
+  ) => {
+    if (updates.length === 0) return;
+
+    // Single undo save
+    const firstSeg = segments.find(s => s.id === updates[0].segmentId);
+    const task = firstSeg ? tasks.find(t => t.id === firstSeg.task_id) : null;
+    saveToUndoStack(task ? `Move "${task.name}"` : 'Move task');
+
+    try {
+      // Normalize all updates
+      const normalizedUpdates = updates.map(({ segmentId, changes }) => {
+        const segment = segments.find(s => s.id === segmentId);
+        if (!segment) return null;
+        const currentStart = new Date(changes.start_date || segment.start_date);
+        const currentEnd = new Date(changes.end_date || segment.end_date);
+        const normalized = normalizeSegmentDates(currentStart, currentEnd, {
+          projectStartDate,
+          projectEndDate,
+          workingDaysMask: project.working_days_mask ?? 31,
+        });
+        return { segmentId, normalized };
+      }).filter(Boolean) as { segmentId: string; normalized: { start_date: string; end_date: string } }[];
+
+      // Batch DB writes (fire all at once)
+      await Promise.all(normalizedUpdates.map(({ segmentId, normalized }) =>
+        supabase.from('task_segments').update(normalized).eq('id', segmentId)
+      ));
+
+      // Single local state update
+      let updatedSegments = [...segments];
+      for (const { segmentId, normalized } of normalizedUpdates) {
+        updatedSegments = updatedSegments.map(s =>
+          s.id === segmentId ? { ...s, ...normalized } : s
+        );
+      }
+      onSegmentsChange(updatedSegments);
+    } catch (error: any) {
+      console.error('Error batch updating segments:', error);
+      toast({ title: 'Error', description: 'Failed to update periods.', variant: 'destructive' });
+    }
+  }, [segments, tasks, saveToUndoStack, projectStartDate, projectEndDate, project.working_days_mask, onSegmentsChange, toast]);
 
   // Regenerate schedule
   const handleRegenerate = async () => {
@@ -1072,6 +1118,7 @@ export function TimelineEditor({
         onAddMeeting={handleOpenAddMeeting}
         onDeleteMeeting={handleDeleteMeeting}
         onUpdateSegment={handleUpdateSegment}
+        onBatchUpdateSegments={handleBatchUpdateSegments}
         hiddenMeetingDates={hiddenMeetingDates}
         onToggleMeetingVisibility={onToggleMeetingVisibility}
       />
