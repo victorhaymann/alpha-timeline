@@ -9,7 +9,7 @@ import { ErrorBoundary } from "@/components/errors/ErrorBoundary";
 import { LoadingTransition } from "@/components/ui/BrandedLoader";
 
 import Auth from "./pages/Auth";
-import Projects from "./pages/Projects";
+
 import NewProject from "./pages/NewProject";
 import ProjectDetail from "./pages/ProjectDetail";
 
@@ -69,7 +69,7 @@ function AppRoutes() {
         </ProtectedRoute>
       }>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/projects" element={<Projects />} />
+        <Route path="/projects" element={<Navigate to="/dashboard" replace />} />
         <Route path="/projects/new" element={<NewProject />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/clients" element={<Clients />} />
