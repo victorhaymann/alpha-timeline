@@ -1,84 +1,97 @@
 
 
-# Review Notes for Client Feedback Segments
+# Gantt Chart Simplification: One Row Per Task (Remove Phase Headers)
 
-## Problem
+## The Problem
 
-When a review segment appears on the timeline, the client has no context on **what** they need to review. The admin/PM writes nothing, and the client sees a dashed "Review" bar with no actionable information.
+Currently each phase renders as **two visual rows**:
+1. A **phase header row** (36px) -- collapsible chevron, colored dot, phase name, task count badge, staff assignment icon, add button
+2. One or more **task rows** (40px each) -- grip handle, task name, duration badge, date pickers, and the actual bar on the timeline
 
-## Solution
+When a phase has a single task (which is the common case -- e.g. "Pre-Production" phase contains a "Pre-Production" task), this produces a redundant double line where the same name appears twice. It looks heavy and complicated for no reason.
 
-Add a `review_notes` text field to each review segment. PMs can write instructions (e.g., "Please review the 3D model textures and provide feedback on lighting"). Clients see a clickable review bar that opens a dialog with the instructions.
+## The Proposal: Flat Task List with Phase Color Indicators
 
----
+Remove the dedicated phase header row entirely. Each task becomes a single self-contained row that carries its phase identity via a **colored left border or dot**.
 
-## Database Change
+```text
+BEFORE (current):
+┌─────────────────────────────────────────────────────────┐
+│ ▼ ● Pre-Production    1  👥  +                          │  ← phase header (36px)
+│     Pre-Production   4d  Feb 24 → Feb 27  ▓▓▓▓▓▓▓▓▓   │  ← task row (40px)
+│ ▼ ● Production        2  👥  +                          │  ← phase header
+│     Modeling         6d  Mar 3 → Mar 10   ▓▓▓▓▓▓▓▓▓   │  ← task row
+│     Texturing        4d  Mar 11 → Mar 14  ▓▓▓▓▓▓▓      │  ← task row
+└─────────────────────────────────────────────────────────┘
 
-### Alter `task_segments` table
-
-Add a nullable `review_notes` column:
-
-```sql
-ALTER TABLE task_segments ADD COLUMN review_notes text;
+AFTER (proposed):
+┌─────────────────────────────────────────────────────────┐
+│ ● Pre-Production   4d  Feb 24 → Feb 27   ▓▓▓▓▓▓▓▓▓   │  ← single row
+│ ● Modeling         6d  Mar 3 → Mar 10    ▓▓▓▓▓▓▓▓▓   │  ← single row
+│ ● Texturing        4d  Mar 11 → Mar 14   ▓▓▓▓▓▓▓      │  ← single row
+│ ● Milestone        —   Mar 14            🚩            │  ← single row
+└─────────────────────────────────────────────────────────┘
 ```
 
-No RLS changes needed -- the existing policies already cover read/write access for segments.
+### What Happens to Phase-Level Features
+
+| Feature | Current Location | New Location |
+|---------|-----------------|--------------|
+| Phase color dot | Phase header | Left of each task name (inherits phase color) |
+| Task count badge | Phase header | Removed (visible by counting rows) |
+| Staff assignment (👥) | Phase header | Moved to a subtle icon on task row hover, or accessible via right-click/popover |
+| Add task (+) | Phase header | Moved to a "+" button that appears at the bottom of each phase group on hover, or in the task popover menu |
+| Collapse/expand | Phase header chevron | Removed -- all tasks always visible (the chart is cleaner without nesting) |
+| Grip/reorder | Task row | Stays on task row |
+| Delete task | Task row | Stays on task row |
+
+### Phase Grouping (Subtle Visual Separator)
+
+To maintain phase awareness without a full header row, add a **thin horizontal divider line** with a small phase label between phase groups:
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  PRE-PRODUCTION                                         │  ← subtle label (16px)
+│ ● Pre-Production   4d  Feb 24 → Feb 27   ▓▓▓▓▓▓▓▓▓   │
+│ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─   │
+│  PRODUCTION                                             │  ← subtle label (16px)
+│ ● Modeling         6d  Mar 3 → Mar 10    ▓▓▓▓▓▓▓▓▓   │
+│ ● Texturing        4d  Mar 11 → Mar 14   ▓▓▓▓▓▓▓      │
+└─────────────────────────────────────────────────────────┘
+```
+
+This label row is ~16-20px (half the old header), non-interactive, and purely decorative. It also carries the staff assignment icon and add-task button on hover.
 
 ---
 
-## UI Changes
+## Technical Changes
 
-### 1. Admin Side -- Edit review notes inline
+### File: `src/components/timeline/GanttChart.tsx`
 
-**File: `src/components/timeline/GanttChart.tsx`**
+**Left pane changes:**
+- Replace the current two-level rendering (phase header → task rows) with a flat list
+- Add a **phase separator row** (~20px) between phase groups: shows uppercase phase name in muted text, colored left accent, and on-hover actions (staff assignment, add task)
+- Each task row keeps: colored dot (phase color), task name (editable), duration badge, inline date pickers, grip handle, delete button
+- Remove `collapsedSections` state and `toggleSectionCollapse` -- no more collapsing
+- Remove `PHASE_HEADER_HEIGHT` usage from height calculations
 
-When a PM clicks on a **review segment** bar (not drag), open a small dialog/popover where they can type review instructions. This reuses the existing click flow (currently only opens the popover menu via the `...` button).
+**Right pane (timeline) changes:**
+- The phase separator row on the right side is just an empty thin row with the grid lines continuing through it
+- Task bar rows remain unchanged in rendering logic
+- Total height calculation simplifies: `HEADER_HEIGHT + (separatorCount * 20) + (taskCount * ROW_HEIGHT) + weeklyCallHeight`
 
-Add a new callback prop `onEditReviewNotes` and a new dialog component.
+**Height calculation update:**
+- Old: `HEADER_HEIGHT + sections * (PHASE_HEADER_HEIGHT + tasks.length * ROW_HEIGHT)`
+- New: `HEADER_HEIGHT + phases.length * PHASE_SEPARATOR_HEIGHT + totalTasks * ROW_HEIGHT`
 
-**File: `src/components/timeline/ReviewNotesDialog.tsx`** (NEW)
+### File: `src/components/timeline/ganttTypes.ts`
 
-A simple dialog with:
-- Title: "Review Instructions for [Task Name]"
-- A `<Textarea>` for the PM to write what the client should review
-- Save button that updates `task_segments.review_notes` via Supabase
-- Character indicator (optional)
+- Add `PHASE_SEPARATOR_HEIGHT = 20` constant
+- Keep `PHASE_HEADER_HEIGHT` for backward compat but it won't be used in GanttChart
 
-**File: `src/components/timeline/TaskPopoverMenu.tsx`**
+### No other file changes needed
 
-Add a new menu item "Edit Review Notes..." that only appears for review segments. This triggers the new dialog.
-
-### 2. Admin Side -- Visual indicator
-
-When a review segment has notes written, show a small document icon or filled dot on the review badge to indicate instructions exist. This helps PMs see at a glance which reviews have instructions.
-
-### 3. Client Side -- Click to view review notes
-
-**File: `src/components/timeline/GanttChart.tsx`**
-
-When `readOnly={true}` and a client clicks on a review segment bar:
-- If the segment has `review_notes`, open a read-only dialog showing the instructions
-- If no notes exist, show nothing (or a brief "No instructions yet" tooltip)
-
-**File: `src/components/timeline/ReviewNotesViewDialog.tsx`** (NEW)
-
-A read-only dialog with:
-- Title: "Review Instructions"
-- Task name and review period dates
-- The review notes text rendered as formatted content
-- A subtle "If you have questions, contact your PM" footer
-
-This dialog is used in both `ClientProjectView.tsx` and `SharedProjectView.tsx` since both render the GanttChart with `readOnly={true}`.
-
-### 4. Data flow
-
-**File: `src/pages/ProjectDetail.tsx`**
-
-Pass the segments (already fetched) to GanttChart -- no change needed since segments already include all columns.
-
-**File: `src/pages/ClientProjectView.tsx`** and `src/pages/SharedProjectView.tsx`**
-
-Segments are already fetched. The new `review_notes` column will automatically be included in `SELECT *` queries. No code changes needed for data fetching.
+The data flow, props, segments, drag/resize, popover menu, review notes -- all stay the same. This is purely a rendering restructure within GanttChart.tsx.
 
 ---
 
@@ -86,9 +99,6 @@ Segments are already fetched. The new `review_notes` column will automatically b
 
 | File | Change |
 |------|--------|
-| Migration SQL | Add `review_notes text` column to `task_segments` |
-| `src/components/timeline/ReviewNotesDialog.tsx` | NEW -- Edit dialog for PMs |
-| `src/components/timeline/ReviewNotesViewDialog.tsx` | NEW -- Read-only dialog for clients |
-| `src/components/timeline/TaskPopoverMenu.tsx` | Add "Edit Review Notes..." menu item for review segments |
-| `src/components/timeline/GanttChart.tsx` | Handle click on review segments to open view/edit dialog; add visual indicator for segments with notes |
+| `src/components/timeline/GanttChart.tsx` | Flatten phase header + task rows into single rows with phase separator labels. Remove collapse logic. |
+| `src/components/timeline/ganttTypes.ts` | Add `PHASE_SEPARATOR_HEIGHT` constant |
 
