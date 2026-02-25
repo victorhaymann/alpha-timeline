@@ -1,44 +1,85 @@
 
-# Gantt Timeline Interaction System — REWRITE COMPLETE
 
-## What was done
+# Analysis: Why Segmented Tasks (with Reviews) Drag Differently
 
-### 1. `src/hooks/useDragAndResize.ts` — Full rewrite
-- **Single callback**: `onDragComplete(result: DragResult)` replaces `onTaskUpdate` + `onSegmentUpdate`
-- **DragResult type**: Contains `type` (task-move/segment-resize-end/etc), `taskId`, optional `segmentId`, `newStart`, `newEnd`
-- **Ref-based pending drag**: `pendingDragRef` replaces `useState` + re-subscribing `useEffect` — fixes event listener stacking
-- **Auto-edge-detection kept**: The 12px threshold on `.gantt-task-bar-base` is the real resize mechanism (CSS `pointer-events: none` on handle divs means they never fire)
-- **All working-day logic preserved**: `snapToWorkingDay`, `addWorkingDays`, `shiftDateByColumns`, `countDurationDays`, `clampToProject`
+## The Two Behaviors
 
-### 2. `src/components/timeline/GanttChart.tsx` — Wiring simplified
-- **Removed**: `handleSegmentUpdate` (vestigial passthrough wrapper)
-- **Removed**: `handleTaskOrSegmentsDrag` (batch routing logic moved to TimelineEditor)
-- **Removed**: `onBatchUpdateSegments` prop
-- **Added**: `onDragComplete` prop passed directly to hook
-- **Kept**: `onUpdateSegment` for inline date pickers (not drag operations)
-- **Kept**: `onTaskUpdate` for inline name edits and date pickers
+### Tasks WITHOUT review segments (works correctly)
+1. User clicks the main bar → `handleDragStart(e, task, 'move')` is called with **no segment**
+2. Hook reads `task.start_date` and `task.end_date` (line 169-170 of useDragAndResize.ts)
+3. These are the same dates used to position the bar visually (line 1205-1208 of GanttChart.tsx uses task dates when no segments exist)
+4. The bar follows the cursor perfectly because the **drag origin dates match the visual dates**
+5. On drop, `handleDragComplete` routes to `handleTaskUpdate` (simple task path)
 
-### 3. `src/components/timeline/TimelineEditor.tsx` — Unified entry point
-- **Added**: `handleDragComplete(result: DragResult)` that routes based on result type:
-  - `segmentId` present → `handleUpdateSegment` (single segment)
-  - No segments on task → `handleTaskUpdate` (simple task)
-  - Segmented task → computes deltas, builds batch array → `handleBatchUpdateSegments`
-- **Kept**: `handleBatchUpdateSegments` (called by handleDragComplete for segmented tasks)
-- **Kept**: `handleUpdateSegment` (used by inline date pickers and individual segment drags)
+### Tasks WITH review segments (broken — bar moves further than cursor)
+1. User clicks the main bar → `handleDragStart(e, task, 'move')` is called with **no segment**
+2. Hook reads `task.start_date` and `task.end_date` (line 169-170)
+3. But the bar is **visually positioned** using segment-derived dates (lines 1203-1208):
+   ```
+   effectiveStartStr = min(all segment start_dates)
+   effectiveEndStr = max(all segment end_dates)
+   ```
+4. **`task.start_date` and segment-derived `effectiveStartStr` can be different** — the DB trigger syncs them, but there's a timing gap. After a drag, the task row gets updated by the trigger asynchronously. If the local `task.start_date` hasn't been refreshed yet, it's stale.
+5. The hook computes `deltaColumns` from the mouse movement, then shifts `originalStart` (which is `task.start_date`) by that delta
+6. But the bar's visual position is based on segment dates, not `task.start_date`
+7. **If `task.start_date` ≠ `min(segment start_dates)`, the preview jumps to the wrong position**
 
-### 4. Read-only views updated
-- `ClientProjectView.tsx` and `SharedProjectView.tsx` pass `onDragComplete={() => {}}` (no-op for read-only)
+## Concrete Example
 
-## Architecture after rewrite
+```text
+Segments:        [Feb 10 ──── Feb 20]  [Feb 25 ──── Mar 5]
+Effective dates: Feb 10 → Mar 5 (used for visual bar position)
+task.start_date: Feb 12 (stale — hasn't been synced by trigger yet)
+task.end_date:   Mar 3  (also stale)
 
+User drags right by 2 columns (2 days):
+  Hook computes: newStart = Feb 12 + 2 = Feb 14, newEnd = Mar 3 + 2 = Mar 5
+  Preview shows: bar at Feb 14 → Mar 5
+
+But the bar was visually at Feb 10 → Mar 5
+So the bar appears to jump 4 days right instead of 2
 ```
-User drags/resizes a bar
-  → useDragAndResize (UX: preview, animation, snap)
-    → onDragComplete(DragResult)
-      → TimelineEditor.handleDragComplete
-        ├── segment drag? → handleUpdateSegment (single DB write)
-        ├── simple task? → handleTaskUpdate (single DB write)
-        └── segmented task? → handleBatchUpdateSegments (batch DB writes)
+
+This is why the behavior is inconsistent — sometimes `task.start_date` matches the segment-derived dates (right after a refresh), and sometimes it doesn't (after a previous drag or when the trigger is slow).
+
+## The Fix
+
+The hook should use the **same dates that position the bar visually**. For tasks with segments, the main bar's `handleDragStart` should pass the segment-derived effective dates, not `task.start_date`/`task.end_date`.
+
+### Change in `GanttChart.tsx` (line 1389)
+
+Currently:
+```typescript
+onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, task, 'move')}
 ```
 
-Inline date pickers bypass the drag system entirely (correct — they're not drag operations).
+The hook then reads `task.start_date` / `task.end_date` (line 169-170 of useDragAndResize.ts).
+
+**Fix**: Create a synthetic task object with the effective dates when segments exist, so the hook's `task.start_date` matches what's visually rendered:
+
+```typescript
+// Before the bar JSX, compute the "drag task" with effective dates
+const dragTask = taskSegments.length > 0 
+  ? { ...task, start_date: effectiveStartStr, end_date: effectiveEndStr }
+  : task;
+
+// Then in onMouseDown:
+onMouseDown={readOnly ? undefined : (e) => handleDragStart(e, dragTask, 'move')}
+```
+
+This ensures the hook's `originalStart`/`originalEnd` always match the bar's visual position. The delta calculation then produces correct pixel-to-date mapping.
+
+The same fix applies to:
+- The resize handles on the main bar (lines 1394-1397, 1419-1422) — should also use `dragTask`
+- The milestone bar (line 1306) — should also use `dragTask` if milestones ever have segments
+
+No changes needed for the review subrow bars — those already pass `seg` (the segment object) and use `seg.start_date`/`seg.end_date`, which is correct.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/components/timeline/GanttChart.tsx` | Compute `dragTask` with segment-derived effective dates. Pass `dragTask` instead of `task` to all three `handleDragStart` calls on the main task bar (move + both resize handles). ~6 lines changed. |
+
+No changes to `useDragAndResize.ts` or `TimelineEditor.tsx` — the hook and persistence layer are correct. The bug is purely that the wrong dates are passed into the hook at drag start.
+
