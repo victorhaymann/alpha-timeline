@@ -96,7 +96,7 @@ export default function Dashboard() {
   // Build ProjectsGantt data
   const projectRows = useMemo(() => {
     return projects.map(project => {
-      const projectPhases = phases.filter(p => p.project_id === project.id);
+      const projectPhases = phases.filter(p => p.project_id === project.id && !/check.?in/i.test(p.name));
       const phaseBars = projectPhases.map(phase => {
         const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
         if (phaseTasks.length === 0) return null;
