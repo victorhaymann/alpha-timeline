@@ -48,8 +48,9 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tasks')
-        .select('id, phase_id, project_id, start_date, end_date, name')
-        .in('project_id', projects.map(p => p.id));
+        .select('id, phase_id, project_id, start_date, end_date, name, task_type, is_feedback_meeting')
+        .in('project_id', projects.map(p => p.id))
+        .neq('task_type', 'meeting');
       if (error) throw error;
       return data;
     },
