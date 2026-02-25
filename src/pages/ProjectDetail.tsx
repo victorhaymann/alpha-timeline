@@ -500,7 +500,7 @@ export default function ProjectDetail() {
       </div>
 
       {/* Project Stats */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -510,32 +510,6 @@ export default function ProjectDetail() {
               <div>
                 <p className="text-sm text-muted-foreground">Duration</p>
                 <p className="text-lg font-semibold">{totalDays} days</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-phase-production/10">
-                <BarChart3 className="w-5 h-5 text-phase-production" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Progress</p>
-                <p className="text-lg font-semibold">{Math.round(progress)}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-phase-preproduction/10">
-                <Layers className="w-5 h-5 text-phase-preproduction" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Steps</p>
-                <p className="text-lg font-semibold">{projectSteps.length}</p>
               </div>
             </div>
           </CardContent>
@@ -591,27 +565,6 @@ export default function ProjectDetail() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Timeline Progress */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex justify-between text-sm mb-2">
-            <span>{format(new Date(project.start_date), 'MMM d, yyyy')}</span>
-            <span>{format(new Date(project.end_date), 'MMM d, yyyy')}</span>
-          </div>
-          <div className="h-2 bg-muted rounded-full overflow-hidden">
-            <div 
-              className={cn(
-                "h-full transition-all duration-500",
-                progress < 50 && "bg-destructive",
-                progress >= 50 && progress < 90 && "bg-orange-500",
-                progress >= 90 && "bg-status-completed"
-              )}
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Tabs */}
       <Tabs defaultValue="timeline" className="space-y-6">
