@@ -230,7 +230,12 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
 
   function dayIndex(date: Date): number {
     for (let i = 0; i < days.length; i++) {
-      if (days[i] >= date) return i;
+      if (
+        days[i].getFullYear() === date.getFullYear() &&
+        days[i].getMonth() === date.getMonth() &&
+        days[i].getDate() === date.getDate()
+      ) return i;
+      if (days[i] > date) return i;
     }
     return days.length - 1;
   }
