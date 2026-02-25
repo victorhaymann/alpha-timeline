@@ -1,69 +1,79 @@
 
 
-# Add Horizontal Scroll Navigation to Gantt Timeline
+# Multi-Lane Rows for Overlapping Phases and Staff Assignments
 
 ## The Problem
 
-The arrow buttons and keyboard arrows correctly shift the date window (±1 week or ±1 month). But the user cannot achieve the same by **scrolling horizontally** with a trackpad or mouse wheel. The timeline content fits exactly within the viewport, so there is nothing to scroll.
+In both the Projects Gantt and Staff Gantt on the dashboard, when multiple phases (or assignments) overlap in time, they render on top of each other in a single fixed-height row. The head of planning cannot see concurrent work at a glance.
 
 ## The Solution
 
-Render the **full project duration** as the underlying date range for all view modes, making the timeline physically wider than the viewport. Then auto-scroll to the "current window" position on mode change. The arrows and keyboard shortcuts become smooth-scroll shortcuts instead of date-range swaps.
+Compute **lanes** for each row. When bars overlap in time, they are stacked vertically into separate lanes within the same row. The row height grows dynamically to accommodate all lanes.
 
-### How It Works
+```text
+BEFORE (overlapping bars hidden behind each other):
+┌──────────────────────────────────────────────┐
+│ Project A   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ (only 1 visible) │  44px
+└──────────────────────────────────────────────┘
 
-1. **All view modes set `dateRange` to full project** (`validStartDate` → `validEndDate`). The `viewMode` still controls column granularity (individual days vs week groups).
+AFTER (stacked lanes):
+┌──────────────────────────────────────────────┐
+│ Project A   ▓▓▓▓ Pre-Prod ▓▓▓▓▓▓            │  lane 0
+│             ▓▓▓▓▓▓▓ Production ▓▓▓           │  lane 1
+└──────────────────────────────────────────────┘
+```
 
-2. **On mode change**, a `useEffect` scrolls the right pane to the correct initial position:
-   - Weekly: scroll so current week's Monday column is at the left edge
-   - Monthly: scroll so today's column is at the left edge
-   - Project: scroll to 0 (everything visible)
+### Lane Algorithm
 
-3. **`navigatePeriod` becomes smooth-scroll**: Instead of changing `dateRange`, it calculates a pixel offset (1 week or ~1 month of columns) and calls `rightBodyRef.current.scrollBy({ left: offset, behavior: 'smooth' })`.
+A standard interval packing / greedy lane assignment:
 
-4. **Remove slide animation**: The `slideDirection` state and CSS classes (`animate-slide-left/right`) are no longer needed since native scroll provides the visual transition.
+1. Sort bars by start date
+2. For each bar, find the first lane where no existing bar overlaps
+3. Assign it to that lane (or create a new lane)
 
-5. **Header date display**: The date range shown in the header picker updates dynamically based on `scrollLeft` position, so the user sees which dates are currently visible.
+Row height = `BASE_ROW_H + (laneCount - 1) * LANE_H` where `LANE_H` is the height of one additional lane (~24px). Single-lane rows stay at the current height.
 
 ## Technical Changes
 
-### File: `src/components/timeline/GanttChart.tsx`
+### File: `src/components/dashboard/ProjectsGantt.tsx`
 
-**`handleViewModeChange`** — Set `dateRange` to full project for all modes. Store the `viewMode` so the scroll effect knows where to jump.
+1. **Add lane computation function** `computeLanes(bars)` that returns each bar with a `lane` index and the total `laneCount`.
 
-**New `useEffect` for initial scroll position** — After `groupedColumns` and `columnWidth` are computed, calculate the target scroll offset using `dateToX()`:
-- Weekly: `dateToX(startOfWeek(today, { weekStartsOn: 1 }))`
-- Monthly: `dateToX(today)`  
-- Project: `0`
+2. **Per-project lane data**: In the rendering, compute lanes for each project's phases. Use `laneCount` to determine the row height dynamically.
 
-Call `rightBodyRef.current.scrollLeft = targetX` (instant, no smooth for initial).
+3. **Bar positioning**: Each bar's `top` offset becomes `padding + lane * LANE_H` instead of a fixed `top-2`.
 
-**`navigatePeriod`** — Replace `setDateRange(...)` with:
-- Weekly: `rightBodyRef.current.scrollBy({ left: direction === 'next' ? weekPixels : -weekPixels, behavior: 'smooth' })`  
-  where `weekPixels = 5 * columnWidth` (5 working day columns)
-- Monthly: `rightBodyRef.current.scrollBy({ left: direction === 'next' ? monthPixels : -monthPixels, behavior: 'smooth' })`  
-  where `monthPixels ≈ 22 * columnWidth` (working days in a month)
-- Project: no-op
+4. **Left pane sync**: The left column row heights must match the right pane. Compute a `rowHeights` map (project id -> height) and apply it to both sides.
 
-**Remove `slideDirection`** — Delete state, `setTimeout`, and the `animate-slide-left/right` class bindings on the right body div.
+5. **`maxHeight` calculation**: Sum all dynamic row heights instead of `filtered.length * ROW_H`.
 
-**Keyboard arrows** — Already call `navigatePeriod`, so they'll automatically smooth-scroll.
+### File: `src/components/dashboard/StaffGantt.tsx`
 
-**Header date range display** — Add an `onScroll` handler (extend `handleRightBodyScroll`) that computes the visible date window from `scrollLeft` using `xToDate()`, and updates a `visibleDateRange` state. Pass this to `GanttHeader` for display.
+Same approach:
 
-**Initial `dateRange` state** — Change from monthly window to full project: `{ from: validStartDate, to: validEndDate }`.
+1. **Add the same `computeLanes` function** for staff assignment bars.
 
-**`useEffect` for project date sync** — Remove the `viewMode === 'project'` guard so all modes update when project dates change.
+2. **Per-staff lane data**: Compute lanes for each staff member's assignments. Row height grows with lane count.
 
-### Performance Note
+3. **Bar positioning**: Offset bars vertically by lane index.
 
-A 6-month Mon-Fri project ≈ 130 day columns. A 12-month project ≈ 260 columns. At 36px minimum width, that is 4,680–9,360px — well within browser rendering limits.
+4. **Left pane sync**: Apply matching dynamic heights to the left column staff rows.
 
----
+5. **`maxHeight` calculation**: Sum all dynamic row heights including category headers.
 
-## Files Summary
+### Shared Constants
+
+- `LANE_H = 24` -- height per additional lane
+- `BAR_H = 20` -- individual bar height
+- `BAR_PAD = 6` -- top padding in each row
+- Base row height stays at current value for single-lane rows
+
+### No other files change
+
+The Dashboard page (`Dashboard.tsx`) passes data unchanged. The lane computation is purely a rendering concern inside each Gantt component.
 
 | File | Change |
 |------|--------|
-| `src/components/timeline/GanttChart.tsx` | Full project dateRange for all modes. navigatePeriod → scrollBy. Auto-scroll on mode change. Remove slideDirection animation. Dynamic visible date display. |
+| `src/components/dashboard/ProjectsGantt.tsx` | Add lane computation, dynamic row heights, stacked bar positioning |
+| `src/components/dashboard/StaffGantt.tsx` | Add lane computation, dynamic row heights, stacked bar positioning |
 
