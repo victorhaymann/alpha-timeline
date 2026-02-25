@@ -39,10 +39,49 @@ interface StaffGanttProps {
   categories: Category[];
 }
 
-const ROW_H = 40;
+// Lane layout constants
+const BASE_ROW_H = 40;
+const LANE_H = 24;
+const BAR_H = 20;
+const BAR_PAD = 6;
 const LEFT_COL = 200;
 const DAY_W = 32;
 const CAT_H = 32;
+
+interface LanedBar<T> {
+  bar: T;
+  lane: number;
+}
+
+function computeLanes<T extends { startDate: Date; endDate: Date }>(bars: T[]): { laned: LanedBar<T>[]; laneCount: number } {
+  if (bars.length === 0) return { laned: [], laneCount: 0 };
+  const sorted = [...bars].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const lanes: Date[] = [];
+  const laned: LanedBar<T>[] = [];
+
+  for (const bar of sorted) {
+    let assigned = -1;
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] < bar.startDate) {
+        assigned = i;
+        break;
+      }
+    }
+    if (assigned === -1) {
+      assigned = lanes.length;
+      lanes.push(bar.endDate);
+    } else {
+      lanes[assigned] = bar.endDate;
+    }
+    laned.push({ bar, lane: assigned });
+  }
+
+  return { laned, laneCount: lanes.length };
+}
+
+function staffRowHeight(laneCount: number): number {
+  return laneCount <= 1 ? BASE_ROW_H : BAR_PAD * 2 + laneCount * LANE_H;
+}
 
 const PROJECT_COLORS = [
   'hsl(260 60% 55%)',
@@ -109,7 +148,6 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
     );
   }, [days]);
 
-  // Color map per project
   const projectColorMap = useMemo(() => {
     const map = new Map<string, string>();
     const uniqueProjects = [...new Set(assignments.map(a => a.projectId))];
@@ -119,14 +157,22 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
     return map;
   }, [assignments]);
 
-  // Build staff by category
+  // Compute lanes per staff member
+  const staffLanesMap = useMemo(() => {
+    const map = new Map<string, { laned: LanedBar<Assignment>[]; laneCount: number }>();
+    staff.forEach(s => {
+      const staffAssigns = assignments.filter(a => a.staffId === s.id);
+      map.set(s.id, computeLanes(staffAssigns));
+    });
+    return map;
+  }, [staff, assignments]);
+
   const grouped = useMemo(() => {
     const q = search.toLowerCase();
     let filtered = staff;
     if (q) filtered = filtered.filter(s => s.fullName.toLowerCase().includes(q));
     if (categoryFilter !== 'all') filtered = filtered.filter(s => s.categoryId === categoryFilter);
 
-    // Check availability
     const staffAvail = new Map<string, boolean>();
     if (availDate) {
       filtered.forEach(s => {
@@ -138,7 +184,6 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
       });
     }
 
-    // Group by category
     const groups = new Map<string, { cat: Category | null; members: StaffMember[] }>();
     const uncategorized: StaffMember[] = [];
 
@@ -154,7 +199,6 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
       }
     });
 
-    // Sort within groups: available first if date selected
     if (availDate) {
       const sortByAvail = (a: StaffMember, b: StaffMember) => {
         const aa = staffAvail.get(a.id) ? 0 : 1;
@@ -166,7 +210,6 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
     }
 
     const result: { catId: string; catName: string; members: StaffMember[] }[] = [];
-    // Sort categories alphabetically
     const sorted = [...groups.entries()].sort((a, b) => a[1].cat!.name.localeCompare(b[1].cat!.name));
     sorted.forEach(([id, { cat, members }]) => {
       result.push({ catId: id, catName: cat!.name, members });
@@ -206,19 +249,12 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
     });
   }
 
-  // Check for overlaps on a staff member
   function hasOverlap(staffId: string): boolean {
-    const sa = assignments.filter(a => a.staffId === staffId);
-    for (let i = 0; i < sa.length; i++) {
-      for (let j = i + 1; j < sa.length; j++) {
-        if (sa[i].startDate <= sa[j].endDate && sa[j].startDate <= sa[i].endDate) return true;
-      }
-    }
-    return false;
+    const lc = staffLanesMap.get(staffId)?.laneCount || 0;
+    return lc > 1;
   }
 
-  // Build rows for rendering
-  const rows: { type: 'category'; catId: string; catName: string; count: number }[] | { type: 'staff'; staff: StaffMember }[] = [];
+  // Build flat rows
   const flatRows: ({ type: 'category'; catId: string; catName: string; count: number } | { type: 'staff'; staff: StaffMember })[] = [];
 
   grouped.groups.forEach(g => {
@@ -227,6 +263,20 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
       g.members.forEach(m => flatRows.push({ type: 'staff', staff: m }));
     }
   });
+
+  // Compute total height
+  const totalRowHeight = useMemo(() => {
+    let h = 0;
+    flatRows.forEach(row => {
+      if (row.type === 'category') {
+        h += CAT_H;
+      } else {
+        const lc = staffLanesMap.get(row.staff.id)?.laneCount || 1;
+        h += staffRowHeight(Math.max(lc, 1));
+      }
+    });
+    return h;
+  }, [flatRows, staffLanesMap]);
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
@@ -278,7 +328,7 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
         </div>
       </div>
 
-      <div className="flex overflow-hidden" style={{ maxHeight: Math.max(flatRows.length * ROW_H + 60, 160) }}>
+      <div className="flex overflow-hidden" style={{ maxHeight: Math.max(totalRowHeight + 60, 160) }}>
         {/* Frozen left */}
         <div
           ref={leftRef}
@@ -306,11 +356,12 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
             const s = row.staff;
             const isAvail = availDate ? grouped.staffAvail.get(s.id) : null;
             const overlap = hasOverlap(s.id);
+            const h = staffRowHeight(Math.max(staffLanesMap.get(s.id)?.laneCount || 1, 1));
             return (
               <div
                 key={`staff-${s.id}`}
                 className="flex items-center px-3 gap-2 border-b border-border/30"
-                style={{ height: ROW_H }}
+                style={{ height: h }}
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium truncate flex items-center gap-1.5">
@@ -391,7 +442,7 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
                 ))}
               </div>
 
-              {flatRows.map((row, ri) => {
+              {flatRows.map((row) => {
                 if (row.type === 'category') {
                   return (
                     <div
@@ -401,29 +452,34 @@ export function StaffGantt({ staff, assignments, categories }: StaffGanttProps) 
                     />
                   );
                 }
-                const staffAssigns = assignments.filter(a => a.staffId === row.staff.id);
+                const lanesData = staffLanesMap.get(row.staff.id);
+                const laneCount = Math.max(lanesData?.laneCount || 1, 1);
+                const h = staffRowHeight(laneCount);
+
                 return (
                   <div
                     key={`staff-tl-${row.staff.id}`}
                     className="relative border-b border-border/30"
-                    style={{ height: ROW_H }}
+                    style={{ height: h }}
                   >
-                    {staffAssigns.map((a, ai) => {
+                    {lanesData?.laned.map(({ bar: a, lane }, ai) => {
                       const si = dayIndex(a.startDate);
                       const ei = dayIndex(a.endDate);
                       const barLeft = si * DAY_W;
                       const barWidth = Math.max((ei - si + 1) * DAY_W - 2, 4);
                       const color = projectColorMap.get(a.projectId) || PROJECT_COLORS[0];
+                      const topOffset = BAR_PAD + lane * LANE_H;
 
                       return (
                         <Tooltip key={ai}>
                           <TooltipTrigger asChild>
                             <div
-                              className="absolute top-1.5 rounded-sm text-[8px] font-medium text-white flex items-center px-1 overflow-hidden whitespace-nowrap shadow-sm"
+                              className="absolute rounded-sm text-[8px] font-medium text-white flex items-center px-1 overflow-hidden whitespace-nowrap shadow-sm"
                               style={{
                                 left: barLeft,
                                 width: barWidth,
-                                height: ROW_H - 12,
+                                height: BAR_H,
+                                top: topOffset,
                                 backgroundColor: color,
                                 opacity: 0.85,
                               }}

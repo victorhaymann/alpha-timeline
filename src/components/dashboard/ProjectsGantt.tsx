@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { format, addDays, startOfWeek, differenceInCalendarDays, isWeekend } from 'date-fns';
+import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,14 +28,53 @@ interface ProjectsGanttProps {
   projects: ProjectRow[];
 }
 
-const ROW_H = 44;
+// Lane layout constants
+const BASE_ROW_H = 44;
+const LANE_H = 24;
+const BAR_H = 20;
+const BAR_PAD = 6;
 const LEFT_COL = 260;
 const DAY_W = 32;
+
+interface LanedBar<T> {
+  bar: T;
+  lane: number;
+}
+
+function computeLanes<T extends { startDate: Date; endDate: Date }>(bars: T[]): { laned: LanedBar<T>[]; laneCount: number } {
+  if (bars.length === 0) return { laned: [], laneCount: 0 };
+  const sorted = [...bars].sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const lanes: Date[] = []; // each lane tracks when it ends
+  const laned: LanedBar<T>[] = [];
+
+  for (const bar of sorted) {
+    let assigned = -1;
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] < bar.startDate) {
+        assigned = i;
+        break;
+      }
+    }
+    if (assigned === -1) {
+      assigned = lanes.length;
+      lanes.push(bar.endDate);
+    } else {
+      lanes[assigned] = bar.endDate;
+    }
+    laned.push({ bar, lane: assigned });
+  }
+
+  return { laned, laneCount: lanes.length };
+}
+
+function rowHeight(laneCount: number): number {
+  return laneCount <= 1 ? BASE_ROW_H : BAR_PAD * 2 + laneCount * LANE_H;
+}
 
 function getTimelineRange() {
   const today = new Date();
   const start = startOfWeek(addDays(today, -14), { weekStartsOn: 1 });
-  const end = addDays(start, 12 * 7); // ~12 weeks
+  const end = addDays(start, 12 * 7);
   return { start, end };
 }
 
@@ -78,6 +117,15 @@ const STATUS_CLASSES: Record<string, string> = {
   completed: 'bg-sky-500/15 text-sky-600 border-sky-500/30',
 };
 
+const PHASE_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(260 60% 55%)',
+  'hsl(200 70% 50%)',
+  'hsl(340 65% 50%)',
+  'hsl(160 60% 40%)',
+  'hsl(30 80% 50%)',
+];
+
 export function ProjectsGantt({ projects }: ProjectsGanttProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('production');
@@ -101,13 +149,11 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
 
   const filtered = useMemo(() => {
     let list = projects;
-    // Status filter
     if (statusFilter === 'production') {
       list = list.filter(p => p.status === 'active' || p.status === 'draft');
     } else if (statusFilter === 'delivered') {
       list = list.filter(p => p.status === 'completed');
     }
-    // Search filter
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(p =>
@@ -117,8 +163,32 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
     return list;
   }, [projects, search, statusFilter]);
 
+  // Compute lanes per project
+  const projectLanes = useMemo(() => {
+    const map = new Map<string, { laned: LanedBar<PhaseBar>[]; laneCount: number }>();
+    filtered.forEach(p => {
+      map.set(p.id, computeLanes(p.phases));
+    });
+    return map;
+  }, [filtered]);
+
+  // Row heights map
+  const rowHeights = useMemo(() => {
+    const map = new Map<string, number>();
+    filtered.forEach(p => {
+      const lc = projectLanes.get(p.id)?.laneCount || 1;
+      map.set(p.id, rowHeight(Math.max(lc, 1)));
+    });
+    return map;
+  }, [filtered, projectLanes]);
+
+  const totalRowHeight = useMemo(() => {
+    let h = 0;
+    filtered.forEach(p => { h += rowHeights.get(p.id) || BASE_ROW_H; });
+    return h;
+  }, [filtered, rowHeights]);
+
   function dayIndex(date: Date): number {
-    // find closest working day index
     for (let i = 0; i < days.length; i++) {
       if (days[i] >= date) return i;
     }
@@ -130,15 +200,6 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
       leftRef.current.scrollTop = scrollRef.current.scrollTop;
     }
   }
-
-  const PHASE_COLORS = [
-    'hsl(var(--primary))',
-    'hsl(260 60% 55%)',
-    'hsl(200 70% 50%)',
-    'hsl(340 65% 50%)',
-    'hsl(160 60% 40%)',
-    'hsl(30 80% 50%)',
-  ];
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
@@ -170,37 +231,39 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
         </div>
       </div>
 
-      <div className="flex overflow-hidden" style={{ maxHeight: Math.max(filtered.length * ROW_H + 60, 160) }}>
+      <div className="flex overflow-hidden" style={{ maxHeight: Math.max(totalRowHeight + 60, 160) }}>
         {/* Frozen left column */}
         <div
           ref={leftRef}
           className="flex-shrink-0 overflow-hidden border-r border-border"
           style={{ width: LEFT_COL }}
         >
-          {/* Header spacer */}
           <div className="h-[52px] border-b border-border bg-muted/30 flex items-end px-3 pb-1.5">
             <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Project</span>
           </div>
-          {filtered.map(p => (
-            <div
-              key={p.id}
-              className="flex items-center px-3 gap-2 border-b border-border/50 cursor-pointer hover:bg-muted/40 transition-colors"
-              style={{ height: ROW_H }}
-              onClick={() => navigate(`/projects/${p.id}`)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium truncate">{p.name}</span>
-                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 shrink-0 ${STATUS_CLASSES[p.status] || ''}`}>
-                    {STATUS_LABELS[p.status] || p.status}
-                  </Badge>
+          {filtered.map(p => {
+            const h = rowHeights.get(p.id) || BASE_ROW_H;
+            return (
+              <div
+                key={p.id}
+                className="flex items-center px-3 gap-2 border-b border-border/50 cursor-pointer hover:bg-muted/40 transition-colors"
+                style={{ height: h }}
+                onClick={() => navigate(`/projects/${p.id}`)}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium truncate">{p.name}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 h-4 shrink-0 ${STATUS_CLASSES[p.status] || ''}`}>
+                      {STATUS_LABELS[p.status] || p.status}
+                    </Badge>
+                  </div>
+                  {p.clientName && (
+                    <div className="text-[10px] text-muted-foreground truncate">{p.clientName}</div>
+                  )}
                 </div>
-                {p.clientName && (
-                  <div className="text-[10px] text-muted-foreground truncate">{p.clientName}</div>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Scrollable timeline */}
@@ -256,47 +319,54 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
                 ))}
               </div>
 
-              {filtered.map(project => (
-                <div
-                  key={project.id}
-                  className="relative border-b border-border/30 cursor-pointer hover:bg-muted/20 transition-colors"
-                  style={{ height: ROW_H }}
-                  onClick={() => navigate(`/projects/${project.id}`)}
-                >
-                  {project.phases.map((phase, pi) => {
-                    const si = dayIndex(phase.startDate);
-                    const ei = dayIndex(phase.endDate);
-                    const barLeft = si * DAY_W;
-                    const barWidth = Math.max((ei - si + 1) * DAY_W - 2, 4);
-                    const color = phase.color || PHASE_COLORS[pi % PHASE_COLORS.length];
+              {filtered.map(project => {
+                const h = rowHeights.get(project.id) || BASE_ROW_H;
+                const lanes = projectLanes.get(project.id);
 
-                    return (
-                      <Tooltip key={pi}>
-                        <TooltipTrigger asChild>
-                          <div
-                            className="absolute top-2 rounded-sm text-[9px] font-medium text-white flex items-center px-1.5 overflow-hidden whitespace-nowrap shadow-sm"
-                            style={{
-                              left: barLeft,
-                              width: barWidth,
-                              height: ROW_H - 16,
-                              backgroundColor: color,
-                              opacity: 0.9,
-                            }}
-                          >
-                            {barWidth > 40 ? phase.name : ''}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          <div className="font-medium">{phase.name}</div>
-                          <div className="text-muted-foreground">
-                            {format(phase.startDate, 'MMM d')} – {format(phase.endDate, 'MMM d')}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              ))}
+                return (
+                  <div
+                    key={project.id}
+                    className="relative border-b border-border/30 cursor-pointer hover:bg-muted/20 transition-colors"
+                    style={{ height: h }}
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
+                    {lanes?.laned.map(({ bar: phase, lane }, pi) => {
+                      const si = dayIndex(phase.startDate);
+                      const ei = dayIndex(phase.endDate);
+                      const barLeft = si * DAY_W;
+                      const barWidth = Math.max((ei - si + 1) * DAY_W - 2, 4);
+                      const color = phase.color || PHASE_COLORS[pi % PHASE_COLORS.length];
+                      const topOffset = BAR_PAD + lane * LANE_H;
+
+                      return (
+                        <Tooltip key={pi}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className="absolute rounded-sm text-[9px] font-medium text-white flex items-center px-1.5 overflow-hidden whitespace-nowrap shadow-sm"
+                              style={{
+                                left: barLeft,
+                                width: barWidth,
+                                height: BAR_H,
+                                top: topOffset,
+                                backgroundColor: color,
+                                opacity: 0.9,
+                              }}
+                            >
+                              {barWidth > 40 ? phase.name : ''}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            <div className="font-medium">{phase.name}</div>
+                            <div className="text-muted-foreground">
+                              {format(phase.startDate, 'MMM d')} – {format(phase.endDate, 'MMM d')}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                );
+              })}
 
               {filtered.length === 0 && (
                 <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
