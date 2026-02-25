@@ -46,6 +46,8 @@ import {
   Pencil,
   Folder,
   FileSignature,
+  Undo2,
+  CalendarRange,
 } from 'lucide-react';
 import { RightsPanel } from '@/components/rights/RightsPanel';
 import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
@@ -106,6 +108,13 @@ export default function ProjectDetail() {
   
   // Regenerate state (lifted from TimelineEditor)
   const [regenerateHandler, setRegenerateHandler] = useState<{ onClick: () => void; isLoading: boolean } | null>(null);
+  const [actionHandlers, setActionHandlers] = useState<{
+    onUndo: () => void;
+    undoDisabled: boolean;
+    isUndoing: boolean;
+    undoCount: number;
+    onShiftTimeline: () => void;
+  } | null>(null);
 
   const fetchProjectData = useCallback(async () => {
     if (!id) return;
@@ -623,21 +632,53 @@ export default function ProjectDetail() {
             </TabsTrigger>
           </TabsList>
           
-          {regenerateHandler && (
-            <Button
-              variant="outline"
-              onClick={regenerateHandler.onClick}
-              disabled={regenerateHandler.isLoading}
-              className="gap-2"
-            >
-              {regenerateHandler.isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Regenerate Schedule
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {actionHandlers && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={actionHandlers.onUndo}
+                  disabled={actionHandlers.undoDisabled}
+                  className="gap-2"
+                  title={actionHandlers.undoCount > 0 ? `Undo (${actionHandlers.undoCount} changes)` : 'No changes to undo'}
+                >
+                  {actionHandlers.isUndoing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Undo2 className="w-4 h-4" />
+                  )}
+                  Undo
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={actionHandlers.onShiftTimeline}
+                  className="gap-2"
+                  title="Shift all tasks forward or backward"
+                >
+                  <CalendarRange className="w-4 h-4" />
+                  Shift Timeline
+                </Button>
+              </>
+            )}
+            {regenerateHandler && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerateHandler.onClick}
+                disabled={regenerateHandler.isLoading}
+                className="gap-2"
+              >
+                {regenerateHandler.isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Regenerate Schedule
+              </Button>
+            )}
+          </div>
         </div>
 
         <TabsContent value="timeline" className="space-y-4">
@@ -669,6 +710,17 @@ export default function ProjectDetail() {
                   setTimeout(() => setRegenerateHandler(props), 0);
                 }
                 return null; // Don't render anything here
+              }}
+              renderActionButtons={(props) => {
+                if (
+                  !actionHandlers ||
+                  actionHandlers.undoDisabled !== props.undoDisabled ||
+                  actionHandlers.isUndoing !== props.isUndoing ||
+                  actionHandlers.undoCount !== props.undoCount
+                ) {
+                  setTimeout(() => setActionHandlers(props), 0);
+                }
+                return null;
               }}
             />
           </ErrorBoundary>
