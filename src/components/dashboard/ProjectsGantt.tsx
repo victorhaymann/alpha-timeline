@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Flag } from 'lucide-react';
+import { Search, Flag, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
@@ -209,10 +209,24 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
     }
   }
 
+  function scrollByWeek(direction: 1 | -1) {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: direction * 5 * DAY_W, behavior: 'smooth' });
+    }
+  }
+
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between p-3 border-b border-border gap-3">
-        <h2 className="text-sm font-semibold">Projects Timeline</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="text-sm font-semibold">Projects Timeline</h2>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => scrollByWeek(-1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => scrollByWeek(1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-md border border-border overflow-hidden">
             {(['production', 'delivered', 'all'] as StatusFilter[]).map(f => (
