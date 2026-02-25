@@ -1,6 +1,6 @@
 import React from 'react';
 import { Task, TaskSegment } from '@/types/database';
-import { Trash2, FileText } from 'lucide-react';
+import { Trash2, FileText, Plus } from 'lucide-react';
 
 interface TaskPopoverMenuProps {
   task: Task;
@@ -8,6 +8,7 @@ interface TaskPopoverMenuProps {
   hoveredSegmentId: string | null;
   onDeleteTask?: (taskId: string) => void;
   onEditReviewNotes?: (segmentId: string, taskName: string, currentNotes: string) => void;
+  onAddReview?: (taskId: string) => void;
   onClose: () => void;
 }
 
@@ -17,8 +18,13 @@ export function TaskPopoverMenu({
   hoveredSegmentId,
   onDeleteTask,
   onEditReviewNotes,
+  onAddReview,
   onClose,
 }: TaskPopoverMenuProps) {
+  // Determine if we're hovering a review segment
+  const hoveredSeg = hoveredSegmentId ? taskSegments.find(s => s.id === hoveredSegmentId) : null;
+  const isHoveringReview = hoveredSeg?.segment_type === 'review';
+
   return (
     <div className="flex flex-col">
       {/* Edit Review Notes - only for review segments */}
@@ -40,6 +46,20 @@ export function TaskPopoverMenu({
           </button>
         );
       })()}
+
+      {/* Add Review - shown when not hovering a review segment */}
+      {onAddReview && !isHoveringReview && (
+        <button
+          onClick={() => {
+            onAddReview(task.id);
+            onClose();
+          }}
+          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors text-left w-full"
+        >
+          <Plus className="w-4 h-4" />
+          Add Review
+        </button>
+      )}
 
       {onDeleteTask && (
         <>
