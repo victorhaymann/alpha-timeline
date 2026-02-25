@@ -70,6 +70,7 @@ import {
   addMonths,
   subMonths,
   startOfDay,
+  startOfWeek,
   isSameDay,
 } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -152,17 +153,20 @@ export function GanttChart({
   // Responsive task column width
   const taskColumnWidth = isMobile ? TASK_COLUMN_WIDTH_MOBILE : TASK_COLUMN_WIDTH_DESKTOP;
   
-  // Default view: show entire project range for full scrolling
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: validStartDate,
-    to: validEndDate,
+  // Default view: monthly window (today → today + 1 month)
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return { from: today, to: addMonths(today, 1) };
   });
   const [containerWidth, setContainerWidth] = useState(800);
   
   // Sync dateRange when project dates change (e.g., deadline updated in settings)
+  // Only reset for project view; week/month views keep their user-navigated window
   useEffect(() => {
-    setDateRange({ from: validStartDate, to: validEndDate });
-  }, [validStartDate.getTime(), validEndDate.getTime()]);
+    if (viewMode === 'project') {
+      setDateRange({ from: validStartDate, to: validEndDate });
+    }
+  }, [validStartDate.getTime(), validEndDate.getTime(), viewMode]);
   
   // Collapsed sections removed - flat layout, all tasks always visible
   // Slide animation state
@@ -364,8 +368,19 @@ export function GanttChart({
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     setViewMode(mode);
-    // All views show full project range - difference is in column display (days vs weeks)
-    setDateRange({ from: validStartDate, to: validEndDate });
+    const today = new Date();
+    if (mode === 'week') {
+      // Monday → Friday of current week
+      const monday = startOfWeek(today, { weekStartsOn: 1 });
+      const friday = addDays(monday, 4);
+      setDateRange({ from: monday, to: friday });
+    } else if (mode === 'month') {
+      // Today → today + 1 month
+      setDateRange({ from: today, to: addMonths(today, 1) });
+    } else {
+      // Project: full duration
+      setDateRange({ from: validStartDate, to: validEndDate });
+    }
   }, [validStartDate, validEndDate]);
 
   // Navigate to previous/next period based on view mode
