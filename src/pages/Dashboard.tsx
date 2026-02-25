@@ -7,6 +7,11 @@ import { StaffGantt } from '@/components/dashboard/StaffGantt';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { LayoutDashboard } from 'lucide-react';
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export default function Dashboard() {
   const { data: projects = [] } = useQuery({
     queryKey: ['dashboard_projects'],
@@ -93,13 +98,13 @@ export default function Dashboard() {
         const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
         if (phaseTasks.length === 0) return null;
         const startDate = phaseTasks.reduce((min, t) => {
-          const d = new Date(t.start_date!);
+          const d = parseLocalDate(t.start_date!);
           return d < min ? d : min;
-        }, new Date(phaseTasks[0].start_date!));
+        }, parseLocalDate(phaseTasks[0].start_date!));
         const endDate = phaseTasks.reduce((max, t) => {
-          const d = new Date(t.end_date!);
+          const d = parseLocalDate(t.end_date!);
           return d > max ? d : max;
-        }, new Date(phaseTasks[0].end_date!));
+        }, parseLocalDate(phaseTasks[0].end_date!));
         return {
           name: phase.name,
           color: phase.color || '',
@@ -113,8 +118,8 @@ export default function Dashboard() {
         name: project.name,
         clientName: project.client_name,
         status: project.status,
-        startDate: new Date(project.start_date),
-        endDate: new Date(project.end_date),
+        startDate: parseLocalDate(project.start_date),
+        endDate: parseLocalDate(project.end_date),
         phases: phaseBars,
       };
     });
@@ -139,13 +144,13 @@ export default function Dashboard() {
       const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
       if (phaseTasks.length === 0) return null;
       const startDate = phaseTasks.reduce((min, t) => {
-        const d = new Date(t.start_date!);
+        const d = parseLocalDate(t.start_date!);
         return d < min ? d : min;
-      }, new Date(phaseTasks[0].start_date!));
+      }, parseLocalDate(phaseTasks[0].start_date!));
       const endDate = phaseTasks.reduce((max, t) => {
-        const d = new Date(t.end_date!);
+        const d = parseLocalDate(t.end_date!);
         return d > max ? d : max;
-      }, new Date(phaseTasks[0].end_date!));
+      }, parseLocalDate(phaseTasks[0].end_date!));
       return {
         staffId: a.staff_id,
         projectId: project.id,
