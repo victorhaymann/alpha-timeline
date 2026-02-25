@@ -669,10 +669,30 @@ export function TimelineEditor({
           segment_type: 'review',
         });
       } else {
-        // Segments exist — append review after the last one
-        const lastSeg = taskSegs[taskSegs.length - 1];
+        // Segments exist — place review at the phase's last day or next available
         const maxOrder = Math.max(...taskSegs.map(s => s.order_index));
-        const reviewStart = nextWorkingDayLib(addDays(new Date(lastSeg.end_date), 1), libMask);
+        
+        // Find the phase this task belongs to, and get the latest end date among all tasks in it
+        const phase = phases.find(p => p.id === task.phase_id);
+        const phaseTasks = phase ? tasks.filter(t => t.phase_id === phase.id && t.end_date) : [];
+        const phaseEndDates = phaseTasks.map(t => new Date(t.end_date!).getTime());
+        const phaseLastDate = phaseEndDates.length > 0 
+          ? new Date(Math.max(...phaseEndDates))
+          : new Date(taskSegs[taskSegs.length - 1].end_date);
+        
+        // Check if phaseLastDate is already taken by one of this task's segments
+        const allTaskSegDates = taskSegs.map(s => s.start_date);
+        const phaseLastStr = format(phaseLastDate, 'yyyy-MM-dd');
+        
+        let reviewStart: Date;
+        if (allTaskSegDates.includes(phaseLastStr) || taskSegs.some(s => s.end_date === phaseLastStr)) {
+          // Date is taken — use next working day after the last segment
+          const lastSeg = taskSegs[taskSegs.length - 1];
+          reviewStart = nextWorkingDayLib(addDays(new Date(lastSeg.end_date), 1), libMask);
+        } else {
+          reviewStart = nextWorkingDayLib(phaseLastDate, libMask);
+        }
+        
         const reviewNorm = normalizeSegmentDates(reviewStart, reviewStart, {
           projectStartDate,
           projectEndDate,
@@ -703,7 +723,7 @@ export function TimelineEditor({
       console.error('Error adding review segment:', error);
       toast({ title: 'Error', description: 'Failed to add review segment.', variant: 'destructive' });
     }
-  }, [tasks, segments, saveToUndoStack, project.working_days_mask, projectStartDate, projectEndDate, onSegmentsChange, toast]);
+  }, [tasks, segments, phases, saveToUndoStack, project.working_days_mask, projectStartDate, projectEndDate, onSegmentsChange, toast]);
 
   // Batch update segments — single undo save, batch DB writes, single local state update.
   // Used by GanttChart when dragging/resizing the main task bar of a segmented task,
