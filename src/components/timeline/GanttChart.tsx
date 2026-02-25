@@ -745,16 +745,16 @@ export function GanttChart({
       </div>
 
       {/* Gantt Chart - Split Pane Layout for frozen tasks column */}
-      <div className="rounded-xl bg-muted border border-border shadow-sm overflow-x-auto" ref={containerRef}>
+      <div className="rounded-lg border border-border bg-card overflow-hidden overflow-x-auto" ref={containerRef}>
         <div className="flex" style={{ height: totalHeight, minWidth: isMobile ? taskColumnWidth + 200 : undefined }}>
           {/* Left Pane - Fixed Tasks Column (no horizontal scroll) */}
-          <div className="flex flex-col shrink-0 bg-muted border-r border-border z-20 sticky left-0" style={{ width: taskColumnWidth }}>
+          <div className="flex flex-col shrink-0 bg-card border-r border-border z-20 sticky left-0" style={{ width: taskColumnWidth }}>
             {/* Tasks Header - Fixed */}
             <div 
-              className="flex items-center px-2 md:px-4 border-b border-border bg-muted/50 font-semibold text-xs md:text-sm tracking-wide uppercase shrink-0"
+              className="flex items-center px-2 md:px-4 border-b border-border bg-muted/30 shrink-0"
               style={{ height: HEADER_HEIGHT }}
             >
-              <span className="text-foreground">Tasks</span>
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Tasks</span>
             </div>
 
             {/* Tasks Body - Vertical scroll only, synced with right pane */}
@@ -890,7 +890,7 @@ export function GanttChart({
                       <React.Fragment key={task.id}>
                       <div
                         className={cn(
-                          "flex items-center gap-1 md:gap-2 px-2 md:px-4 group hover:bg-muted/40 transition-colors border-b border-border/30",
+                          "flex items-center gap-1 md:gap-2 px-2 md:px-4 group hover:bg-muted/20 transition-colors border-b border-border/30",
                           getVerticalDragClasses(task.id),
                           getSwapTargetClasses(task.id, taskIndex, section.phase.id),
                           insertionGap && "gantt-insertion-gap"
@@ -1033,15 +1033,15 @@ export function GanttChart({
             {/* Timeline Header - Fixed horizontally synced with 3 rows: Month, Week, Day */}
             <div 
               ref={rightHeaderRef}
-              className="overflow-x-hidden shrink-0 border-b border-border bg-muted/50"
+              className="overflow-x-hidden shrink-0 border-b border-border bg-muted/30"
               style={{ height: HEADER_HEIGHT }}
             >
               {/* Month Row */}
-              <div className="flex border-b border-border/60" style={{ height: MONTH_ROW_HEIGHT, width: chartWidth }}>
+              <div className="flex border-b border-border/10" style={{ height: MONTH_ROW_HEIGHT, width: chartWidth }}>
                 {monthGroups.map((group, idx) => (
                   <div
                     key={`month-${group.monthLabel}-${idx}`}
-                    className="flex items-center justify-center text-xs font-bold uppercase tracking-wider text-foreground border-r border-border/60 shrink-0"
+                    className="flex items-center justify-center text-[10px] font-medium text-muted-foreground border-r border-border/10 shrink-0"
                     style={{ width: group.count * columnWidth }}
                   >
                     {group.monthLabel}
@@ -1050,42 +1050,33 @@ export function GanttChart({
               </div>
 
               {/* Week Row */}
-              <div className="flex border-b border-border/60" style={{ height: WEEK_ROW_HEIGHT, width: chartWidth }}>
-                {weekGroups.map((group, idx) => {
-                  const isAlternateWeek = idx % 2 === 1;
-                  return (
+              <div className="flex border-b border-border/10" style={{ height: WEEK_ROW_HEIGHT, width: chartWidth }}>
+                {weekGroups.map((group, idx) => (
                     <div
                       key={`week-${group.weekLabel}-${idx}`}
-                      className={cn(
-                        "flex items-center justify-center text-xs font-bold uppercase tracking-wider text-foreground border-r border-border/60 shrink-0",
-                        isAlternateWeek && "bg-black/[0.04]"
-                      )}
+                      className="flex items-center justify-center text-[10px] font-medium text-muted-foreground border-r border-border/10 shrink-0"
                       style={{ width: group.count * columnWidth }}
                     >
                       {group.weekLabel}
                     </div>
-                  );
-                })}
+                ))}
               </div>
 
               {/* Day Row */}
               <div className="flex" style={{ height: DAY_ROW_HEIGHT, width: chartWidth }}>
                 {groupedColumns.map((col) => {
                   const isToday = col.days.some(d => isSameDay(d, new Date()));
-                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
 
                   return (
                     <div
                       key={col.key}
                       className={cn(
-                        "flex flex-col items-center justify-center text-xs shrink-0 border-r border-border/60",
-                        isToday && "bg-destructive/10",
-                        !isToday && isAlternateWeek && "bg-black/[0.04]"
+                        "flex items-center justify-center shrink-0 border-r border-border/10",
+                        isToday && "bg-destructive/10"
                       )}
                       style={{ width: columnWidth }}
                     >
-                      <span className="font-bold text-foreground tracking-wide">{col.label}</span>
-                      <span className="text-muted-foreground text-[10px] font-medium uppercase tracking-wider">{col.subLabel}</span>
+                      <span className="text-[9px] text-muted-foreground">{col.subLabel || format(col.days[0], 'EEE').charAt(0)}</span>
                     </div>
                   );
                 })}
@@ -1117,16 +1108,15 @@ export function GanttChart({
                     <div key={sectionKey}>
                       {/* Phase separator row (thin, matches left pane) */}
                       <div 
-                        className="bg-muted/20"
+                        className="bg-transparent"
                         style={{ height: PHASE_SEPARATOR_HEIGHT }}
                       >
                         <div className="flex h-full">
                           {groupedColumns.map((col) => {
-                            const isAlternateWeek = weekAlternatingMap[col.weekNumber];
                             return (
                               <div
                                 key={col.key}
-                                className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                className="shrink-0 border-r border-border/10"
                                 style={{ width: columnWidth }}
                               />
                             );
@@ -1144,7 +1134,7 @@ export function GanttChart({
                               return (
                                 <div
                                   key={col.key}
-                                  className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                  className="shrink-0 border-r border-border/10"
                                   style={{ width: columnWidth }}
                                 />
                               );
@@ -1222,16 +1212,13 @@ export function GanttChart({
                         // Grid background helper
                         const renderGridBg = (height: number) => (
                           <div className="absolute inset-0 flex">
-                            {groupedColumns.map((col) => {
-                              const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                              return (
+                            {groupedColumns.map((col) => (
                                 <div
                                   key={col.key}
-                                  className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                  className="shrink-0 border-r border-border/10"
                                   style={{ width: columnWidth }}
                                 />
-                              );
-                            })}
+                            ))}
                           </div>
                         );
 
@@ -1240,11 +1227,10 @@ export function GanttChart({
                             <div style={{ height: ROW_HEIGHT }}>
                               <div className="flex h-full">
                                 {groupedColumns.map((col) => {
-                                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
                                   return (
                                     <div
                                       key={col.key}
-                                      className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                      className="shrink-0 border-r border-border/10"
                                       style={{ width: columnWidth }}
                                     />
                                   );
@@ -1254,16 +1240,13 @@ export function GanttChart({
                             {hasReviewSegments && (
                               <div style={{ height: REVIEW_SUB_ROW_HEIGHT }}>
                                 <div className="flex h-full">
-                                  {groupedColumns.map((col) => {
-                                    const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                                    return (
-                                      <div
-                                        key={col.key}
-                                        className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                                        style={{ width: columnWidth }}
-                                      />
-                                    );
-                                  })}
+                                {groupedColumns.map((col) => (
+                                    <div
+                                      key={col.key}
+                                      className="shrink-0 border-r border-border/10"
+                                      style={{ width: columnWidth }}
+                                    />
+                                ))}
                                 </div>
                               </div>
                             )}
@@ -1337,11 +1320,11 @@ export function GanttChart({
                                 const ghostWidth = getTaskWidth(ghost.start, ghost.end);
                                 return (
                                   <div
-                                    className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
+                                    className="absolute top-1/2 -translate-y-1/2 h-5 rounded-sm gantt-task-ghost"
                                     style={{
                                       left: ghostLeft + 2,
                                       width: ghostWidth - 4,
-                                      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                      background: `${sectionColor}30`,
                                     }}
                                   />
                                 );
@@ -1373,20 +1356,18 @@ export function GanttChart({
                                   <TooltipTrigger asChild>
                                     <div
                                       className={cn(
-                                        "absolute top-1/2 -translate-y-1/2 h-7 rounded-md cursor-move group/taskbar",
+                                        "absolute top-1/2 -translate-y-1/2 h-5 rounded-sm cursor-move group/taskbar",
                                         "gantt-task-bar-base",
-                                        "hover:shadow-xl hover:ring-2 hover:ring-white/40",
+                                        "hover:shadow-md",
                                         getDragClasses(task.id),
                                         isFeedback && "gantt-review-bar"
                                       )}
                                       style={{
                                         left: clippedLeft + 2,
                                         width: clippedWidth - 4,
-                                        background: isFeedback 
-                                          ? `${sectionColor}99` 
-                                          : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                        borderColor: isFeedback ? sectionColor : undefined,
-                                        boxShadow: `0 4px 12px ${sectionColor}66`,
+                                        backgroundColor: sectionColor,
+                                        opacity: 0.9,
+                                        boxShadow: `0 1px 3px ${sectionColor}33`,
                                         ...getDragStyles(task.id),
                                       }}
                                       onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id)}
@@ -1523,9 +1504,9 @@ export function GanttChart({
                                       <TooltipTrigger asChild>
                                         <div
                                           className={cn(
-                                            "absolute top-1/2 -translate-y-1/2 h-5 rounded-md group/reviewbar",
+                                            "absolute top-1/2 -translate-y-1/2 h-4 rounded-sm group/reviewbar",
                                             readOnly ? ((localSegmentNotes[seg.id] || (seg as any).review_notes) ? "cursor-pointer" : "cursor-default") : "cursor-pointer",
-                                            "hover:shadow-lg hover:ring-1 hover:ring-white/30",
+                                            "hover:shadow-md",
                                             "gantt-review-bar",
                                             getDragClasses(task.id, seg.id)
                                           )}
@@ -1534,7 +1515,7 @@ export function GanttChart({
                                             width: segWidth - 4,
                                             backgroundColor: `${sectionColor}15`,
                                             border: `2px dashed ${sectionColor}`,
-                                            boxShadow: `0 2px 8px ${sectionColor}20`,
+                                            boxShadow: `0 1px 3px ${sectionColor}15`,
                                             ...getDragStyles(task.id, seg.id),
                                           }}
                                           onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id, seg.id)}
@@ -1657,23 +1638,16 @@ export function GanttChart({
                   
                   const todayX = todayColIndex * columnWidth + columnWidth / 2;
                   const bodyHeight = totalHeight - HEADER_HEIGHT;
-                  return (
-                    <div
-                      className="absolute w-0.5 bg-destructive z-30 pointer-events-none animate-pulse-subtle"
-                      style={{ 
-                        left: todayX,
-                        top: 0,
-                        height: bodyHeight,
-                        boxShadow: '0 0 8px 2px hsl(var(--destructive) / 0.4)',
-                      }}
-                    >
-                      {/* Top indicator dot */}
-                      <div 
-                        className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-destructive animate-pulse-subtle"
-                        style={{ boxShadow: '0 0 10px 3px hsl(var(--destructive) / 0.5)' }}
+                    return (
+                      <div
+                        className="absolute w-0.5 bg-destructive/70 z-10 pointer-events-none"
+                        style={{ 
+                          left: todayX,
+                          top: 0,
+                          height: bodyHeight,
+                        }}
                       />
-                    </div>
-                  );
+                    );
                 })()}
               </div>
             </div>
