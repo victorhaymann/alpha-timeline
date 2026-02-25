@@ -1,68 +1,109 @@
 
 
-# Fix: Drag-and-Drop Snap-Back for Tasks with Segments
+# Fix: Resize and Move for Segmented Tasks
 
 ## Root Cause
 
-There are two drag paths, and one is broken for tasks that have segments:
+The `handleTaskOrSegmentsDrag` wrapper (lines 312-335 of GanttChart.tsx) was written **only for the move case** but is called for **all three drag types** (move, resize-start, resize-end). This causes two distinct failures:
 
-1. **Main task bar** (continuous work bar) → calls `onTaskUpdate` → updates `tasks.start_date` and `tasks.end_date` directly in the database
-2. **Review segment bar** (sub-row) → calls `onSegmentUpdate` → updates the segment in `task_segments` table
+### Bug 1: Resize-end silently does nothing
+When you resize the right edge of a segmented task bar:
+- `handleDragEnd` in the hook calls `onTaskUpdate(taskId, { start_date, end_date })` with the **same** start_date but a **new** end_date
+- `handleTaskOrSegmentsDrag` computes `daysDelta = differenceInDays(newStart, oldStart)` — which is **0** because start didn't change
+- It hits `if (daysDelta === 0) return;` and **exits without doing anything**
+- The bar visually extended during drag, but no DB update happens → snap-back on refresh
 
-The problem: a database trigger (`sync_task_dates_on_segment_change`) automatically recalculates `tasks.start_date/end_date` from segments whenever segments change. So for tasks that have segments, the **segments are the source of truth**, not the task row.
+### Bug 2: Resize-start shifts everything instead of extending
+When you resize the left edge:
+- `daysDelta` is non-zero (e.g. -2 if you extended left by 2 days)
+- The code shifts **all segments** by that delta — moving everything left/right
+- But a resize-start should only change the **first segment's start_date**, not move everything
 
-When you drag the main bar of a segmented task, `onTaskUpdate` writes new dates to `tasks`, but the segments remain unchanged. On the next data refresh, the trigger's segment-derived dates overwrite your changes — the bar "snaps back."
-
-Tasks without segments work fine because there's no trigger override.
+### Why tasks without reviews work fine
+Tasks without segments bypass the wrapper entirely (the `if (taskSegs.length > 0)` check fails) and call `onTaskUpdate` directly, which writes to the `tasks` table. Since there's no trigger override for segment-less tasks, the dates stick.
 
 ## Fix Strategy
 
-When dragging/resizing the **main bar** of a task that has segments, we should **shift all segments** by the same delta instead of updating the task row directly. The trigger will then automatically sync the parent task dates.
+Replace the move-only logic with a handler that detects the drag type from the date changes:
+
+1. **Move** (both start and end shifted by the same delta): shift all segments uniformly — current logic, works correctly
+2. **Resize-end** (start unchanged, end changed): adjust only the **last segment's** `end_date` by the delta
+3. **Resize-start** (start changed, end unchanged): adjust only the **first segment's** `start_date` by the delta
+
+The DB trigger will then recalculate parent task dates from the updated segments.
 
 ## Changes
 
-### 1. `src/components/timeline/GanttChart.tsx`
+### `src/components/timeline/GanttChart.tsx` — lines 309-335
 
-**In the `useDragAndResize` hook initialization (~line 322):**
-- Replace the current `onTaskUpdate` callback with a new handler that checks whether the task has segments.
-- If the task has segments: compute the day delta from old→new dates, then call `onUpdateSegment` for **every** segment of that task, shifting each by the same delta.
-- If the task has no segments: call `onTaskUpdate` as before.
+Replace `handleTaskOrSegmentsDrag` with logic that differentiates between move and resize:
 
-Concretely, create a new wrapper function `handleTaskOrSegmentsDrag` that:
-```
-(taskId, { start_date, end_date }) => {
-  const taskSegments = segments.filter(s => s.task_id === taskId);
-  if (taskSegments.length > 0 && onUpdateSegment) {
-    // Shift all segments by the same delta
-    const task = tasks.find(t => t.id === taskId);
-    const oldStart = new Date(effectiveStartDate);  // segment-derived
-    const newStart = new Date(start_date);
-    const daysDelta = differenceInDays(newStart, oldStart);
-    for (const seg of taskSegments) {
-      onUpdateSegment(seg.id, {
-        start_date: format(addDays(new Date(seg.start_date), daysDelta), 'yyyy-MM-dd'),
-        end_date: format(addDays(new Date(seg.end_date), daysDelta), 'yyyy-MM-dd'),
+```typescript
+const handleTaskOrSegmentsDrag = useCallback((taskId: string, updates: Partial<Task>) => {
+  const taskSegs = segments.filter(s => s.task_id === taskId);
+  if (taskSegs.length > 0 && onUpdateSegment && updates.start_date && updates.end_date) {
+    // Derive current effective boundaries from segments (source of truth)
+    const segStarts = taskSegs.map(s => new Date(s.start_date).getTime());
+    const segEnds = taskSegs.map(s => new Date(s.end_date).getTime());
+    const oldStart = new Date(Math.min(...segStarts));
+    const oldEnd = new Date(Math.max(...segEnds));
+    const newStart = new Date(updates.start_date as string);
+    const newEnd = new Date(updates.end_date as string);
+
+    const startDelta = differenceInDays(newStart, oldStart);
+    const endDelta = differenceInDays(newEnd, oldEnd);
+
+    if (startDelta === 0 && endDelta === 0) return; // no change
+
+    // Sort segments by order_index for first/last identification
+    const sorted = [...taskSegs].sort((a, b) => a.order_index - b.order_index);
+
+    if (startDelta === endDelta) {
+      // MOVE: uniform shift — shift every segment
+      for (const seg of taskSegs) {
+        onUpdateSegment(seg.id, {
+          start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+          end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+        });
+      }
+    } else if (startDelta === 0 && endDelta !== 0) {
+      // RESIZE-END: only adjust last segment's end_date
+      const lastSeg = sorted[sorted.length - 1];
+      onUpdateSegment(lastSeg.id, {
+        end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd'),
+      });
+    } else if (endDelta === 0 && startDelta !== 0) {
+      // RESIZE-START: only adjust first segment's start_date
+      const firstSeg = sorted[0];
+      onUpdateSegment(firstSeg.id, {
+        start_date: format(addDays(new Date(firstSeg.start_date), startDelta), 'yyyy-MM-dd'),
+      });
+    } else {
+      // Mixed change (shouldn't happen normally) — shift all segments by start delta,
+      // then adjust last segment end to match
+      for (const seg of taskSegs) {
+        onUpdateSegment(seg.id, {
+          start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+          end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+        });
+      }
+      const lastSeg = sorted[sorted.length - 1];
+      const extraEndDelta = endDelta - startDelta;
+      onUpdateSegment(lastSeg.id, {
+        end_date: format(addDays(new Date(lastSeg.end_date), startDelta + extraEndDelta), 'yyyy-MM-dd'),
       });
     }
   } else {
-    onTaskUpdate(taskId, { start_date, end_date });
+    onTaskUpdate(taskId, updates);
   }
-}
+}, [segments, onUpdateSegment, onTaskUpdate]);
 ```
 
-Pass this as `onTaskUpdate` to `useDragAndResize` instead of the raw `onTaskUpdate`.
-
-### 2. `src/components/timeline/TimelineEditor.tsx`
-
-No changes needed — `handleUpdateSegment` already handles individual segment updates correctly, and the DB trigger will sync parent task dates.
-
-### 3. `src/hooks/useDragAndResize.ts`
-
-No changes needed — the hook correctly calls `onTaskUpdate` for task-level drags and `onSegmentUpdate` for segment-level drags. The fix is entirely in how GanttChart wires the `onTaskUpdate` callback.
+No other files need changes. The hook, segment update handler, and DB trigger all work correctly — the bug is entirely in how this wrapper interprets the drag type.
 
 ## Summary
 
 | File | Change |
 |------|--------|
-| `src/components/timeline/GanttChart.tsx` | Create a wrapper around `onTaskUpdate` that shifts all segments when dragging a segmented task, instead of writing to the task row directly. Pass this wrapper to `useDragAndResize`. |
+| `src/components/timeline/GanttChart.tsx` (lines 309-335) | Replace move-only wrapper with logic that detects move vs resize-start vs resize-end from date deltas. Move shifts all segments; resize-end adjusts last segment's end; resize-start adjusts first segment's start. |
 
