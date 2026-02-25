@@ -23,7 +23,6 @@ export function TaskPopoverMenu({
 }: TaskPopoverMenuProps) {
   // Determine if we're hovering a review segment
   const hoveredSeg = hoveredSegmentId ? taskSegments.find(s => s.id === hoveredSegmentId) : null;
-  const isHoveringReview = hoveredSeg?.segment_type === 'review';
 
   return (
     <div className="flex flex-col">
@@ -48,7 +47,7 @@ export function TaskPopoverMenu({
       })()}
 
       {/* Add Review - shown when not hovering a review segment */}
-      {onAddReview && !isHoveringReview && (
+      {onAddReview && (
         <button
           onClick={() => {
             onAddReview(task.id);
