@@ -306,33 +306,65 @@ export function GanttChart({
     }
   }, [onUpdateSegment]);
 
-  // Wrapper: when dragging a task that has segments, shift all segments by the
-  // same delta so the DB trigger keeps everything in sync. Without this, the
-  // trigger overwrites the task-row dates from unchanged segments → snap-back.
+  // Wrapper: when dragging/resizing a task that has segments, detect the drag
+  // type from date deltas and update segments accordingly. The DB trigger then
+  // syncs parent task dates from the updated segments.
   const handleTaskOrSegmentsDrag = useCallback((taskId: string, updates: Partial<Task>) => {
     const taskSegs = segments.filter(s => s.task_id === taskId);
-    if (taskSegs.length > 0 && onUpdateSegment && updates.start_date) {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) { onTaskUpdate(taskId, updates); return; }
-
-      // Derive the current effective start from segments (source of truth)
-      const segStarts = taskSegs.map(s => new Date(s.start_date));
-      const oldStart = new Date(Math.min(...segStarts.map(d => d.getTime())));
+    if (taskSegs.length > 0 && onUpdateSegment && updates.start_date && updates.end_date) {
+      // Derive current effective boundaries from segments (source of truth)
+      const segStarts = taskSegs.map(s => new Date(s.start_date).getTime());
+      const segEnds = taskSegs.map(s => new Date(s.end_date).getTime());
+      const oldStart = new Date(Math.min(...segStarts));
+      const oldEnd = new Date(Math.max(...segEnds));
       const newStart = new Date(updates.start_date as string);
-      const daysDelta = differenceInDays(newStart, oldStart);
+      const newEnd = new Date(updates.end_date as string);
 
-      if (daysDelta === 0) return; // no change
+      const startDelta = differenceInDays(newStart, oldStart);
+      const endDelta = differenceInDays(newEnd, oldEnd);
 
-      for (const seg of taskSegs) {
-        onUpdateSegment(seg.id, {
-          start_date: format(addDays(new Date(seg.start_date), daysDelta), 'yyyy-MM-dd'),
-          end_date: format(addDays(new Date(seg.end_date), daysDelta), 'yyyy-MM-dd'),
+      if (startDelta === 0 && endDelta === 0) return; // no change
+
+      // Sort segments by order_index for first/last identification
+      const sorted = [...taskSegs].sort((a, b) => a.order_index - b.order_index);
+
+      if (startDelta === endDelta) {
+        // MOVE: uniform shift — shift every segment
+        for (const seg of taskSegs) {
+          onUpdateSegment(seg.id, {
+            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          });
+        }
+      } else if (startDelta === 0 && endDelta !== 0) {
+        // RESIZE-END: only adjust last segment's end_date
+        const lastSeg = sorted[sorted.length - 1];
+        onUpdateSegment(lastSeg.id, {
+          end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd'),
+        });
+      } else if (endDelta === 0 && startDelta !== 0) {
+        // RESIZE-START: only adjust first segment's start_date
+        const firstSeg = sorted[0];
+        onUpdateSegment(firstSeg.id, {
+          start_date: format(addDays(new Date(firstSeg.start_date), startDelta), 'yyyy-MM-dd'),
+        });
+      } else {
+        // Mixed change — shift all segments by start delta, then adjust last end
+        for (const seg of taskSegs) {
+          onUpdateSegment(seg.id, {
+            start_date: format(addDays(new Date(seg.start_date), startDelta), 'yyyy-MM-dd'),
+            end_date: format(addDays(new Date(seg.end_date), startDelta), 'yyyy-MM-dd'),
+          });
+        }
+        const lastSeg = sorted[sorted.length - 1];
+        onUpdateSegment(lastSeg.id, {
+          end_date: format(addDays(new Date(lastSeg.end_date), endDelta), 'yyyy-MM-dd'),
         });
       }
     } else {
       onTaskUpdate(taskId, updates);
     }
-  }, [segments, tasks, onUpdateSegment, onTaskUpdate]);
+  }, [segments, onUpdateSegment, onTaskUpdate]);
 
   // Drag and drop hook
   const {
