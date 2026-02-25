@@ -1,7 +1,7 @@
 import { Task, Phase, TaskSegment, SegmentType } from '@/types/database';
 
 // View mode types
-export type ViewMode = 'week' | 'month' | 'project';
+export type ViewMode = 'month' | 'project';
 
 // Column representation for the timeline
 export interface Column {

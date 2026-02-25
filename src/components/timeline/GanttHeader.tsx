@@ -71,7 +71,7 @@ export function GanttHeader({
         
         {/* View mode toggle - Segmented control */}
         <div className="flex items-center rounded-lg p-0.5 md:p-1 bg-muted border border-border">
-          {(['week', 'month', 'project'] as ViewMode[]).map((mode) => (
+          {(['month', 'project'] as ViewMode[]).map((mode) => (
             <Button
               key={mode}
               variant="ghost"
@@ -85,8 +85,8 @@ export function GanttHeader({
               onClick={() => onViewModeChange(mode)}
             >
               {isMobile 
-                ? (mode === 'week' ? 'W' : mode === 'month' ? 'M' : 'P')
-                : (mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'Project')
+                ? (mode === 'month' ? 'M' : 'P')
+                : (mode === 'month' ? 'Monthly' : 'Project')
               }
             </Button>
           ))}
@@ -187,8 +187,7 @@ export function GanttHeader({
               </div>
               
               <div className="border-t border-border pt-2 mt-2 text-muted-foreground">
-                <p><strong>Weekly view:</strong> 7 days per period</p>
-                <p className="mt-1"><strong>Monthly view:</strong> Full month view</p>
+              <p><strong>Monthly view:</strong> Full month view</p>
               </div>
             </div>
           </TooltipContent>
