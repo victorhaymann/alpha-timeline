@@ -1,57 +1,62 @@
 
 
-# Fix: Timezone-Induced Date Shift in Dashboard Gantt Charts
+# Align Tabs and Action Buttons on One Row
 
-## Root Cause
+## The Problem
 
-The bug is a classic **UTC vs local timezone** mismatch. Here is the chain:
+The screenshot shows the TabsList (Timeline, Resources, Client Documents, Rights) and the action buttons (Regenerate Schedule, Undo, Shift Timeline) on **separate rows**. Currently:
 
-1. **Database** stores dates as strings like `"2026-03-09"` (a Monday).
-2. **`Dashboard.tsx`** (lines 96-102, 116-117) parses them with `new Date("2026-03-09")`, which JavaScript interprets as **UTC midnight** — i.e. `2026-03-09T00:00:00Z`.
-3. In UTC+1 (Paris), that becomes `2026-03-08T23:00:00` local time — **the previous day** (Sunday).
-4. **`dayIndex()`** in `ProjectsGantt.tsx` (line 191-196) and `StaffGantt.tsx` (line 231-236) uses `days[i] >= date`. The `days` array is built with `addDays()` which produces **local midnight** dates. So a UTC-midnight date that maps to the previous evening in local time gets matched to the wrong grid column.
+- **Row 1** (in `ProjectDetail.tsx` line 609): TabsList + Regenerate Schedule button — these are in a `flex justify-between` wrapper.
+- **Row 2** (in `TimelineEditor.tsx` lines 1212-1224): Undo + Shift Timeline — rendered inside the `TimelineEditor` component as a separate `div`.
 
-This only affects dates where the UTC-to-local shift crosses midnight — which is why it hits some phases but not all.
+The user wants all CTAs on the **same horizontal line** as the tabs.
 
-## Fix (3 files, minimal changes)
+## The Fix
 
-### 1. `src/pages/Dashboard.tsx`
+### File: `src/components/timeline/TimelineEditor.tsx`
 
-Add a `parseLocalDate` helper that splits `"YYYY-MM-DD"` and constructs `new Date(year, month-1, day)` (local midnight). Replace all 6 occurrences of `new Date(dateString)` for task/project dates with `parseLocalDate(dateString)`.
+**Expose Undo and Shift Timeline handlers** via a new render prop (similar to how `renderRegenerateButton` works), so `ProjectDetail.tsx` can render them in the tabs row.
 
-Lines affected: ~96, 98, 99, 102, 116, 117 — plus the same pattern in the staff assignment builder (~140-155).
-
-### 2. `src/components/dashboard/ProjectsGantt.tsx`
-
-Fix `dayIndex` (lines 191-196) to compare by calendar date instead of timestamp:
-
+Add a new optional prop:
 ```typescript
-function dayIndex(date: Date): number {
-  for (let i = 0; i < days.length; i++) {
-    if (
-      days[i].getFullYear() === date.getFullYear() &&
-      days[i].getMonth() === date.getMonth() &&
-      days[i].getDate() === date.getDate()
-    ) return i;
-    if (days[i] > date) return i;
-  }
-  return days.length - 1;
-}
+renderActionButtons?: (props: {
+  onUndo: () => void;
+  undoDisabled: boolean;
+  isUndoing: boolean;
+  undoCount: number;
+  onShiftTimeline: () => void;
+}) => React.ReactNode;
 ```
 
-### 3. `src/components/dashboard/StaffGantt.tsx`
+When `renderActionButtons` is provided, skip rendering the Undo + Shift Timeline block inside `TimelineEditor` (lines 1212-1224). The caller renders them instead.
 
-Same `dayIndex` fix (lines 231-236) — identical change.
+### File: `src/pages/ProjectDetail.tsx`
 
-Also fix the staff assignment date parsing in `Dashboard.tsx` (lines ~140-155) where `new Date(t.start_date!)` and `new Date(t.end_date!)` are used for staff assignment bars.
+Move the Undo, Shift Timeline, and Regenerate Schedule buttons **into the same `flex justify-between` row** as the TabsList (line 609). Use the new `renderActionButtons` prop to capture the handlers, similar to the existing `regenerateHandler` pattern.
 
-## Summary
+The row becomes:
+```
+[ TabsList ]                        [ Undo ] [ Shift Timeline ] [ Regenerate Schedule ]
+```
+
+All on one line via `flex items-center justify-between`.
+
+## Technical Details
+
+### `TimelineEditor.tsx` changes (lines 49-53, 1210-1227)
+
+1. Add `renderActionButtons` to the props interface.
+2. In the return block (line 1212), when `renderActionButtons` is provided, call it instead of rendering the buttons inline — and return `null` so nothing renders above the GanttChart.
+3. Also call `renderActionButtons` similarly to `renderRegenerateButton` — store handlers via a `setTimeout` pattern on first render so `ProjectDetail` can use them.
+
+### `ProjectDetail.tsx` changes (lines 608-641)
+
+1. Add state for action handlers: `const [actionHandlers, setActionHandlers] = useState(...)`.
+2. Pass `renderActionButtons` prop to `TimelineEditor` that captures the handlers.
+3. In the tabs header row (line 609), render all three buttons in a single `div` with `flex items-center gap-2` on the right side, combining the existing Regenerate Schedule button with the new Undo and Shift Timeline buttons.
 
 | File | Change |
 |------|--------|
-| `src/pages/Dashboard.tsx` | Add `parseLocalDate()` helper. Replace all `new Date(dateString)` with `parseLocalDate(dateString)` for task/project/assignment dates. |
-| `src/components/dashboard/ProjectsGantt.tsx` | Fix `dayIndex` to compare year/month/day instead of timestamp. |
-| `src/components/dashboard/StaffGantt.tsx` | Same `dayIndex` fix. |
-
-No logic duplication. No new dependencies. Just correcting how date strings are parsed and compared.
+| `src/components/timeline/TimelineEditor.tsx` | Add `renderActionButtons` prop. Skip inline rendering when prop is provided. |
+| `src/pages/ProjectDetail.tsx` | Capture action handlers. Render all buttons in the tabs header row. |
 
