@@ -536,32 +536,28 @@ export default function ProjectDetail() {
               <div className="p-2 rounded-lg bg-primary/10 shrink-0">
                 <User className="w-5 h-5 text-primary" />
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between">
+              <div className="min-w-0 flex-1 flex items-center justify-between">
+                <div className="shrink-0">
                   <p className="text-sm text-muted-foreground">Project Manager</p>
-                  <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <p className="text-sm font-semibold">{project.pm_name || <span className="italic font-normal text-muted-foreground">Not assigned</span>}</p>
                 </div>
-                {project.pm_name ? (
-                  <div>
-                    <p className="text-sm font-semibold truncate">{project.pm_name}</p>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {project.pm_email && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground min-w-0">
-                          <Mail className="w-3.5 h-3.5 text-primary shrink-0" />
-                          <span className="truncate">{project.pm_email}</span>
-                        </div>
-                      )}
-                      {project.pm_whatsapp && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                          <Phone className="w-3.5 h-3.5 text-primary shrink-0" />
-                          <span>{project.pm_whatsapp}</span>
-                        </div>
-                      )}
-                    </div>
+                {project.pm_name && (
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    {project.pm_email && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                        <Mail className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="truncate">{project.pm_email}</span>
+                      </div>
+                    )}
+                    {project.pm_whatsapp && (
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Phone className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span>{project.pm_whatsapp}</span>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">Not assigned</p>
                 )}
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
               </div>
             </div>
           </CardContent>
