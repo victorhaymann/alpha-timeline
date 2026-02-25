@@ -1,33 +1,64 @@
 
 
-# Plan: Show Milestones as Flags in Dashboard Projects Timeline
-
-## Problem
-In the Dashboard's Projects Timeline, milestone tasks are included in phase date-range calculations, producing a single wide bar spanning milestone dates (e.g., April 15 to May 1) instead of individual flag icons on each date.
+# Plan: Enable Bidirectional Scrolling in All Gantt Charts
 
 ## Root Cause
-1. The Dashboard query in `Dashboard.tsx` does not fetch `task_type` for tasks, so milestones cannot be identified.
-2. Phase bar date ranges in `Dashboard.tsx` include milestone tasks, inflating the span.
-3. `ProjectsGantt.tsx` only renders rectangular bars — it has no concept of milestone flags.
 
-## Changes
+### Dashboard Gantts (ProjectsGantt + StaffGantt)
+Both use `getTimelineRange()` which generates a fixed window: `today - 14 days` to `today + 12 weeks`. With only ~10 working days to the left of today and a `DAY_W` of 32px, that's only ~320px of past content. Once the viewport is wider than that, there's nothing to scroll left into — the scroll container has no overflow on the left side.
 
-### 1. `src/pages/Dashboard.tsx` — Fetch `task_type` and separate milestones from phase bars
+### Project Gantt
+The date range is `projectStartDate` to `projectEndDate`. The auto-scroll positions the view at "today". If the project started recently, there's minimal content to the left of today. However, the bigger issue is that if the project started months ago, the full range is rendered but the initial scroll goes to today — scrolling left should already work here unless the project start date is very close to today.
 
-- Add `task_type` to the tasks query select: `'id, phase_id, project_id, start_date, end_date, name, task_type, is_feedback_meeting'` (already has `task_type`, but currently filters out meetings only — milestones are included in phase date calc).
-- When building `phaseBars`, **exclude** milestone tasks from the date range calculation (`t.task_type !== 'milestone'`).
-- Build a separate `milestones` array per project: for each milestone task, extract `{ date, color, name }` using the phase color.
-- Pass `milestones` alongside `phases` in each project row.
+## Solution
 
-### 2. `src/components/dashboard/ProjectsGantt.tsx` — Render milestone flags
+### 1. Dashboard Gantts — Extend past range
+**Files:** `src/components/dashboard/ProjectsGantt.tsx` and `src/components/dashboard/StaffGantt.tsx`
 
-- Update the `ProjectRow` interface to include `milestones: { name: string; date: Date; color: string }[]`.
-- In the row rendering section (where phase bars are drawn), after rendering phase bars, render each milestone as a `Flag` icon (from `lucide-react`) positioned at its date column — same visual style as the project Gantt (filled flag with phase color, `w-4 h-4`).
-- Each flag gets a `Tooltip` showing the milestone name and date.
-- Milestones do **not** participate in lane calculations (they are point markers, not bars).
+Change `getTimelineRange()` in both files:
+- **Before:** `start = today - 14 days`, `end = start + 12 weeks`
+- **After:** `start = today - 8 weeks`, `end = today + 12 weeks`
 
-## Visual Result
-- Phase bars show only the span of work tasks (excluding milestones).
-- Each milestone appears as a colored flag icon at its exact date on the project row.
-- Lancaster (Coty) will show two flags on April 15 and May 1 instead of one long segment.
+This gives ~40 working days to the left of today (enough scrollable content in the past). The range becomes 20 weeks total, which is reasonable.
+
+Add an initial scroll-to-today `useEffect` so the view opens centered on today rather than at the far left. This way users see the current week on load but can scroll freely in both directions.
+
+### 2. Project Gantt — Extend past padding
+**File:** `src/components/timeline/GanttChart.tsx`
+
+No change needed if the project already has a start date in the past. The full project range is rendered and scrollable. The auto-scroll to today already works. If the user's project started only recently, scrolling left is inherently limited — this is correct behavior (there are no dates before the project start).
+
+However, to be safe and consistent, add a small buffer: extend `viewStart` by 1 week before `projectStartDate` so there's always some scrollable past content even at the project boundary.
+
+## Specific Changes
+
+### `src/components/dashboard/ProjectsGantt.tsx`
+- Update `getTimelineRange()`: change `-14` to `-8 * 7` (8 weeks back)
+- Add `useEffect` to auto-scroll to today on mount:
+  ```
+  useEffect(() => {
+    if (scrollRef.current && todayIdx >= 0) {
+      const targetX = Math.max(0, todayIdx * DAY_W - scrollRef.current.clientWidth / 3);
+      scrollRef.current.scrollLeft = targetX;
+    }
+  }, [todayIdx]);
+  ```
+
+### `src/components/dashboard/StaffGantt.tsx`
+- Same `getTimelineRange()` update: `-14` to `-8 * 7`
+- Same auto-scroll `useEffect` on mount
+
+### `src/components/timeline/GanttChart.tsx`
+- When computing `viewStart`, subtract 7 calendar days from `validStartDate` as a buffer:
+  ```
+  const viewStart = dateRange?.from 
+    ? addDays(dateRange.from, -7) 
+    : addDays(validStartDate, -7);
+  ```
+  This ensures there's always scrollable content before the first task.
+
+## Result
+- Dashboard Gantts: ~8 weeks of past visible by scrolling left, ~12 weeks of future by scrolling right, centered on today on load
+- Project Gantt: 1-week buffer before project start, full project duration rendered, auto-scrolled to today
+- All three Gantt views support free bidirectional horizontal scrolling
 
