@@ -70,7 +70,6 @@ import {
   addDays,
   differenceInDays,
   startOfDay,
-  startOfWeek,
   isSameDay,
 } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -379,13 +378,8 @@ export function GanttChart({
     const sign = direction === 'next' ? 1 : -1;
     let pixelOffset: number;
     
-    if (viewMode === 'week') {
-      // Scroll by 5 working day columns (1 week)
-      pixelOffset = 5 * columnWidth * sign;
-    } else {
-      // Scroll by ~22 working day columns (1 month)
-      pixelOffset = 22 * columnWidth * sign;
-    }
+    // Scroll by ~22 working day columns (1 month)
+    pixelOffset = 22 * columnWidth * sign;
     
     rightBodyRef.current.scrollBy({ left: pixelOffset, behavior: 'smooth' });
   }, [viewMode, columnWidth]);
@@ -397,10 +391,7 @@ export function GanttChart({
     const today = new Date();
     let targetX = 0;
     
-    if (scrollTarget === 'week') {
-      const monday = startOfWeek(today, { weekStartsOn: 1 });
-      targetX = dateToX(monday);
-    } else if (scrollTarget === 'month') {
+    if (scrollTarget === 'month') {
       targetX = dateToX(today);
     }
     // project: scroll to 0
@@ -624,7 +615,7 @@ export function GanttChart({
           
           {/* View mode toggle - Segmented control */}
           <div className="flex items-center rounded-lg p-0.5 md:p-1 bg-muted border border-border">
-            {(['week', 'month', 'project'] as ViewMode[]).map((mode) => (
+            {(['month', 'project'] as ViewMode[]).map((mode) => (
               <Button
                 key={mode}
                 variant="ghost"
@@ -638,8 +629,8 @@ export function GanttChart({
                 onClick={() => handleViewModeChange(mode)}
               >
                 {isMobile 
-                  ? (mode === 'week' ? 'W' : mode === 'month' ? 'M' : 'P')
-                  : (mode === 'week' ? 'Weekly' : mode === 'month' ? 'Monthly' : 'Project')
+                  ? (mode === 'month' ? 'M' : 'P')
+                  : (mode === 'month' ? 'Monthly' : 'Project')
                 }
               </Button>
             ))}
@@ -737,8 +728,7 @@ export function GanttChart({
                 </div>
                 
                 <div className="border-t border-border pt-2 mt-2 text-muted-foreground">
-                  <p><strong>Weekly view:</strong> 7 days per period</p>
-                  <p className="mt-1"><strong>Monthly view:</strong> Full month view</p>
+                  <p><strong>Monthly view:</strong> Full month view</p>
                 </div>
               </div>
             </TooltipContent>
@@ -747,7 +737,7 @@ export function GanttChart({
       </div>
 
       {/* Gantt Chart - Split Pane Layout for frozen tasks column */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden overflow-x-auto" ref={containerRef}>
+      <div className="rounded-lg border border-border bg-card overflow-hidden" ref={containerRef}>
         <div className="flex" style={{ height: totalHeight, minWidth: isMobile ? taskColumnWidth + 200 : undefined }}>
           {/* Left Pane - Fixed Tasks Column (no horizontal scroll) */}
           <div className="flex flex-col shrink-0 bg-card border-r border-border z-20 sticky left-0" style={{ width: taskColumnWidth }}>
@@ -1078,7 +1068,12 @@ export function GanttChart({
                       )}
                       style={{ width: columnWidth }}
                     >
-                      <span className="text-[9px] text-muted-foreground">{col.subLabel || format(col.days[0], 'EEE').charAt(0)}</span>
+                      <span className="text-[9px] text-muted-foreground">
+                        {viewMode === 'month' 
+                          ? `${format(col.days[0], 'EEE')} ${format(col.days[0], 'd')}`
+                          : (col.subLabel || format(col.days[0], 'EEE').charAt(0))
+                        }
+                      </span>
                     </div>
                   );
                 })}
