@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
-import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment, SegmentType } from '@/types/database';
+import { Task, Phase, PhaseCategory, PHASE_CATEGORY_COLORS, TaskSegment } from '@/types/database';
 import { useDragAndResize } from '@/hooks/useDragAndResize';
 import { useVerticalReorder } from '@/hooks/useVerticalReorder';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -36,6 +36,7 @@ import {
 import { 
   ViewMode,
   ROW_HEIGHT,
+  REVIEW_SUB_ROW_HEIGHT,
   MONTH_ROW_HEIGHT,
   WEEK_ROW_HEIGHT,
   DAY_ROW_HEIGHT,
@@ -91,11 +92,7 @@ interface GanttChartProps {
   onDeleteTask?: (taskId: string) => void;
   onAddMeeting?: () => void;
   onDeleteMeeting?: (taskId: string) => void;
-  onAddSegment?: (taskId: string, position: 'before' | 'after', segmentType?: SegmentType) => void;
-  onEditSegments?: (task: Task) => void;
   onUpdateSegment?: (segmentId: string, updates: Partial<TaskSegment>) => void;
-  onConvertSegmentType?: (segmentId: string, newType: SegmentType) => void;
-  onDeleteSegment?: (segmentId: string, taskId: string) => void;
   hiddenMeetingDates?: Set<string>;
   onToggleMeetingVisibility?: (date: string, hidden: boolean) => void;
   readOnly?: boolean;
@@ -122,15 +119,10 @@ export function GanttChart({
   onTaskUpdate,
   onTaskReorder,
   onAddTask,
-  // onAddReviewRound removed
   onDeleteTask,
   onAddMeeting,
   onDeleteMeeting,
-  onAddSegment,
-  onEditSegments,
   onUpdateSegment,
-  onConvertSegmentType,
-  onDeleteSegment,
   hiddenMeetingDates,
   onToggleMeetingVisibility,
   readOnly = false,
@@ -596,7 +588,14 @@ export function GanttChart({
     if (section.type === 'weekly-call') {
       totalHeight += PHASE_SEPARATOR_HEIGHT + ROW_HEIGHT; // separator + single row
     } else {
-      totalHeight += section.tasks.length * ROW_HEIGHT;
+      section.tasks.forEach(task => {
+        totalHeight += ROW_HEIGHT;
+        // Add review sub-row height if task has review segments
+        const hasReviewSegments = segments.some(s => s.task_id === task.id && s.segment_type === 'review');
+        if (hasReviewSegments) {
+          totalHeight += REVIEW_SUB_ROW_HEIGHT;
+        }
+      });
     }
   });
 
@@ -889,9 +888,12 @@ export function GanttChart({
 
                     const insertionGap = shouldShowInsertionGap(taskIndex, section.phase.id);
 
+                    const reviewSegments = taskSegments.filter(s => s.segment_type === 'review');
+                    const hasReviewSegments = reviewSegments.length > 0;
+
                     return (
+                      <React.Fragment key={task.id}>
                       <div
-                        key={task.id}
                         className={cn(
                           "flex items-center gap-1 md:gap-2 px-2 md:px-4 group hover:bg-muted/40 transition-colors border-b border-border/30",
                           getVerticalDragClasses(task.id),
@@ -1007,6 +1009,21 @@ export function GanttChart({
                           </button>
                         )}
                       </div>
+
+                      {/* Review sub-row label */}
+                      {hasReviewSegments && (
+                        <div
+                          className="flex items-center gap-1 px-2 md:px-4 border-b border-border/20"
+                          style={{ height: REVIEW_SUB_ROW_HEIGHT }}
+                        >
+                          <div className="w-4 md:w-5 shrink-0" />
+                          <div className="w-2 shrink-0" />
+                          <span className="text-[10px] text-muted-foreground font-medium tracking-wide pl-1">
+                            ↳ Reviews ({reviewSegments.length})
+                          </span>
+                        </div>
+                      )}
+                      </React.Fragment>
                     );
                   })}
 
@@ -1181,9 +1198,9 @@ export function GanttChart({
                         </div>
                       )}
 
-                      {/* All task bars rendered as single rows with inline segments */}
+                      {/* All task bars - continuous work bar + review sub-row */}
                       {section.type === 'phase' && section.tasks.map((task) => {
-                        const isCurrentlyDragging = dragging?.taskId === task.id;
+                        const isCurrentlyDragging = dragging?.taskId === task.id && !dragging?.segmentId;
                         const isJustDropped = justDropped === task.id;
                         
                         // Use segment-derived dates when segments exist (single source of truth)
@@ -1198,30 +1215,59 @@ export function GanttChart({
                         const displayStart = isCurrentlyDragging && dragPreview ? dragPreview.start : safeParseDate(effectiveStartStr);
                         const displayEnd = isCurrentlyDragging && dragPreview ? dragPreview.end : safeParseDate(effectiveEndStr);
 
-                        const currentDaysDiff = safeDifferenceInDays(displayEnd, displayStart);
-                        const currentDuration = currentDaysDiff !== null ? currentDaysDiff + 1 : null;
-                        const originalDuration = dragging?.originalDuration;
-                        const isResizing = isCurrentlyDragging && (dragging?.type === 'resize-start' || dragging?.type === 'resize-end');
-                        const durationChanged = isResizing && originalDuration && currentDuration !== originalDuration;
-                        
-                        // Check if this is a feedback meeting (should have dashed border)
                         const isFeedback = task.is_feedback_meeting || task.task_type === 'meeting';
+                        const reviewSegments = taskSegments.filter(s => s.segment_type === 'review');
+                        const hasReviewSegments = reviewSegments.length > 0;
+
+                        // Grid background helper
+                        const renderGridBg = (height: number) => (
+                          <div className="absolute inset-0 flex">
+                            {groupedColumns.map((col) => {
+                              const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                              return (
+                                <div
+                                  key={col.key}
+                                  className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                  style={{ width: columnWidth }}
+                                />
+                              );
+                            })}
+                          </div>
+                        );
 
                         if (!displayStart || !displayEnd) return (
-                          <div key={task.id} style={{ height: ROW_HEIGHT }}>
-                            <div className="flex h-full">
-                              {groupedColumns.map((col) => {
-                                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                                return (
-                                  <div
-                                    key={col.key}
-                                    className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                                    style={{ width: columnWidth }}
-                                  />
-                                );
-                              })}
+                          <React.Fragment key={task.id}>
+                            <div style={{ height: ROW_HEIGHT }}>
+                              <div className="flex h-full">
+                                {groupedColumns.map((col) => {
+                                  const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                  return (
+                                    <div
+                                      key={col.key}
+                                      className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                      style={{ width: columnWidth }}
+                                    />
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
+                            {hasReviewSegments && (
+                              <div style={{ height: REVIEW_SUB_ROW_HEIGHT }}>
+                                <div className="flex h-full">
+                                  {groupedColumns.map((col) => {
+                                    const isAlternateWeek = weekAlternatingMap[col.weekNumber];
+                                    return (
+                                      <div
+                                        key={col.key}
+                                        className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
+                                        style={{ width: columnWidth }}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
                         );
 
                         const firstColDate = groupedColumns.length > 0 ? startOfDay(groupedColumns[0].startDate) : null;
@@ -1240,23 +1286,16 @@ export function GanttChart({
                           clippedWidth = getTaskWidth(firstColDate, displayEnd);
                         }
 
+                        const tooltipInfo = isCurrentlyDragging ? getDynamicTooltipInfo() : null;
+
                         return (
-                          <div key={task.id} className="relative" style={{ height: ROW_HEIGHT }}>
-                            <div className="absolute inset-0 flex">
-                              {groupedColumns.map((col) => {
-                                const isAlternateWeek = weekAlternatingMap[col.weekNumber];
-                                return (
-                                  <div
-                                    key={col.key}
-                                    className={cn("shrink-0 border-r border-border/60", isAlternateWeek && "bg-black/[0.04]")}
-                                    style={{ width: columnWidth }}
-                                  />
-                                );
-                              })}
-                            </div>
+                          <React.Fragment key={task.id}>
+                          {/* Main task row - continuous work bar */}
+                          <div className="relative" style={{ height: ROW_HEIGHT }}>
+                            {renderGridBg(ROW_HEIGHT)}
 
                             {!isOutsideView && clippedWidth > 0 && task.task_type === 'milestone' ? (
-                              // Milestone: Flag icon aligned to right of column
+                              // Milestone: Flag icon
                               <Tooltip delayDuration={200}>
                                 <TooltipTrigger asChild>
                                   <div
@@ -1288,287 +1327,7 @@ export function GanttChart({
                                   )}
                                 </TooltipContent>
                               </Tooltip>
-                            ) : !isOutsideView && clippedWidth > 0 && (() => {
-                              // Regular task bar with ghost and dynamic tooltip
-                              const tooltipInfo = isCurrentlyDragging ? getDynamicTooltipInfo() : null;
-                              // taskSegments already computed above for date derivation
-                              const hasMultipleSegments = taskSegments.length > 1;
-                              
-                              // If multiple segments, render each segment as a separate bar with connecting lines
-                              if (hasMultipleSegments) {
-                                return (
-                                  <>
-                                    {/* Connecting dashed lines between segments */}
-                                    <svg className="absolute inset-0 pointer-events-none overflow-visible" style={{ width: chartWidth, height: ROW_HEIGHT }}>
-                                      {taskSegments.slice(0, -1).map((seg, idx) => {
-                                        const segStart = safeParseDate(seg.start_date);
-                                        const segEnd = safeParseDate(seg.end_date);
-                                        const nextSeg = taskSegments[idx + 1];
-                                        const nextStart = safeParseDate(nextSeg.start_date);
-                                        if (!segStart || !segEnd || !nextStart) return null;
-                                        
-                                        // Calculate segment bar position and width
-                                        const segLeft = dateToX(segStart);
-                                        const segWidth = getTaskWidth(segStart, segEnd);
-                                        
-                                        // Line starts at end of current segment bar
-                                        const x1 = segLeft + segWidth - 2;
-                                        const x2 = dateToX(nextStart) + 2;
-                                        const y = ROW_HEIGHT / 2;
-                                        
-                                        return (
-                                          <line
-                                            key={`conn-${seg.id}`}
-                                            x1={x1}
-                                            y1={y}
-                                            x2={x2}
-                                            y2={y}
-                                            stroke={sectionColor}
-                                            strokeWidth="2"
-                                            strokeDasharray="4 3"
-                                            className="opacity-60"
-                                          />
-                                        );
-                                      })}
-                                    </svg>
-                                    
-                                    {/* Ghost elements for segment-level dragging */}
-                                    {dragging?.taskId === task.id && dragging?.segmentId && (() => {
-                                      const ghost = getGhostPosition();
-                                      if (!ghost || ghost.segmentId !== dragging.segmentId) return null;
-                                      const ghostLeft = dateToX(ghost.start);
-                                      const ghostWidth = getTaskWidth(ghost.start, ghost.end);
-                                      return (
-                                        <div
-                                          className="absolute top-1/2 -translate-y-1/2 h-7 rounded-md gantt-task-ghost"
-                                          style={{
-                                            left: ghostLeft + 2,
-                                            width: ghostWidth - 4,
-                                            background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
-                                          }}
-                                        />
-                                      );
-                                    })()}
-                                    
-                                    {/* Render each segment as a bar */}
-                                    {taskSegments.map((seg, segIdx) => {
-                                      const segmentPreview = getSegmentDragPreview(seg.id);
-                                      const segStart = segmentPreview ? segmentPreview.start : safeParseDate(seg.start_date);
-                                      const segEnd = segmentPreview ? segmentPreview.end : safeParseDate(seg.end_date);
-                                      if (!segStart || !segEnd) return null;
-                                      
-                                      const segLeft = dateToX(segStart);
-                                      const segWidth = getTaskWidth(segStart, segEnd);
-                                      const isFirstSegment = segIdx === 0;
-                                      const isLastSegment = segIdx === taskSegments.length - 1;
-                                      const isSegmentDragging = dragging?.segmentId === seg.id;
-                                      const tooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
-                                      
-                                      // Check if this is a review segment
-                                      const isReviewSegment = seg.segment_type === 'review';
-                                      
-                                      // Review segment: subtle fill with dashed border and softer shadow
-                                      const segmentStyle = isReviewSegment
-                                        ? {
-                                            left: segLeft + 2,
-                                            width: segWidth - 4,
-                                            backgroundColor: `${sectionColor}15`,
-                                            border: `2px dashed ${sectionColor}`,
-                                            boxShadow: `0 2px 8px ${sectionColor}20`,
-                                            ...getDragStyles(task.id, seg.id),
-                                          }
-                                        : {
-                                            left: segLeft + 2,
-                                            width: segWidth - 4,
-                                            background: isFeedback 
-                                              ? `${sectionColor}99` 
-                                              : `linear-gradient(135deg, ${sectionColor} 0%, ${sectionColor}dd 100%)`,
-                                            borderColor: isFeedback ? sectionColor : undefined,
-                                            boxShadow: `0 4px 12px ${sectionColor}66`,
-                                            ...getDragStyles(task.id, seg.id),
-                                          };
-                                      
-                                      return (
-                                        <React.Fragment key={seg.id}>
-                                          <Tooltip delayDuration={200}>
-                                            <TooltipTrigger asChild>
-                                              <div
-                                                className={cn(
-                                                  "absolute top-1/2 -translate-y-1/2 h-7 rounded-md group/taskbar gantt-segment-bar",
-                                                  readOnly ? (isReviewSegment && (localSegmentNotes[seg.id] || (seg as any).review_notes) ? "cursor-pointer" : "cursor-default") : "cursor-pointer",
-                                                  !isReviewSegment && "gantt-task-bar-base",
-                                                  "hover:shadow-xl hover:ring-2 hover:ring-white/40",
-                                                  (isFeedback || isReviewSegment) && "gantt-review-bar",
-                                                  getDragClasses(task.id, seg.id)
-                                                )}
-                                                style={segmentStyle}
-                                                onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id, seg.id)}
-                                                onMouseLeave={() => handleTaskBarMouseLeave(task.id)}
-                                                onMouseDown={readOnly ? undefined : (e) => {
-                                                  // Enable segment-level dragging for all segments
-                                                  handleDragStart(e, task, 'move', seg);
-                                                }}
-                                                onClick={readOnly && isReviewSegment ? () => {
-                                                  const notes = localSegmentNotes[seg.id] || (seg as any).review_notes;
-                                                  if (notes) {
-                                                    setReviewNotesViewDialog({
-                                                      open: true,
-                                                      taskName: task.name,
-                                                      notes,
-                                                      startDate: seg.start_date,
-                                                      endDate: seg.end_date,
-                                                    });
-                                                  }
-                                                } : undefined}
-                                              >
-                                                {/* Review badge indicator */}
-                                                {isReviewSegment && segWidth > 50 && (
-                                                  <span 
-                                                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-background border-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10 flex items-center gap-1"
-                                                    style={{ borderColor: sectionColor, color: sectionColor }}
-                                                  >
-                                                    Review
-                                                    {(localSegmentNotes[seg.id] || (seg as any).review_notes) && (
-                                                      <FileText className="w-2.5 h-2.5" />
-                                                    )}
-                                                  </span>
-                                                )}
-                                                {/* Resize handles for segments */}
-                                                {!readOnly && (
-                                                  <>
-                                                    <div
-                                                      className={cn("gantt-resize-handle gantt-resize-handle-start", isSegmentDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")}
-                                                    />
-                                                    <div
-                                                      className={cn("gantt-resize-handle gantt-resize-handle-end", isSegmentDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")}
-                                                    />
-                                                  </>
-                                                )}
-                                                <div className="absolute inset-0 flex items-center justify-center px-2 overflow-hidden">
-                                                  <span className={cn(
-                                                    "text-xs font-semibold truncate drop-shadow-md tracking-wide text-center",
-                                                    isReviewSegment ? "text-foreground" : "text-white"
-                                                  )}>
-                                                    {segWidth > 60 ? (isReviewSegment ? '' : task.name) : ''}
-                                                  </span>
-                                                  {!readOnly && segWidth > 40 && (
-                                                    <button
-                                                      className={cn(
-                                                        "opacity-0 group-hover/taskbar:opacity-100 transition-opacity duration-150 p-0.5 rounded shrink-0 ml-1 absolute right-1",
-                                                        isReviewSegment ? "hover:bg-black/10" : "hover:bg-white/20"
-                                                      )}
-                                                      onClick={(e) => handleMenuButtonClick(e, task.id, seg.id)}
-                                                      onMouseDown={(e) => e.stopPropagation()}
-                                                    >
-                                                      <MoreHorizontal className={cn("w-4 h-4 drop-shadow-md", isReviewSegment ? "text-foreground" : "text-white")} />
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            </TooltipTrigger>
-                                            {!isSegmentDragging && (
-                                              <TooltipContent side="top" className="font-semibold">
-                                                <p>{task.name} - {isReviewSegment ? 'Client Review' : `Period ${segIdx + 1}`}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                  {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
-                                                </p>
-                                              </TooltipContent>
-                                            )}
-                                          </Tooltip>
-                                          
-                                          {/* Dynamic tooltip during segment drag */}
-                                          {isSegmentDragging && tooltipInfo && (
-                                            <div 
-                                              className="gantt-dynamic-tooltip"
-                                              style={{ 
-                                                left: segLeft + segWidth / 2,
-                                                top: '50%',
-                                                transform: 'translate(-50%, -200%)',
-                                              }}
-                                            >
-                                              <div className="gantt-dynamic-tooltip-arrow" />
-                                              {tooltipInfo.type === 'move' ? (
-                                                <span>
-                                                  <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.start, 'MMM d')}</span>
-                                                  <span className="gantt-tooltip-separator">→</span>
-                                                  <span className="gantt-tooltip-date">{safeFormat(tooltipInfo.end, 'MMM d')}</span>
-                                                </span>
-                                              ) : (
-                                                <span>
-                                                  <span className="gantt-tooltip-date">
-                                                    {safeFormat(tooltipInfo.type === 'resize-start' ? tooltipInfo.start : tooltipInfo.end, 'MMM d')}
-                                                  </span>
-                                                  {(() => {
-                                                    const durationChange = getDurationChange();
-                                                    if (durationChange && durationChange.delta !== 0) {
-                                                      return (
-                                                        <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
-                                                          {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
-                                                        </span>
-                                                      );
-                                                    }
-                                                    return null;
-                                                  })()}
-                                                </span>
-                                              )}
-                                            </div>
-                                          )}
-                                        </React.Fragment>
-                                      );
-                                    })}
-                                    
-                                    {/* Popover for the task menu (shared across all segments) */}
-                                    <Popover 
-                                      open={openTaskMenuId === task.id}
-                                      onOpenChange={(open) => {
-                                        if (!open) closeTaskMenu();
-                                        else setOpenTaskMenuId(task.id);
-                                      }}
-                                    >
-                                      {openTaskMenuId === task.id && taskMenuPos && (
-                                        <PopoverAnchor asChild>
-                                          <div
-                                            style={{
-                                              position: 'fixed',
-                                              left: taskMenuPos.x,
-                                              top: taskMenuPos.y,
-                                              width: 1,
-                                              height: 1,
-                                              pointerEvents: 'none',
-                                            }}
-                                          />
-                                        </PopoverAnchor>
-                                      )}
-                                      <PopoverContent
-                                        className="w-48 p-1 animate-enter"
-                                        side="bottom"
-                                        align="start"
-                                        sideOffset={8}
-                                        onMouseEnter={handlePopoverMouseEnter}
-                                        onMouseLeave={() => handlePopoverMouseLeave(task.id)}
-                                      >
-                                        <TaskPopoverMenu
-                                          task={task}
-                                          taskSegments={taskSegments}
-                                          hoveredSegmentId={hoveredSegmentId}
-                                          onAddSegment={onAddSegment}
-                                          onEditSegments={onEditSegments}
-                                          onConvertSegmentType={onConvertSegmentType}
-                                           onDeleteSegment={onDeleteSegment}
-                                           onDeleteTask={onDeleteTask}
-                                           onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
-                                             setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
-                                           } : undefined}
-                                           onClose={closeTaskMenu}
-                                        />
-                                      </PopoverContent>
-                                    </Popover>
-                                  </>
-                                );
-                              }
-                              
-                              // Single segment or no segments - render as before
-                              return (
+                            ) : !isOutsideView && clippedWidth > 0 && (
                               <>
                               {/* Ghost element at original position */}
                               {isCurrentlyDragging && (() => {
@@ -1582,9 +1341,7 @@ export function GanttChart({
                                     style={{
                                       left: ghostLeft + 2,
                                       width: ghostWidth - 4,
-                                      background: isFeedback 
-                                        ? `${sectionColor}30` 
-                                        : `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
+                                      background: `linear-gradient(135deg, ${sectionColor}40 0%, ${sectionColor}30 100%)`,
                                     }}
                                   />
                                 );
@@ -1694,10 +1451,6 @@ export function GanttChart({
                                     task={task}
                                     taskSegments={taskSegments}
                                     hoveredSegmentId={hoveredSegmentId}
-                                    onAddSegment={onAddSegment}
-                                    onEditSegments={onEditSegments}
-                                    onConvertSegmentType={onConvertSegmentType}
-                                     onDeleteSegment={onDeleteSegment}
                                      onDeleteTask={onDeleteTask}
                                      onEditReviewNotes={!readOnly ? (segId, taskName, notes) => {
                                        setReviewNotesDialog({ open: true, segmentId: segId, taskName, notes });
@@ -1745,9 +1498,149 @@ export function GanttChart({
                                 </div>
                               )}
                               </>
-                            );
-                            })()}
+                            )}
                           </div>
+
+                          {/* Review sub-row - dashed review segment bars */}
+                          {hasReviewSegments && (
+                            <div className="relative" style={{ height: REVIEW_SUB_ROW_HEIGHT }}>
+                              {renderGridBg(REVIEW_SUB_ROW_HEIGHT)}
+
+                              {reviewSegments.map((seg) => {
+                                const segmentPreview = getSegmentDragPreview(seg.id);
+                                const segStart = segmentPreview ? segmentPreview.start : safeParseDate(seg.start_date);
+                                const segEnd = segmentPreview ? segmentPreview.end : safeParseDate(seg.end_date);
+                                if (!segStart || !segEnd) return null;
+                                
+                                const segLeft = dateToX(segStart);
+                                const segWidth = getTaskWidth(segStart, segEnd);
+                                const isSegmentDragging = dragging?.segmentId === seg.id;
+                                const segTooltipInfo = isSegmentDragging ? getDynamicTooltipInfo() : null;
+                                
+                                return (
+                                  <React.Fragment key={seg.id}>
+                                    <Tooltip delayDuration={200}>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className={cn(
+                                            "absolute top-1/2 -translate-y-1/2 h-5 rounded-md group/reviewbar",
+                                            readOnly ? ((localSegmentNotes[seg.id] || (seg as any).review_notes) ? "cursor-pointer" : "cursor-default") : "cursor-pointer",
+                                            "hover:shadow-lg hover:ring-1 hover:ring-white/30",
+                                            "gantt-review-bar",
+                                            getDragClasses(task.id, seg.id)
+                                          )}
+                                          style={{
+                                            left: segLeft + 2,
+                                            width: segWidth - 4,
+                                            backgroundColor: `${sectionColor}15`,
+                                            border: `2px dashed ${sectionColor}`,
+                                            boxShadow: `0 2px 8px ${sectionColor}20`,
+                                            ...getDragStyles(task.id, seg.id),
+                                          }}
+                                          onMouseEnter={(e) => handleTaskBarMouseEnter(e, task.id, seg.id)}
+                                          onMouseLeave={() => handleTaskBarMouseLeave(task.id)}
+                                          onMouseDown={readOnly ? undefined : (e) => {
+                                            handleDragStart(e, task, 'move', seg);
+                                          }}
+                                          onClick={readOnly ? () => {
+                                            const notes = localSegmentNotes[seg.id] || (seg as any).review_notes;
+                                            if (notes) {
+                                              setReviewNotesViewDialog({
+                                                open: true,
+                                                taskName: task.name,
+                                                notes,
+                                                startDate: seg.start_date,
+                                                endDate: seg.end_date,
+                                              });
+                                            }
+                                          } : undefined}
+                                        >
+                                          {/* Review badge */}
+                                          {segWidth > 40 && (
+                                            <span 
+                                              className="absolute -top-2 left-1/2 -translate-x-1/2 bg-background border rounded-full px-1.5 py-0 text-[8px] font-bold uppercase tracking-wider shadow-sm whitespace-nowrap z-10 flex items-center gap-0.5"
+                                              style={{ borderColor: sectionColor, color: sectionColor }}
+                                            >
+                                              Review
+                                              {(localSegmentNotes[seg.id] || (seg as any).review_notes) && (
+                                                <FileText className="w-2 h-2" />
+                                              )}
+                                            </span>
+                                          )}
+                                          {/* Resize handles */}
+                                          {!readOnly && (
+                                            <>
+                                              <div className={cn("gantt-resize-handle gantt-resize-handle-start", isSegmentDragging && dragging?.type === 'resize-start' && "gantt-resize-handle-active")} />
+                                              <div className={cn("gantt-resize-handle gantt-resize-handle-end", isSegmentDragging && dragging?.type === 'resize-end' && "gantt-resize-handle-active")} />
+                                            </>
+                                          )}
+                                          {/* Menu button */}
+                                          {!readOnly && segWidth > 30 && (
+                                            <div className="absolute inset-0 flex items-center justify-end px-1">
+                                              <button
+                                                className="opacity-0 group-hover/reviewbar:opacity-100 transition-opacity duration-150 p-0.5 rounded hover:bg-black/10 shrink-0"
+                                                onClick={(e) => handleMenuButtonClick(e, task.id, seg.id)}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                              >
+                                                <MoreHorizontal className="w-3 h-3 text-foreground" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </TooltipTrigger>
+                                      {!isSegmentDragging && (
+                                        <TooltipContent side="top" className="font-semibold">
+                                          <p>{task.name} - Client Review</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {safeFormat(segStart, 'MMM d')} → {safeFormat(segEnd, 'MMM d')}
+                                          </p>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                    
+                                    {/* Dynamic tooltip during segment drag */}
+                                    {isSegmentDragging && segTooltipInfo && (
+                                      <div 
+                                        className="gantt-dynamic-tooltip"
+                                        style={{ 
+                                          left: segLeft + segWidth / 2,
+                                          top: '50%',
+                                          transform: 'translate(-50%, -200%)',
+                                        }}
+                                      >
+                                        <div className="gantt-dynamic-tooltip-arrow" />
+                                        {segTooltipInfo.type === 'move' ? (
+                                          <span>
+                                            <span className="gantt-tooltip-date">{safeFormat(segTooltipInfo.start, 'MMM d')}</span>
+                                            <span className="gantt-tooltip-separator">→</span>
+                                            <span className="gantt-tooltip-date">{safeFormat(segTooltipInfo.end, 'MMM d')}</span>
+                                          </span>
+                                        ) : (
+                                          <span>
+                                            <span className="gantt-tooltip-date">
+                                              {safeFormat(segTooltipInfo.type === 'resize-start' ? segTooltipInfo.start : segTooltipInfo.end, 'MMM d')}
+                                            </span>
+                                            {(() => {
+                                              const durationChange = getDurationChange();
+                                              if (durationChange && durationChange.delta !== 0) {
+                                                return (
+                                                  <span className={cn("gantt-tooltip-delta", durationChange.delta > 0 ? "positive" : "negative")}>
+                                                    {durationChange.delta > 0 ? '+' : ''}{durationChange.delta}d
+                                                  </span>
+                                                );
+                                              }
+                                              return null;
+                                            })()}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          )}
+                          </React.Fragment>
                         );
                       })}
                     </div>

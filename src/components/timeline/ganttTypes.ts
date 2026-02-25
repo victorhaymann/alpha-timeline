@@ -49,6 +49,7 @@ export const TASK_COLUMN_WIDTH_DESKTOP = 340;
 export const TASK_COLUMN_WIDTH_MOBILE = 160;
 export const MIN_COLUMN_WIDTH = 36;
 export const MIN_COLUMN_WIDTH_MOBILE = 28;
+export const REVIEW_SUB_ROW_HEIGHT = 28;
 
 // Reasonable date boundaries to prevent crashes from corrupted data
 export const MIN_REASONABLE_YEAR = 1950;
