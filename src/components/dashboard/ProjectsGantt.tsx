@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
-
 import { Button } from '@/components/ui/button';
-import { Search } from 'lucide-react';
+import { Search, Flag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
@@ -14,6 +13,12 @@ interface PhaseBar {
   endDate: Date;
 }
 
+interface MilestoneMarker {
+  name: string;
+  date: Date;
+  color: string;
+}
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -22,6 +27,7 @@ interface ProjectRow {
   startDate: Date;
   endDate: Date;
   phases: PhaseBar[];
+  milestones: MilestoneMarker[];
 }
 
 interface ProjectsGanttProps {
@@ -351,6 +357,30 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
                             <div className="text-muted-foreground">
                               {format(phase.startDate, 'MMM d')} – {format(phase.endDate, 'MMM d')}
                             </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                    {/* Milestone flags */}
+                    {project.milestones.map((ms, mi) => {
+                      const msIdx = dayIndex(ms.date);
+                      const flagLeft = msIdx * DAY_W + DAY_W / 2 - 8;
+                      const flagTop = BAR_PAD;
+                      const color = ms.color || PHASE_COLORS[mi % PHASE_COLORS.length];
+
+                      return (
+                        <Tooltip key={`ms-${mi}`}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className="absolute z-10"
+                              style={{ left: flagLeft, top: flagTop }}
+                            >
+                              <Flag className="w-4 h-4" style={{ color, fill: color }} />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            <div className="font-medium">{ms.name}</div>
+                            <div className="text-muted-foreground">{format(ms.date, 'MMM d')}</div>
                           </TooltipContent>
                         </Tooltip>
                       );

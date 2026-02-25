@@ -98,7 +98,7 @@ export default function Dashboard() {
     return projects.map(project => {
       const projectPhases = phases.filter(p => p.project_id === project.id && !/check.?in/i.test(p.name));
       const phaseBars = projectPhases.map(phase => {
-        const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date);
+        const phaseTasks = tasks.filter(t => t.phase_id === phase.id && t.start_date && t.end_date && t.task_type !== 'milestone');
         if (phaseTasks.length === 0) return null;
         const startDate = phaseTasks.reduce((min, t) => {
           const d = parseLocalDate(t.start_date!);
@@ -116,6 +116,17 @@ export default function Dashboard() {
         };
       }).filter(Boolean) as { name: string; color: string; startDate: Date; endDate: Date }[];
 
+      // Build milestones array
+      const milestoneTasks = tasks.filter(t => t.project_id === project.id && t.task_type === 'milestone' && t.start_date);
+      const milestones = milestoneTasks.map(t => {
+        const phase = phases.find(p => p.id === t.phase_id);
+        return {
+          name: t.name,
+          date: parseLocalDate(t.start_date!),
+          color: phase?.color || '',
+        };
+      });
+
       return {
         id: project.id,
         name: project.name,
@@ -124,6 +135,7 @@ export default function Dashboard() {
         startDate: parseLocalDate(project.start_date),
         endDate: parseLocalDate(project.end_date),
         phases: phaseBars,
+        milestones,
       };
     });
   }, [projects, phases, tasks]);
