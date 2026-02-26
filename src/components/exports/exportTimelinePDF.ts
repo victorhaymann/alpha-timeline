@@ -232,7 +232,7 @@ export function exportTimelinePDF(
   const html = `<!DOCTYPE html>
 <html>
 <head>
-<title>${project.name} – Timeline</title>
+<title>Timeline_${project.name.replace(/\s+/g, ' ')}_${format(new Date(), 'ddMMyy')}</title>
 <style>
   @page { size: landscape; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
