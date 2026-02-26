@@ -1,86 +1,46 @@
 
 
-# Plan: One-Page Horizontal PDF Timeline Export
+# Plan: Polish Timeline PDF Export
 
-## Goal
-Create a printable, landscape-oriented, single-page PDF that visually represents the full project timeline (Day 1 to End), showing phase bars, milestones as flags, and review periods — plus a header card with the project logo, PM name, and delivery date. Below the timeline, a table lists review periods with their attached descriptions. This gives clients without platform access a complete visual overview.
+## Changes to `src/components/exports/exportTimelinePDF.ts`
 
-## Architecture
+### 1. Center the project title
+The header currently uses a left-aligned layout with `header-left` and `header-right`. Change it to a three-column layout: client logo on the left, project name centered in the middle, and info cards on the right.
 
-The export will be a new function `exportTimelinePDF` inside `ExportPanel.tsx`. It generates an HTML document styled for landscape printing, opens it in a new window, and triggers `window.print()` (same pattern as the existing `exportPDF`). The HTML is self-contained with inline CSS — no external dependencies needed.
+### 2. Remove the red "today" vertical line
+Remove the `showToday` logic and the entire today-line/dot/label HTML block from the output. Also remove the red progress bar row entirely (the `progress-row` section with the red fill).
 
-## Changes
+### 3. Sort tasks chronologically within each phase
+Currently tasks are sorted by `order_index`. Change the sort to use `start_date` (chronological) so milestones and tasks appear in date order within each phase group.
 
-### 1. `src/components/exports/ExportPanel.tsx` — Add segments prop + new export function
+### 4. Add The New Face logo
+The logo asset is at `src/assets/tnf-logo-purple.png`. Since the PDF HTML is self-contained and rendered in an iframe, we need to convert the logo to a base64 data URL or use the absolute deployed URL. The approach will be to:
+- Accept an optional `tnfLogoUrl` parameter (a base64 data URL generated before calling the function), OR
+- Pre-convert the imported asset path to an absolute URL at call time.
 
-**Props update:**
-- Add `segments: TaskSegment[]` to `ExportPanelProps` (review segments are needed to show review periods and their notes).
+The simpler approach: since Vite resolves `import tnfLogo from '@/assets/tnf-logo-purple.png'` to a URL path, we can pass it as an absolute URL (`window.location.origin + tnfLogo`). Add the TNF logo in the top-right corner of the header (or bottom-right of the page as a watermark), matching the shared view branding pattern.
 
-**New `exportTimelinePDF` function** that builds a landscape HTML page with:
+Implementation: Add a `tnfLogoUrl?: string` parameter to the function. In `ProjectDetail.tsx`, import the logo and pass `window.location.origin + tnfLogo` when calling the function.
 
-**A) Header card** (top of page):
-- Project logo (`project.client_logo_url`) on the left
-- Project name (large, centered)
-- PM name (`project.pm_name`) and delivery date (`project.end_date`) as small info cards on the right
+### 5. Remove browser-injected small text (date stamp, URL)
+These are the default browser print headers/footers (date, URL, page number). They cannot be removed via HTML/CSS directly — they are controlled by the browser's print dialog settings. However, we can suppress them with additional `@page` rules and a print-specific approach:
+- Add `@page { margin: 0; }` to eliminate the browser header/footer area entirely
+- Then use `body { padding: 10mm; }` to create our own margins within the content area
+- This is the standard technique to remove "date", "URL", and "page 1/1" from printed pages
 
-**B) Visual timeline (middle, full width):**
-- Horizontal bar from `project.start_date` to `project.end_date`
-- Each phase rendered as a colored horizontal bar segment (using `phase.color`), stacked vertically by phase with the phase name on the left
-- Each task rendered as a sub-bar within its phase row
-- Milestones rendered as flag markers (▶ or similar CSS shape) at their date position
-- Review segments rendered as dashed/striped bars in a distinct style (lighter color or hatched pattern)
-- Date axis along the top showing months/weeks
-- Today marker as a vertical red line
+### Summary of all edits
 
-**C) Review periods table (bottom):**
-- A compact table listing all review segments with columns: Phase, Task, Review Dates, Notes (`review_notes`)
-- Only segments with `segment_type === 'review'` are shown
+**`src/components/exports/exportTimelinePDF.ts`:**
+- Update function signature to accept `tnfLogoUrl?: string`
+- Change `@page { margin: 10mm }` to `@page { size: landscape; margin: 0; }` and add `body { padding: 10mm; }`
+- Restructure header to three columns: client logo left, title centered, info cards right
+- Add TNF logo next to info cards (small, top-right area)
+- Remove the entire `progress-row` div (red progress bar + date labels)
+- Remove the `showToday` / `today-line` / `today-dot` / `today-label` HTML block
+- Change task sort from `a.order_index - b.order_index` to chronological: `new Date(a.start_date).getTime() - new Date(b.start_date).getTime()`
+- Remove unused CSS for `.today-line`, `.today-dot`, `.today-label`, `.progress-*`
 
-**Page styling:**
-- `@page { size: landscape; margin: 15mm; }`
-- Compact font sizes (10-12px) to fit on one page
-- Phase colors used for bars
-- Clean, professional, light background
-
-**Update exports array:**
-- Add a new entry: `{ id: 'timeline-pdf', title: 'Timeline PDF', description: 'One-page visual timeline for offline sharing', icon: CalendarRange, action: exportTimelinePDF }`
-
-### 2. `src/pages/ProjectDetail.tsx` — Pass segments to ExportPanel
-
-- If `ExportPanel` is rendered (or re-added to a tab/button), pass the `segments` state as a prop
-- Currently ExportPanel is imported but not in the JSX — it may need to be wired up (e.g., behind an export button in the timeline header, or re-added as a tab)
-
-Since ExportPanel is currently not rendered anywhere in ProjectDetail, there are two approaches:
-
-**Option A**: Add a "Download Timeline PDF" button directly in the timeline toolbar/header that calls the export logic inline — no need for ExportPanel at all.
-
-**Option B**: Re-add ExportPanel to a tab or dialog.
-
-I will go with **Option A** — add a download button to the project detail page header (near the existing Share/Settings buttons) that directly triggers the timeline PDF generation. This is simpler and more discoverable. The export logic will live in a new utility function in `src/components/exports/exportTimelinePDF.ts` so it can be called from anywhere.
-
-### Revised file plan:
-
-**New file: `src/components/exports/exportTimelinePDF.ts`**
-- Pure function: `exportTimelinePDF(project, phases, tasks, segments)` 
-- Builds the full landscape HTML string and opens print dialog
-- Contains all the inline CSS and layout logic for the visual timeline
-- Timeline rendering: calculates day positions proportionally across the page width, draws SVG-like bars using CSS (colored divs with absolute positioning)
-
-**Edit: `src/pages/ProjectDetail.tsx`**
-- Add a "PDF" or "Download Timeline" button in the project header area (near Share/Settings)
-- Import and call `exportTimelinePDF` with project, phases, tasks, segments
-
-## Technical Details
-
-### Timeline bar calculation
-```
-totalDays = differenceInDays(endDate, startDate)
-taskLeftPercent = differenceInDays(taskStart, projectStart) / totalDays * 100
-taskWidthPercent = differenceInDays(taskEnd, taskStart) / totalDays * 100
-```
-
-Each phase gets its own horizontal row. Tasks within a phase are rendered as colored bars. Review segments are overlaid with a striped pattern. Milestones are rendered as small flag/diamond icons at their date percentage position.
-
-### Review notes table
-Filter `segments` where `segment_type === 'review'`, join with task name and phase name, display `review_notes` content.
+**`src/pages/ProjectDetail.tsx`:**
+- Import `tnfLogo from '@/assets/tnf-logo-purple.png'`
+- Update the `exportTimelinePDF` call to pass `window.location.origin + tnfLogo` as the 5th argument
 
