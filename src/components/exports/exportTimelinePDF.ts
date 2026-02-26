@@ -163,7 +163,9 @@ export function exportTimelinePDF(
   }).join('');
 
   // ── Build review table ─────────────────────────────────────────────
-  const reviewSegments = segments.filter(s => s.segment_type === 'review');
+  const reviewSegments = segments
+    .filter(s => s.segment_type === 'review')
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
   const reviewRowsHtml = reviewSegments.map(seg => {
     const task = tasks.find(t => t.id === seg.task_id);
     const phase = task ? phases.find(p => p.id === task.phase_id) : null;
@@ -264,18 +266,18 @@ export function exportTimelinePDF(
     align-items: stretch;
     justify-content: flex-end;
   }
-  .info-card { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 8px 16px; text-align: center; min-width: 100px; }
+  .info-card { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 12px 24px; text-align: center; min-width: 160px; }
   .info-card .label { font-size: 8px; text-transform: uppercase; color: #999; letter-spacing: 0.8px; font-weight: 600; }
-  .info-card .value { font-size: 12px; font-weight: 600; margin-top: 2px; color: #333; }
+  .info-card .value { font-size: 14px; font-weight: 600; margin-top: 2px; color: #333; }
   .tnf-logo { display: flex; align-items: center; margin-left: 12px; }
   .tnf-logo img { height: 32px; width: auto; object-fit: contain; }
 
   .timeline { position: relative; margin-bottom: 14px; }
-  .month-bar { display: flex; position: relative; height: 20px; background: #fafafa; border-bottom: 1px solid #eee; }
+  .month-bar { display: flex; position: relative; height: 20px; background: #fafafa; border-bottom: 1px solid #eee; margin-left: 200px; }
   .month-span { position: absolute; font-size: 9px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.5px; padding-left: 6px; line-height: 20px; border-left: 1px solid #e0e0e0; overflow: hidden; }
-  .week-bar { display: flex; position: relative; height: 16px; border-bottom: 1px solid #eee; }
+  .week-bar { display: flex; position: relative; height: 16px; border-bottom: 1px solid #eee; margin-left: 200px; }
   .week-tick { position: absolute; font-size: 7px; color: #bbb; font-weight: 500; text-align: center; line-height: 16px; border-left: 1px solid #f0f0f0; padding-left: 4px; }
-  .day-bar { display: flex; position: relative; height: 14px; border-bottom: 1px solid #eee; }
+  .day-bar { display: flex; position: relative; height: 14px; border-bottom: 1px solid #eee; margin-left: 200px; }
   .day-tick { position: absolute; font-size: 6px; color: #ccc; text-align: center; line-height: 14px; overflow: hidden; }
 
   .phase-group { margin-bottom: 4px; }
@@ -325,8 +327,6 @@ export function exportTimelinePDF(
       <h1>${project.name}</h1>
       <div class="sub">
         ${format(projectStart, 'MMMM d, yyyy')} – ${format(projectEnd, 'MMMM d, yyyy')}
-        <span>·</span>
-        <span class="badge">${totalDays} days</span>
       </div>
     </div>
     <div class="header-right">
@@ -335,10 +335,6 @@ export function exportTimelinePDF(
           <div class="label">Project Manager</div>
           <div class="value">${project.pm_name}</div>
         </div>` : ''}
-      <div class="info-card">
-        <div class="label">Delivery Date</div>
-        <div class="value">${format(projectEnd, 'MMM d, yyyy')}</div>
-      </div>
       ${tnfLogoHtml}
     </div>
   </div>
