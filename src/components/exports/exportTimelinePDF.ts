@@ -9,7 +9,8 @@ export function exportTimelinePDF(
   project: Project,
   phases: Phase[],
   tasks: Task[],
-  segments: TaskSegment[]
+  segments: TaskSegment[],
+  tnfLogoUrl?: string
 ) {
   const projectStart = new Date(project.start_date);
   const projectEnd = new Date(project.end_date);
@@ -19,9 +20,6 @@ export function exportTimelinePDF(
     const d = differenceInDays(date, projectStart);
     return Math.max(0, Math.min(100, (d / totalDays) * 100));
   };
-
-  const todayPct = pct(new Date());
-  const showToday = todayPct > 0 && todayPct < 100;
 
   const sortedPhases = [...phases].sort((a, b) => a.order_index - b.order_index);
 
@@ -76,7 +74,11 @@ export function exportTimelinePDF(
   const phaseRowsHtml = sortedPhases.map(phase => {
     const phaseTasks = tasks
       .filter(t => t.phase_id === phase.id)
-      .sort((a, b) => a.order_index - b.order_index);
+      .sort((a, b) => {
+        const aDate = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+        const bDate = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+        return aDate - bDate;
+      });
 
     const taskRowsHtml = phaseTasks.map(task => {
       const taskSegments = segments.filter(s => s.task_id === task.id);
@@ -193,18 +195,23 @@ export function exportTimelinePDF(
       ).join('')
     : '';
 
+  // ── TNF logo HTML ──────────────────────────────────────────────────
+  const tnfLogoHtml = tnfLogoUrl
+    ? `<div class="tnf-logo"><img src="${tnfLogoUrl}" alt="The New Face" /></div>`
+    : '';
+
   // ── Assemble full HTML ─────────────────────────────────────────────
   const html = `<!DOCTYPE html>
 <html>
 <head>
 <title>${project.name} – Timeline</title>
 <style>
-  @page { size: landscape; margin: 10mm; }
+  @page { size: landscape; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
     color: #1a1a1a;
-    padding: 0;
+    padding: 10mm;
     font-size: 10px;
     background: #fff;
   }
@@ -217,20 +224,51 @@ export function exportTimelinePDF(
     padding-bottom: 12px;
     border-bottom: 1px solid #e8e8e8;
   }
-  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-left {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
   .header-logo img { height: 40px; width: auto; object-fit: contain; }
-  .header-title h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 2px; }
-  .header-title .sub { font-size: 10px; color: #888; display: flex; align-items: center; gap: 6px; }
-  .header-title .badge { background: #f3f3f3; color: #888; padding: 1px 8px; border-radius: 10px; font-size: 9px; font-weight: 500; }
-  .header-right { display: flex; gap: 12px; align-items: stretch; }
+  .header-center {
+    flex: 2;
+    text-align: center;
+  }
+  .header-center h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin-bottom: 2px;
+  }
+  .header-center .sub {
+    font-size: 10px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .header-center .badge {
+    background: #f3f3f3;
+    color: #888;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 500;
+  }
+  .header-right {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    justify-content: flex-end;
+  }
   .info-card { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 8px 16px; text-align: center; min-width: 100px; }
   .info-card .label { font-size: 8px; text-transform: uppercase; color: #999; letter-spacing: 0.8px; font-weight: 600; }
   .info-card .value { font-size: 12px; font-weight: 600; margin-top: 2px; color: #333; }
-
-  .progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .progress-date { font-size: 9px; font-weight: 600; color: #555; white-space: nowrap; }
-  .progress-bar-track { flex: 1; height: 4px; background: #f0f0f0; border-radius: 2px; position: relative; }
-  .progress-bar-fill { height: 100%; background: #ef4444; border-radius: 2px; }
+  .tnf-logo { display: flex; align-items: center; margin-left: 12px; }
+  .tnf-logo img { height: 32px; width: auto; object-fit: contain; }
 
   .timeline { position: relative; margin-bottom: 14px; }
   .month-bar { display: flex; position: relative; height: 20px; background: #fafafa; border-bottom: 1px solid #eee; }
@@ -265,10 +303,6 @@ export function exportTimelinePDF(
   .grid-lines { position: absolute; top: 0; left: 200px; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   .grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #f5f5f5; }
 
-  .today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 10; border-radius: 1px; }
-  .today-dot { position: absolute; top: -4px; left: -3px; width: 8px; height: 8px; background: #ef4444; border-radius: 50%; }
-  .today-label { position: absolute; top: -16px; font-size: 7px; color: #ef4444; font-weight: 700; transform: translateX(-50%); white-space: nowrap; background: #fff; padding: 0 3px; border-radius: 2px; }
-
   .review-section { margin-top: 14px; page-break-inside: avoid; }
   .review-section h3 { font-size: 11px; font-weight: 700; margin-bottom: 6px; color: #333; }
   .review-section table { width: 100%; border-collapse: collapse; font-size: 9px; }
@@ -278,7 +312,7 @@ export function exportTimelinePDF(
   .date-cell { white-space: nowrap; color: #666; }
 
   @media print {
-    body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { padding: 10mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
 </head>
@@ -286,13 +320,13 @@ export function exportTimelinePDF(
   <div class="header">
     <div class="header-left">
       ${project.client_logo_url ? `<div class="header-logo"><img src="${project.client_logo_url}" alt="Logo" /></div>` : ''}
-      <div class="header-title">
-        <h1>${project.name}</h1>
-        <div class="sub">
-          ${format(projectStart, 'MMMM d, yyyy')} – ${format(projectEnd, 'MMMM d, yyyy')}
-          <span>·</span>
-          <span class="badge">${totalDays} days</span>
-        </div>
+    </div>
+    <div class="header-center">
+      <h1>${project.name}</h1>
+      <div class="sub">
+        ${format(projectStart, 'MMMM d, yyyy')} – ${format(projectEnd, 'MMMM d, yyyy')}
+        <span>·</span>
+        <span class="badge">${totalDays} days</span>
       </div>
     </div>
     <div class="header-right">
@@ -305,15 +339,8 @@ export function exportTimelinePDF(
         <div class="label">Delivery Date</div>
         <div class="value">${format(projectEnd, 'MMM d, yyyy')}</div>
       </div>
+      ${tnfLogoHtml}
     </div>
-  </div>
-
-  <div class="progress-row">
-    <span class="progress-date">${format(projectStart, 'MMM d, yyyy')}</span>
-    <div class="progress-bar-track">
-      <div class="progress-bar-fill" style="width:${Math.min(100, todayPct)}%"></div>
-    </div>
-    <span class="progress-date">${format(projectEnd, 'MMM d, yyyy')}</span>
   </div>
 
   <div class="timeline">
@@ -335,12 +362,6 @@ export function exportTimelinePDF(
       <div class="grid-lines">
         ${gridLinesHtml}
       </div>
-
-      ${showToday ? `
-        <div class="today-line" style="left:${todayPct}%">
-          <div class="today-dot"></div>
-          <span class="today-label">${format(new Date(), 'EEE MMM d')}</span>
-        </div>` : ''}
 
       ${phaseRowsHtml}
     </div>

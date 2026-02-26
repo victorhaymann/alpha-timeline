@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { RightsPanel } from '@/components/rights/RightsPanel';
 import { exportTimelinePDF } from '@/components/exports/exportTimelinePDF';
+import tnfLogoPurple from '@/assets/tnf-logo-purple.png';
 import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { LearningResourcesPanel } from '@/components/resources/LearningResourcesPanel';
@@ -483,7 +484,7 @@ export default function ProjectDetail() {
             variant="outline"
             size="sm"
             className="gap-2"
-            onClick={() => exportTimelinePDF(project, phases, tasks, segments)}
+            onClick={() => exportTimelinePDF(project, phases, tasks, segments, window.location.origin + tnfLogoPurple)}
           >
             <CalendarRange className="w-4 h-4" />
             Timeline PDF
