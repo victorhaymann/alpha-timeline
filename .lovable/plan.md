@@ -1,40 +1,34 @@
 
 
-# Plan: Fix Review Table Sorting, Clean Up Header, and Align Day Axis
-
-## Issues Identified
-
-1. **Review table not sorted chronologically** — `reviewSegments` are iterated in whatever order they come from the `segments` array. Need to sort by `start_date` ascending.
-
-2. **"· 50 days" badge under title** — The `.sub` div shows the date range, a dot separator, and a "50 days" badge. Remove the dot and badge, keep only the date range.
-
-3. **Delivery Date card still showing** — Lines 338-341 render a Delivery Date info-card. Remove it. Keep only the PM card and make it larger (bigger padding, larger font).
-
-4. **Day axis misalignment with timeline bars** — The `pct()` function and day tick positioning both use `differenceInDays` which counts calendar day boundaries. The day ticks use `left` positioning at the start of each day, but bars also start at the left edge of a day. The issue is that the day-tick `width` is `100 / totalDays` but the track area for bars starts at `left: 200px` (the task-info column), while the day-bar spans the full width. The day-bar, month-bar, and week-bar all span the full container width, but the task bars are inside a child div that starts after the 200px task-info column. The axis headers need to be offset by the same 200px left margin to align with the bars.
+# Plan: Landscape Default, Weekday-Only Day Labels, Alternating Week Bands
 
 ## Changes to `src/components/exports/exportTimelinePDF.ts`
 
-### 1. Sort review table chronologically
-Change line 166-167 from:
-```js
-const reviewSegments = segments.filter(s => s.segment_type === 'review');
-```
-to:
-```js
-const reviewSegments = segments
-  .filter(s => s.segment_type === 'review')
-  .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-```
+### 1. Landscape by default
+The `@page { size: landscape; }` is already set. This controls the print dialog default. No change needed here -- it's already landscape.
 
-### 2. Remove "· 50 days" from subtitle
-Lines 326-330: Remove the dot span and badge span from the `.sub` div, keeping only the date range text.
+### 2. Remove weekends from day labels, use single-letter abbreviations
+Currently the day labels show `"Mon 3"`, `"Tue 4"`, etc. including Sat/Sun.
 
-### 3. Remove Delivery Date card, enlarge PM card
-- Remove lines 338-341 (the Delivery Date info-card)
-- Update the PM info-card CSS: increase padding to `12px 24px`, bump `.value` font to `14px`, and increase `min-width` to `160px`
+Change the day label generation (lines 64-71) to:
+- Skip days where `getDay() === 0` (Sunday) or `getDay() === 6` (Saturday)
+- Use single-letter format: M, T, W, T, F (using `format(date, 'EEEEE')`)
+- Show the day number below or next to it: e.g. `"M 3"`
 
-### 4. Fix day/week/month axis alignment with task bars
-The root cause: the header rows (month-bar, week-bar, day-bar) span the full container width, but the task track area only occupies `flex: 1` after a 200px task-info column. The percentage positions calculated by `pct()` are correct for the track area, but the header bars don't account for the 200px offset.
+Since weekends are skipped in labels but the `pct()` positioning still uses calendar days, the labels will simply not appear for weekend columns. The bars still span correctly across weekends since positioning is percentage-based on total calendar days. The day-tick width stays at `100 / totalDays` per calendar day -- weekend slots just remain empty/unlabeled, giving more visual breathing room.
 
-Fix: Add `margin-left: 200px` to `.month-bar`, `.week-bar`, and `.day-bar` so they align with the task track area. This way, the percentage positions in both the axis labels and the bars refer to the same coordinate space.
+### 3. Alternating week background bands
+Generate vertical background stripes for every other week in the timeline track area. Using the existing `weekTicks` array, render `<div>` elements with alternating `background: #f8f8f8` (light grey) and transparent, positioned absolutely behind the task bars. These go inside the grid-lines container, spanning the full height.
+
+Build a `weekBandsHtml` string: for each week tick, calculate its left% and width% (to the next tick or 100%), and for odd-indexed weeks apply a light grey background.
+
+### 4. CSS additions
+- Add `.week-band` class: `position: absolute; top: 0; bottom: 0; z-index: 0;`
+- The week bands render behind grid lines and task bars
+
+### Summary of edits in `exportTimelinePDF.ts`:
+- **Lines 64-71**: Filter out weekends, change label format to single letter + number
+- **Lines 189-192**: Add week band generation alongside grid lines
+- **Lines 305-306**: Add `.week-band` CSS
+- **Lines 357-360**: Insert week bands HTML into the grid-lines container
 
