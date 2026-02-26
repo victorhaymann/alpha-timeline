@@ -412,7 +412,11 @@ export function exportTimelinePDF(
     iframeDoc.write(html);
     iframeDoc.close();
 
+    const pdfTitle = `Timeline_${project.name.replace(/\s+/g, ' ')}_${format(new Date(), 'ddMMyy')}`;
+
     setTimeout(() => {
+      const originalTitle = document.title;
+      document.title = pdfTitle;
       try {
         iframe.contentWindow?.print();
       } catch {
@@ -425,6 +429,7 @@ export function exportTimelinePDF(
         }
       }
       setTimeout(() => {
+        document.title = originalTitle;
         document.body.removeChild(iframe);
       }, 1000);
     }, 500);
