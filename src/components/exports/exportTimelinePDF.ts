@@ -292,7 +292,7 @@ export function exportTimelinePDF(
     align-items: stretch;
     justify-content: flex-end;
   }
-  .info-card { background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 12px 24px; text-align: center; min-width: 160px; }
+  .info-card { background: none; border: none; padding: 12px 24px; text-align: center; min-width: 160px; }
   .info-card .label { font-size: 8px; text-transform: uppercase; color: #999; letter-spacing: 0.8px; font-weight: 600; }
   .info-card .value { font-size: 14px; font-weight: 600; margin-top: 2px; color: #333; }
   .tnf-logo { display: flex; align-items: center; margin-left: 12px; }
