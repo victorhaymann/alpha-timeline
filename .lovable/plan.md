@@ -1,64 +1,86 @@
 
 
-# Plan: Enable Bidirectional Scrolling in All Gantt Charts
+# Plan: One-Page Horizontal PDF Timeline Export
 
-## Root Cause
+## Goal
+Create a printable, landscape-oriented, single-page PDF that visually represents the full project timeline (Day 1 to End), showing phase bars, milestones as flags, and review periods — plus a header card with the project logo, PM name, and delivery date. Below the timeline, a table lists review periods with their attached descriptions. This gives clients without platform access a complete visual overview.
 
-### Dashboard Gantts (ProjectsGantt + StaffGantt)
-Both use `getTimelineRange()` which generates a fixed window: `today - 14 days` to `today + 12 weeks`. With only ~10 working days to the left of today and a `DAY_W` of 32px, that's only ~320px of past content. Once the viewport is wider than that, there's nothing to scroll left into — the scroll container has no overflow on the left side.
+## Architecture
 
-### Project Gantt
-The date range is `projectStartDate` to `projectEndDate`. The auto-scroll positions the view at "today". If the project started recently, there's minimal content to the left of today. However, the bigger issue is that if the project started months ago, the full range is rendered but the initial scroll goes to today — scrolling left should already work here unless the project start date is very close to today.
+The export will be a new function `exportTimelinePDF` inside `ExportPanel.tsx`. It generates an HTML document styled for landscape printing, opens it in a new window, and triggers `window.print()` (same pattern as the existing `exportPDF`). The HTML is self-contained with inline CSS — no external dependencies needed.
 
-## Solution
+## Changes
 
-### 1. Dashboard Gantts — Extend past range
-**Files:** `src/components/dashboard/ProjectsGantt.tsx` and `src/components/dashboard/StaffGantt.tsx`
+### 1. `src/components/exports/ExportPanel.tsx` — Add segments prop + new export function
 
-Change `getTimelineRange()` in both files:
-- **Before:** `start = today - 14 days`, `end = start + 12 weeks`
-- **After:** `start = today - 8 weeks`, `end = today + 12 weeks`
+**Props update:**
+- Add `segments: TaskSegment[]` to `ExportPanelProps` (review segments are needed to show review periods and their notes).
 
-This gives ~40 working days to the left of today (enough scrollable content in the past). The range becomes 20 weeks total, which is reasonable.
+**New `exportTimelinePDF` function** that builds a landscape HTML page with:
 
-Add an initial scroll-to-today `useEffect` so the view opens centered on today rather than at the far left. This way users see the current week on load but can scroll freely in both directions.
+**A) Header card** (top of page):
+- Project logo (`project.client_logo_url`) on the left
+- Project name (large, centered)
+- PM name (`project.pm_name`) and delivery date (`project.end_date`) as small info cards on the right
 
-### 2. Project Gantt — Extend past padding
-**File:** `src/components/timeline/GanttChart.tsx`
+**B) Visual timeline (middle, full width):**
+- Horizontal bar from `project.start_date` to `project.end_date`
+- Each phase rendered as a colored horizontal bar segment (using `phase.color`), stacked vertically by phase with the phase name on the left
+- Each task rendered as a sub-bar within its phase row
+- Milestones rendered as flag markers (▶ or similar CSS shape) at their date position
+- Review segments rendered as dashed/striped bars in a distinct style (lighter color or hatched pattern)
+- Date axis along the top showing months/weeks
+- Today marker as a vertical red line
 
-No change needed if the project already has a start date in the past. The full project range is rendered and scrollable. The auto-scroll to today already works. If the user's project started only recently, scrolling left is inherently limited — this is correct behavior (there are no dates before the project start).
+**C) Review periods table (bottom):**
+- A compact table listing all review segments with columns: Phase, Task, Review Dates, Notes (`review_notes`)
+- Only segments with `segment_type === 'review'` are shown
 
-However, to be safe and consistent, add a small buffer: extend `viewStart` by 1 week before `projectStartDate` so there's always some scrollable past content even at the project boundary.
+**Page styling:**
+- `@page { size: landscape; margin: 15mm; }`
+- Compact font sizes (10-12px) to fit on one page
+- Phase colors used for bars
+- Clean, professional, light background
 
-## Specific Changes
+**Update exports array:**
+- Add a new entry: `{ id: 'timeline-pdf', title: 'Timeline PDF', description: 'One-page visual timeline for offline sharing', icon: CalendarRange, action: exportTimelinePDF }`
 
-### `src/components/dashboard/ProjectsGantt.tsx`
-- Update `getTimelineRange()`: change `-14` to `-8 * 7` (8 weeks back)
-- Add `useEffect` to auto-scroll to today on mount:
-  ```
-  useEffect(() => {
-    if (scrollRef.current && todayIdx >= 0) {
-      const targetX = Math.max(0, todayIdx * DAY_W - scrollRef.current.clientWidth / 3);
-      scrollRef.current.scrollLeft = targetX;
-    }
-  }, [todayIdx]);
-  ```
+### 2. `src/pages/ProjectDetail.tsx` — Pass segments to ExportPanel
 
-### `src/components/dashboard/StaffGantt.tsx`
-- Same `getTimelineRange()` update: `-14` to `-8 * 7`
-- Same auto-scroll `useEffect` on mount
+- If `ExportPanel` is rendered (or re-added to a tab/button), pass the `segments` state as a prop
+- Currently ExportPanel is imported but not in the JSX — it may need to be wired up (e.g., behind an export button in the timeline header, or re-added as a tab)
 
-### `src/components/timeline/GanttChart.tsx`
-- When computing `viewStart`, subtract 7 calendar days from `validStartDate` as a buffer:
-  ```
-  const viewStart = dateRange?.from 
-    ? addDays(dateRange.from, -7) 
-    : addDays(validStartDate, -7);
-  ```
-  This ensures there's always scrollable content before the first task.
+Since ExportPanel is currently not rendered anywhere in ProjectDetail, there are two approaches:
 
-## Result
-- Dashboard Gantts: ~8 weeks of past visible by scrolling left, ~12 weeks of future by scrolling right, centered on today on load
-- Project Gantt: 1-week buffer before project start, full project duration rendered, auto-scrolled to today
-- All three Gantt views support free bidirectional horizontal scrolling
+**Option A**: Add a "Download Timeline PDF" button directly in the timeline toolbar/header that calls the export logic inline — no need for ExportPanel at all.
+
+**Option B**: Re-add ExportPanel to a tab or dialog.
+
+I will go with **Option A** — add a download button to the project detail page header (near the existing Share/Settings buttons) that directly triggers the timeline PDF generation. This is simpler and more discoverable. The export logic will live in a new utility function in `src/components/exports/exportTimelinePDF.ts` so it can be called from anywhere.
+
+### Revised file plan:
+
+**New file: `src/components/exports/exportTimelinePDF.ts`**
+- Pure function: `exportTimelinePDF(project, phases, tasks, segments)` 
+- Builds the full landscape HTML string and opens print dialog
+- Contains all the inline CSS and layout logic for the visual timeline
+- Timeline rendering: calculates day positions proportionally across the page width, draws SVG-like bars using CSS (colored divs with absolute positioning)
+
+**Edit: `src/pages/ProjectDetail.tsx`**
+- Add a "PDF" or "Download Timeline" button in the project header area (near Share/Settings)
+- Import and call `exportTimelinePDF` with project, phases, tasks, segments
+
+## Technical Details
+
+### Timeline bar calculation
+```
+totalDays = differenceInDays(endDate, startDate)
+taskLeftPercent = differenceInDays(taskStart, projectStart) / totalDays * 100
+taskWidthPercent = differenceInDays(taskEnd, taskStart) / totalDays * 100
+```
+
+Each phase gets its own horizontal row. Tasks within a phase are rendered as colored bars. Review segments are overlaid with a striped pattern. Milestones are rendered as small flag/diamond icons at their date percentage position.
+
+### Review notes table
+Filter `segments` where `segment_type === 'review'`, join with task name and phase name, display `review_notes` content.
 
