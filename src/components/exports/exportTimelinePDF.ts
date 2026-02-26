@@ -65,7 +65,10 @@ export function exportTimelinePDF(
   if (showDayLevel) {
     const dayCursor = new Date(projectStart);
     while (isBefore(dayCursor, projectEnd) || dayCursor.getTime() === projectEnd.getTime()) {
-      dayLabels.push({ label: `${format(dayCursor, 'EEE')} ${dayCursor.getDate()}`, left: pct(dayCursor) });
+      const dow = dayCursor.getDay();
+      if (dow !== 0 && dow !== 6) {
+        dayLabels.push({ label: `${format(dayCursor, 'EEEEE')} ${dayCursor.getDate()}`, left: pct(dayCursor) });
+      }
       dayCursor.setDate(dayCursor.getDate() + 1);
     }
   }
@@ -186,10 +189,19 @@ export function exportTimelinePDF(
       </table>
     </div>` : '';
 
-  // ── Week grid lines ────────────────────────────────────────────────
+  // ── Week grid lines & alternating bands ─────────────────────────────
   const gridLinesHtml = weekTicks.map(t =>
     `<div class="grid-line" style="left:${t.left}%"></div>`
   ).join('');
+
+  const weekBandsHtml = weekTicks.map((t, i) => {
+    const nextLeft = i < weekTicks.length - 1 ? weekTicks[i + 1].left : 100;
+    const w = nextLeft - t.left;
+    if (i % 2 === 1) {
+      return `<div class="week-band" style="left:${t.left}%;width:${w}%"></div>`;
+    }
+    return '';
+  }).join('');
 
   const dayHeaderHtml = showDayLevel
     ? dayLabels.map(d =>
@@ -304,6 +316,7 @@ export function exportTimelinePDF(
 
   .grid-lines { position: absolute; top: 0; left: 200px; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   .grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #f5f5f5; }
+  .week-band { position: absolute; top: 0; bottom: 0; background: #f8f8f8; z-index: 0; }
 
   .review-section { margin-top: 14px; page-break-inside: avoid; }
   .review-section h3 { font-size: 11px; font-weight: 700; margin-bottom: 6px; color: #333; }
@@ -356,6 +369,7 @@ export function exportTimelinePDF(
 
     <div style="position:relative;">
       <div class="grid-lines">
+        ${weekBandsHtml}
         ${gridLinesHtml}
       </div>
 
