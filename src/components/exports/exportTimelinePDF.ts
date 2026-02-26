@@ -14,11 +14,26 @@ export function exportTimelinePDF(
 ) {
   const projectStart = new Date(project.start_date);
   const projectEnd = new Date(project.end_date);
-  const totalDays = Math.max(1, differenceInDays(projectEnd, projectStart));
+
+  // ── Working-day coordinate system (skip weekends) ──────────────────
+  const isWorkingDay = (d: Date) => { const dow = d.getDay(); return dow !== 0 && dow !== 6; };
+
+  const countWorkingDays = (from: Date, to: Date) => {
+    let count = 0;
+    const c = new Date(from);
+    while (isBefore(c, to)) {
+      if (isWorkingDay(c)) count++;
+      c.setDate(c.getDate() + 1);
+    }
+    return count;
+  };
+
+  const totalWorkingDays = Math.max(1, countWorkingDays(projectStart, projectEnd));
+  const totalCalendarDays = Math.max(1, differenceInDays(projectEnd, projectStart));
 
   const pct = (date: Date) => {
-    const d = differenceInDays(date, projectStart);
-    return Math.max(0, Math.min(100, (d / totalDays) * 100));
+    const wd = countWorkingDays(projectStart, date);
+    return Math.max(0, Math.min(100, (wd / totalWorkingDays) * 100));
   };
 
   const sortedPhases = [...phases].sort((a, b) => a.order_index - b.order_index);
@@ -59,14 +74,13 @@ export function exportTimelinePDF(
     monthMarkers.push({ label: format(start, 'MMMM'), left, width });
   }
 
-  // Day labels for short projects
-  const showDayLevel = totalDays <= 70;
+  // Day labels for short projects (weekdays only, single-letter)
+  const showDayLevel = totalCalendarDays <= 70;
   const dayLabels: { label: string; left: number }[] = [];
   if (showDayLevel) {
     const dayCursor = new Date(projectStart);
     while (isBefore(dayCursor, projectEnd) || dayCursor.getTime() === projectEnd.getTime()) {
-      const dow = dayCursor.getDay();
-      if (dow !== 0 && dow !== 6) {
+      if (isWorkingDay(dayCursor)) {
         dayLabels.push({ label: `${format(dayCursor, 'EEEEE')} ${dayCursor.getDate()}`, left: pct(dayCursor) });
       }
       dayCursor.setDate(dayCursor.getDate() + 1);
@@ -205,7 +219,7 @@ export function exportTimelinePDF(
 
   const dayHeaderHtml = showDayLevel
     ? dayLabels.map(d =>
-        `<span class="day-tick" style="left:${d.left}%;width:${100 / totalDays}%">${d.label}</span>`
+        `<span class="day-tick" style="left:${d.left}%;width:${100 / totalWorkingDays}%">${d.label}</span>`
       ).join('')
     : '';
 
