@@ -50,6 +50,7 @@ import {
   CalendarRange,
 } from 'lucide-react';
 import { RightsPanel } from '@/components/rights/RightsPanel';
+import { exportTimelinePDF } from '@/components/exports/exportTimelinePDF';
 import { ClientDocumentsPanel, ClientDocument as ClientDocType } from '@/components/documents/ClientDocumentsPanel';
 import { ResourceLinksPanel, ResourceLink } from '@/components/documents/ResourceLinksPanel';
 import { LearningResourcesPanel } from '@/components/resources/LearningResourcesPanel';
@@ -478,6 +479,15 @@ export default function ProjectDetail() {
         )}
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => exportTimelinePDF(project, phases, tasks, segments)}
+          >
+            <CalendarRange className="w-4 h-4" />
+            Timeline PDF
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
