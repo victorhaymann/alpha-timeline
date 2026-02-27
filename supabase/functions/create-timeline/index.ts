@@ -70,6 +70,10 @@ Deno.serve(async (req) => {
   }
 
   try {
+    console.log("API KEY HEADER:", req.headers.get("x-api-key"));
+    console.log("TIMELINE_API_KEY ENV:", Deno.env.get("TIMELINE_API_KEY"));
+    console.log("MATCH:", req.headers.get("x-api-key") === Deno.env.get("TIMELINE_API_KEY"));
+
     // Auth: check x-api-key FIRST, then fall through to Bearer token
     const apiKeyHeader = req.headers.get("x-api-key");
     const timelineApiKey = Deno.env.get("TIMELINE_API_KEY");
