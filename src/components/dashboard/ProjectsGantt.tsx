@@ -2,9 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { format, addDays, startOfWeek, isWeekend } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Flag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Flag, ChevronLeft, ChevronRight, Trash2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface PhaseBar {
   name: string;
@@ -124,9 +137,13 @@ const PHASE_COLORS = [
 export function ProjectsGantt({ projects }: ProjectsGanttProps) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('production');
+  const [deleteTarget, setDeleteTarget] = useState<ProjectRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const leftRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { start: tlStart, end: tlEnd } = useMemo(getTimelineRange, []);
   const days = useMemo(() => buildDays(tlStart, tlEnd), [tlStart, tlEnd]);
@@ -215,6 +232,22 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
     }
   }
 
+  async function handleDeleteProject() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('projects').delete().eq('id', deleteTarget.id);
+      if (error) throw error;
+      toast({ title: 'Project deleted', description: `${deleteTarget.name} has been removed.` });
+      queryClient.invalidateQueries({ queryKey: ['dashboard_projects'] });
+    } catch (error: any) {
+      toast({ title: 'Error deleting project', description: error.message, variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between p-3 border-b border-border gap-3">
@@ -268,7 +301,7 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
             return (
               <div
                 key={p.id}
-                className="flex items-center px-3 gap-2 border-b border-border/50 cursor-pointer hover:bg-muted/40 transition-colors"
+                className="flex items-center px-3 gap-2 border-b border-border/50 cursor-pointer hover:bg-muted/40 transition-colors group/row"
                 style={{ height: h }}
                 onClick={() => navigate(`/projects/${p.id}`)}
               >
@@ -280,6 +313,17 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
                     <div className="text-[10px] text-muted-foreground truncate">{p.clientName}</div>
                   )}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 opacity-0 group-hover/row:opacity-100 transition-opacity flex-shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(p);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
               </div>
             );
           })}
@@ -420,6 +464,27 @@ export function ProjectsGantt({ projects }: ProjectsGanttProps) {
           </div>
         </div>
       </div>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteTarget?.name}</strong> and all its phases, tasks, and related data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }
