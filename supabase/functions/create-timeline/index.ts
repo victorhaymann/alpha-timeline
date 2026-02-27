@@ -37,6 +37,7 @@ interface SegmentInput {
 }
 
 interface CreateTimelineRequest {
+  owner_id?: string; // Required when using service role key auth
   project: {
     name: string;
     client_name?: string;
@@ -78,25 +79,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const bearerToken = authHeader.replace("Bearer ", "");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string;
+    let supabase;
+
+    if (isServiceRole) {
+      // Service role path: use service role client (bypasses RLS) and take owner_id from body
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        serviceRoleKey,
+      );
+
+      const body: CreateTimelineRequest = await req.json();
+      if (!body.owner_id) {
+        return new Response(
+          JSON.stringify({ error: "owner_id is required when using service role key" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = body.owner_id;
+      // Re-assign body vars below after this block
+      var requestBody = body;
+    } else {
+      // Normal JWT path
+      supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(bearerToken);
+      if (claimsError || !claimsData?.claims) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      userId = claimsData.claims.sub as string;
+      var requestBody = await req.json() as CreateTimelineRequest;
     }
 
-    const userId = claimsData.claims.sub as string;
-
-    const body: CreateTimelineRequest = await req.json();
-    const { project, phases } = body;
+    const { project, phases } = requestBody!;
 
     if (!project?.name || !project?.start_date || !project?.end_date) {
       return new Response(
