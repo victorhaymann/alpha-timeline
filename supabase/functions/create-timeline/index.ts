@@ -72,7 +72,8 @@ Deno.serve(async (req) => {
   try {
     // Auth check
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const hasApiKey = !!req.headers.get("x-api-key");
+    if (!authHeader?.startsWith("Bearer ") && !hasApiKey) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -83,25 +84,29 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const isServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
 
+    // Check for x-api-key header auth
+    const apiKeyHeader = req.headers.get("x-api-key");
+    const timelineApiKey = Deno.env.get("TIMELINE_API_KEY");
+    const isApiKeyAuth = timelineApiKey && apiKeyHeader === timelineApiKey;
+
     let userId: string;
     let supabase;
 
-    if (isServiceRole) {
-      // Service role path: use service role client (bypasses RLS) and take owner_id from body
+    if (isServiceRole || isApiKeyAuth) {
+      // Service role or API key path: use service role client (bypasses RLS) and take owner_id from body
       supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
-        serviceRoleKey,
+        serviceRoleKey!,
       );
 
       const body: CreateTimelineRequest = await req.json();
       if (!body.owner_id) {
         return new Response(
-          JSON.stringify({ error: "owner_id is required when using service role key" }),
+          JSON.stringify({ error: "owner_id is required when using service role key or API key" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       userId = body.owner_id;
-      // Re-assign body vars below after this block
       var requestBody = body;
     } else {
       // Normal JWT path
