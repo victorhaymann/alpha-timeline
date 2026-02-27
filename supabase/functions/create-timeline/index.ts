@@ -70,62 +70,75 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth check
-    const authHeader = req.headers.get("Authorization");
-    const hasApiKey = !!req.headers.get("x-api-key");
-    if (!authHeader?.startsWith("Bearer ") && !hasApiKey) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const bearerToken = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const isServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
-
-    // Check for x-api-key header auth
+    // Auth: check x-api-key FIRST, then fall through to Bearer token
     const apiKeyHeader = req.headers.get("x-api-key");
     const timelineApiKey = Deno.env.get("TIMELINE_API_KEY");
     const isApiKeyAuth = timelineApiKey && apiKeyHeader === timelineApiKey;
 
     let userId: string;
     let supabase;
+    var requestBody: CreateTimelineRequest;
 
-    if (isServiceRole || isApiKeyAuth) {
-      // Service role or API key path: use service role client (bypasses RLS) and take owner_id from body
-      supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        serviceRoleKey!,
-      );
+    if (isApiKeyAuth) {
+      // API key path: use service role client, owner_id from body
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
 
       const body: CreateTimelineRequest = await req.json();
       if (!body.owner_id) {
         return new Response(
-          JSON.stringify({ error: "owner_id is required when using service role key or API key" }),
+          JSON.stringify({ error: "owner_id is required when using API key" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       userId = body.owner_id;
-      var requestBody = body;
+      requestBody = body;
     } else {
-      // Normal JWT path
-      supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(bearerToken);
-      if (claimsError || !claimsData?.claims) {
+      // Bearer token path
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      userId = claimsData.claims.sub as string;
-      var requestBody = await req.json() as CreateTimelineRequest;
+      const bearerToken = authHeader.replace("Bearer ", "");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const isServiceRole = serviceRoleKey && bearerToken === serviceRoleKey;
+
+      if (isServiceRole) {
+        // Service role path
+        supabase = createClient(Deno.env.get("SUPABASE_URL")!, serviceRoleKey);
+
+        const body: CreateTimelineRequest = await req.json();
+        if (!body.owner_id) {
+          return new Response(
+            JSON.stringify({ error: "owner_id is required when using service role key" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        userId = body.owner_id;
+        requestBody = body;
+      } else {
+        // Normal JWT path
+        supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_ANON_KEY")!,
+          { global: { headers: { Authorization: authHeader } } }
+        );
+
+        const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(bearerToken);
+        if (claimsError || !claimsData?.claims) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        userId = claimsData.claims.sub as string;
+        requestBody = await req.json() as CreateTimelineRequest;
+      }
     }
 
     const { project, phases } = requestBody!;
